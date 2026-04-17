@@ -1,0 +1,24 @@
+# Web framework
+fastapi==0.135.3
+uvicorn==0.44.0
+python-socketio==5.16.1
+pydantic==2.13.1
+pydantic-settings==2.13.1
+
+# Database
+sqlalchemy[asyncio]==2.0.41
+asyncpg==0.30.0
+
+# AI providers
+anthropic==0.95.0
+openai==2.32.0
+google-generativeai==0.8.6
+
+# HTTP client
+httpx==0.28.1
+
+# Browser automation
+playwright==1.58.0
+
+# Env
+python-dotenv==1.1.0

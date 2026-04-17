@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+backend/venv/
+
+# Node
+frontend/node_modules/
+frontend/.next/
+
+# Env (secrets)
+.env
+.env.local
+backend/.env
+frontend/.env.local
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker volumes
+pgdata/
+
+# Superpowers brainstorm artifacts
+.superpowers/
