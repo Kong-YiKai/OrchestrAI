@@ -27,3 +27,11 @@ pgdata/
 
 # Superpowers brainstorm artifacts
 .superpowers/
+
+# AI assistant local settings
+.claude/
+.cursor/
+
+# AI assistant project context docs
+CLAUDE.md
+**/CLAUDE.md
