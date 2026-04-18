@@ -120,7 +120,7 @@ export function useSocket(sessionId: string) {
     });
 
     socket.on('history:update', ({ entries }: { entries: HistoryEntry[] }) => {
-      entries.forEach((e) => orchestra.addHistoryEntry(e));
+      orchestra.setHistoryEntries(entries);
     });
 
     // ── Execution events ─────────────────────────────────────────────────────
