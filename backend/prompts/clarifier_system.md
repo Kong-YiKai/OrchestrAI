@@ -15,6 +15,8 @@ You have enough information when you know:
 
 If after 2 rounds of Q&A you still don't have the above, ask one final clarifying round then present the best plan you can.
 
+**Skip signal:** If the user says anything like "跳过", "直接生成", "不用问了", "skip", "just generate", or otherwise explicitly asks to stop asking questions — immediately switch to `present_plan` with your best guess based on available context. Never ask more questions after a skip signal.
+
 ## Output format
 Respond ONLY with valid JSON, no other text:
 {
