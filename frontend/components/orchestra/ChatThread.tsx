@@ -10,55 +10,8 @@ import {
   Send,
   Sparkles,
 } from 'lucide-react';
-
-type Message = {
-  id: string;
-  role: 'user' | 'assistant';
-  author: string;
-  avatar: string;
-  tone?: 'brand' | 'violet' | 'sky' | 'rose';
-  body: string;
-  ts: string;
-};
-
-const SEED: Message[] = [
-  {
-    id: 'm1',
-    role: 'user',
-    author: 'Vita',
-    avatar: 'V',
-    body:
-      '@GPT-5, Claude — I have drafted a complete workflow for the 3D Weather App but I want to set up parallel tasks with 3D visuals.',
-    ts: '10:42',
-  },
-  {
-    id: 'm2',
-    role: 'assistant',
-    author: 'GPT-5',
-    avatar: 'G',
-    tone: 'violet',
-    body:
-      'Create a weather forecast app with a modern UI with 3D statements to view and interact with.',
-    ts: '10:43',
-  },
-  {
-    id: 'm3',
-    role: 'assistant',
-    author: 'Claude 4.5',
-    avatar: 'C',
-    tone: 'brand',
-    body:
-      'Understood. I will kick off the scaffold — Three.js base scene, lazy-loaded cloud meshes, and a real-time barometric graph. GPT can review the copy deck while I hand off the API layer to the tools team.',
-    ts: '10:44',
-  },
-];
-
-const TONE: Record<NonNullable<Message['tone']>, string> = {
-  brand: 'bg-brand-500',
-  violet: 'bg-[#7c3aed]',
-  sky: 'bg-[#0ea5e9]',
-  rose: 'bg-danger-500',
-};
+import { useOrchestraStore } from '@/stores/orchestraStore';
+import { getSocket } from '@/lib/socket';
 
 interface ChatThreadProps {
   contextOpen: boolean;
@@ -73,25 +26,21 @@ export function ChatThread({
   onToggleContext,
   leftCollapsed,
   onToggleLeft,
-  onSendMessage,
 }: ChatThreadProps) {
-  const [messages, setMessages] = useState<Message[]>(SEED);
+  const { messages, streamingBuffers, convState, sessionId } = useOrchestraStore();
   const [draft, setDraft] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, streamingBuffers]);
 
   const send = () => {
     const text = draft.trim();
-    if (!text) return;
-    setMessages((prev) => [
-      ...prev,
-      { id: crypto.randomUUID(), role: 'user', author: 'You', avatar: 'Y', body: text, ts: 'now' },
-    ]);
+    if (!text || convState === 'generating') return;
     setDraft('');
-    onSendMessage?.(text);
+    const socket = getSocket();
+    socket.emit('chat_send', { content: text, session_id: sessionId });
   };
 
   const handleKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -150,32 +99,45 @@ export function ChatThread({
       {/* Messages */}
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto scrollbar-thin px-6 py-6">
         <div className="mx-auto flex max-w-[720px] flex-col gap-5">
-          {messages.map((m, idx) => (
-            <motion.div
-              key={m.id}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.22, delay: Math.min(idx * 0.02, 0.15) }}
-              className="flex items-start gap-3"
-            >
-              <span
-                className={`mt-0.5 grid h-9 w-9 flex-shrink-0 place-items-center rounded-full text-[13px] font-semibold text-white ${
-                  m.tone ? TONE[m.tone] : 'bg-ink-soft'
-                }`}
+          {messages.length === 0 && (
+            <p className="text-center text-[13px] text-ink-muted pt-16">
+              发送消息开始协作…
+            </p>
+          )}
+          {messages.map((m, idx) => {
+            const displayContent = m.is_streaming
+              ? (streamingBuffers[m.message_id] ?? '')
+              : m.content;
+            const initial = m.sender.name.charAt(0).toUpperCase();
+            return (
+              <motion.div
+                key={m.message_id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.22, delay: Math.min(idx * 0.02, 0.15) }}
+                className="flex items-start gap-3"
               >
-                {m.avatar}
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-[13px] font-semibold text-ink">{m.author}</span>
-                  <span className="text-[11px] text-ink-muted">{m.ts}</span>
+                <span
+                  className="mt-0.5 grid h-9 w-9 flex-shrink-0 place-items-center rounded-full text-[13px] font-semibold text-white"
+                  style={{ backgroundColor: m.sender.color || '#6B7280' }}
+                >
+                  {initial}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-[13px] font-semibold text-ink">{m.sender.name}</span>
+                    <span className="text-[11px] text-ink-muted">
+                      {new Date(m.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <div className="mt-1 rounded-[14px] border border-hairline bg-surface px-4 py-3 text-[13.5px] leading-[1.55] text-ink-soft shadow-[0_1px_0_rgba(0,0,0,0.02)]">
+                    {displayContent}
+                    {m.is_streaming && <span className="ml-0.5 inline-block h-3.5 w-0.5 animate-pulse bg-brand-500" />}
+                  </div>
                 </div>
-                <div className="mt-1 rounded-[14px] border border-hairline bg-surface px-4 py-3 text-[13.5px] leading-[1.55] text-ink-soft shadow-[0_1px_0_rgba(0,0,0,0.02)]">
-                  {m.body}
-                </div>
-              </div>
-            </motion.div>
-          ))}
+              </motion.div>
+            );
+          })}
         </div>
       </div>
 
@@ -193,9 +155,10 @@ export function ChatThread({
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={handleKey}
-            placeholder="Message the orchestra — mention agents with @…"
+            disabled={convState === 'generating'}
+            placeholder={convState === 'generating' ? '正在生成工作流…' : 'Message the orchestra — mention agents with @…'}
             rows={1}
-            className="min-h-[36px] flex-1 resize-none bg-transparent py-1.5 text-[13.5px] leading-[1.5] placeholder:text-ink-muted focus:outline-none"
+            className="min-h-[36px] flex-1 resize-none bg-transparent py-1.5 text-[13.5px] leading-[1.5] placeholder:text-ink-muted focus:outline-none disabled:opacity-50"
           />
           <button
             type="button"

@@ -4,6 +4,7 @@ import { Boxes, ChevronRight, FileCode2, History, Settings2 } from 'lucide-react
 import type { ComponentType } from 'react';
 import { cn } from '@/lib/utils';
 import type { ContextPanelNav } from '../ContextPanel';
+import { useOrchestraStore } from '@/stores/orchestraStore';
 
 type Card = {
   key: 'clarifications' | 'building' | 'reports' | 'history';
@@ -17,31 +18,38 @@ type Card = {
 };
 
 export function OverviewList({ nav }: { nav: ContextPanelNav }) {
+  const { clarificationQuestions, buildingLogs, historyEntries, convState } = useOrchestraStore();
+
+  const clarCount = clarificationQuestions.length;
+  const buildCount = buildingLogs.length;
+  const historyCount = historyEntries.length;
+  const isLive = convState === 'generating';
+
   const cards: Card[] = [
     {
       key: 'clarifications',
       title: 'Clarifications',
-      subtitle: '2 Agents awaiting decisions',
+      subtitle: clarCount > 0 ? `${clarCount} 个问题待回答` : '等待需求澄清',
       icon: Boxes,
       iconTile: 'bg-[#fde2ec] text-[#e11d74]',
-      cardBorder: 'border-[#f5c6d9]',
-      badge: { kind: 'count', value: 2 },
+      cardBorder: clarCount > 0 ? 'border-[#f5c6d9]' : 'border-hairline',
+      badge: clarCount > 0 ? { kind: 'count', value: clarCount } : undefined,
       onClick: () => nav.goTo({ name: 'clarifications' }),
     },
     {
       key: 'building',
       title: 'Building Process',
-      subtitle: '2 Agents running in parallel',
+      subtitle: buildCount > 0 ? `${buildCount} 条日志` : '等待开始生成',
       icon: Settings2,
       iconTile: 'bg-warning-50 text-warning-500',
-      cardBorder: 'border-[#fde68a]',
-      badge: { kind: 'live' },
+      cardBorder: isLive ? 'border-[#fde68a]' : 'border-hairline',
+      badge: isLive ? { kind: 'live' } : buildCount > 0 ? { kind: 'count', value: buildCount } : undefined,
       onClick: () => nav.goTo({ name: 'building' }),
     },
     {
       key: 'reports',
       title: 'Agent Reports',
-      subtitle: '2 New Updates',
+      subtitle: 'Phase 7 中开放',
       icon: FileCode2,
       iconTile: 'bg-canvas-soft text-ink-soft',
       cardBorder: 'border-hairline',
@@ -50,10 +58,11 @@ export function OverviewList({ nav }: { nav: ContextPanelNav }) {
     {
       key: 'history',
       title: 'History',
-      subtitle: 'View & undo past actions',
+      subtitle: historyCount > 0 ? `${historyCount} 条操作记录` : '暂无记录',
       icon: History,
       iconTile: 'bg-canvas-soft text-ink-soft',
       cardBorder: 'border-hairline',
+      badge: historyCount > 0 ? { kind: 'count', value: historyCount } : undefined,
       onClick: () => nav.goTo({ name: 'history' }),
     },
   ];
