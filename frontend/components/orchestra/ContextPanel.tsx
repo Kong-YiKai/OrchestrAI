@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useOrchestraStore } from '@/stores/orchestraStore';
 import { OverviewList } from './context/OverviewList';
 import { ClarificationsList } from './context/ClarificationsList';
 import { ClarificationDetail } from './context/ClarificationDetail';
@@ -27,6 +28,15 @@ export type ContextPanelNav = {
 export function ContextPanel() {
   const [view, setView] = useState<View>({ name: 'overview' });
   const [direction, setDirection] = useState<1 | -1>(1);
+  const { pendingPanelView, setPendingPanelView } = useOrchestraStore();
+
+  useEffect(() => {
+    if (!pendingPanelView) return;
+    const name = pendingPanelView as View['name'];
+    setDirection(1);
+    setView({ name } as View);
+    setPendingPanelView(null);
+  }, [pendingPanelView, setPendingPanelView]);
 
   const nav: ContextPanelNav = {
     goTo: (next) => {
