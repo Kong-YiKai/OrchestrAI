@@ -69,6 +69,7 @@ interface OrchestraStore {
   addBuildingLog: (log: BuildingLog) => void;
   setBuildingComplete: () => void;
   addHistoryEntry: (entry: HistoryEntry) => void;
+  setHistoryEntries: (entries: HistoryEntry[]) => void;
   setReadyWorkflowId: (id: string) => void;
   reset: () => void;
 }
@@ -125,6 +126,8 @@ export const useOrchestraStore = create<OrchestraStore>((set) => ({
 
   addHistoryEntry: (entry) =>
     set((state) => ({ historyEntries: [...state.historyEntries, entry] })),
+
+  setHistoryEntries: (entries) => set({ historyEntries: entries }),
 
   setReadyWorkflowId: (id) => set({ readyWorkflowId: id }),
 

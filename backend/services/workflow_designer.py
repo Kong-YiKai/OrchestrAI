@@ -78,6 +78,9 @@ async def design_workflow(
 
     workflow = _parse_workflow(full_text)
     if not workflow:
+        # Log the raw response tail to help diagnose future failures
+        tail = full_text[-300:].replace('\n', ' ')
+        print(f"[designer] parse failed. response tail: {tail}")
         await _emit_log(sio_emit_fn, session_id, "error", "解析工作流 JSON 失败")
         return None
 
@@ -89,11 +92,18 @@ async def design_workflow(
 
 
 def _parse_workflow(text: str) -> Workflow | None:
+    # Try tagged format first
     match = re.search(r'<workflow_json>(.*?)</workflow_json>', text, re.DOTALL)
-    if not match:
-        return None
+    if match:
+        raw = match.group(1).strip()
+    else:
+        # Fallback: find the outermost JSON object in the response
+        obj_match = re.search(r'\{[\s\S]*"nodes"[\s\S]*\}', text)
+        if not obj_match:
+            return None
+        raw = obj_match.group(0)
     try:
-        data = json.loads(match.group(1).strip())
+        data = json.loads(raw)
         nodes = []
         for n in data.get("nodes", []):
             nodes.append(WorkflowNode(
