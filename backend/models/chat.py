@@ -32,11 +32,18 @@ class ChatMessage(BaseModel):
     workflow_ref: Optional[str] = None
 
 
+class ClarificationOption(BaseModel):
+    id: str
+    label: str
+    meta: str = ""
+
+
 class ClarificationQuestion(BaseModel):
     id: str
     question: str
     hint: str = ""
     answer: str = ""
+    options: list[ClarificationOption] = []
     status: Literal["pending", "answered"] = "pending"
 
 

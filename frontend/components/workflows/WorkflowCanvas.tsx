@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Background,
   BackgroundVariant,
@@ -16,105 +16,136 @@ import {
   type OnEdgesChange,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { TaskNodeCard, type TaskNode, type TaskNodeData } from './TaskNodeCard';
+import { Workflow as WorkflowIcon } from 'lucide-react';
+import { TaskNodeCard, type TaskNode, type TaskNodeData, type TaskNodeStatus } from './TaskNodeCard';
 import { NodeDetailDrawer, type NodeDetail } from './NodeDetailDrawer';
 import { Breadcrumbs } from './Breadcrumbs';
+import { useWorkflowStore } from '@/stores/workflowStore';
+import { updateNodeModel } from '@/lib/api';
+import type { WorkflowNode, NodeStatus } from '@/types/workflow';
 
 const nodeTypes: NodeTypes = { task: TaskNodeCard };
 
-const INITIAL_NODES: TaskNode[] = [
-  {
-    id: 'n1',
-    type: 'task',
-    position: { x: 40, y: 160 },
-    data: {
-      title: 'Requirements & Architecture',
-      summary: 'Clarify scope, shape the tech stack, and draft the component graph.',
-      agents: 2,
-      status: 'online',
-      accent: 'success',
-    },
-  },
-  {
-    id: 'n2',
-    type: 'task',
-    position: { x: 320, y: 40 },
-    data: {
-      title: '3D UI/UX Design',
-      summary: 'Sketch Figma frames for hero scene, controls, and micro-interactions.',
-      agents: 1,
-      status: 'online',
-      accent: 'brand',
-    },
-  },
-  {
-    id: 'n3',
-    type: 'task',
-    position: { x: 600, y: 40 },
-    data: {
-      title: 'Frontend Components',
-      summary: 'Implement Three.js scene + React glue for the design tokens.',
-      agents: 3,
-      status: 'queued',
-      accent: 'violet',
-    },
-  },
-  {
-    id: 'n4',
-    type: 'task',
-    position: { x: 320, y: 280 },
-    data: {
-      title: 'Setup Weather API',
-      summary: 'Provision API credentials and normalise the forecast schema.',
-      agents: 1,
-      status: 'online',
-      accent: 'sky',
-    },
-  },
-  {
-    id: 'n5',
-    type: 'task',
-    position: { x: 600, y: 280 },
-    data: {
-      title: 'Backend Integration',
-      summary: 'Wire Next.js route handlers to the weather provider with caching.',
-      agents: 2,
-      status: 'queued',
-      accent: 'warning',
-    },
-  },
-];
+const ACCENT_BY_AI: Record<string, TaskNodeData['accent']> = {
+  claude: 'warning',
+  gpt: 'success',
+  gemini: 'sky',
+  grok: 'violet',
+};
 
-const INITIAL_EDGES: Edge[] = [
-  { id: 'e1-2', source: 'n1', target: 'n2', type: 'smoothstep', animated: true },
-  { id: 'e1-4', source: 'n1', target: 'n4', type: 'smoothstep', animated: true },
-  { id: 'e2-3', source: 'n2', target: 'n3', type: 'smoothstep' },
-  { id: 'e4-5', source: 'n4', target: 'n5', type: 'smoothstep' },
-];
+const MODEL_LABEL: Record<string, string> = {
+  claude: 'Claude-4.6',
+  gpt: 'GPT-4o',
+  gemini: 'Gemini',
+  grok: 'Grok',
+};
+
+function mapStatus(s: NodeStatus): TaskNodeStatus {
+  if (s === 'running') return 'running';
+  if (s === 'complete') return 'complete';
+  return 'queued';
+}
+
+function buildFlowNodes(
+  nodes: WorkflowNode[],
+  onModelChange: (nodeId: string, model: string) => void,
+): TaskNode[] {
+  return nodes
+    .slice()
+    .sort((a, b) => a.order - b.order)
+    .map((n, idx) => ({
+      id: n.node_id,
+      type: 'task' as const,
+      position: { x: 40 + idx * 280, y: 120 + (idx % 2) * 160 },
+      data: {
+        nodeId: n.node_id,
+        title: n.title || n.title_zh,
+        summary: n.description || n.description_zh,
+        agents: 1,
+        status: mapStatus(n.status),
+        accent: ACCENT_BY_AI[n.assigned_ai] ?? 'brand',
+        assignedAi: n.assigned_ai,
+        onModelChange,
+      },
+    }));
+}
+
+function buildFlowEdges(nodes: WorkflowNode[]): Edge[] {
+  const sorted = nodes.slice().sort((a, b) => a.order - b.order);
+  const edges: Edge[] = [];
+  for (let i = 0; i < sorted.length - 1; i += 1) {
+    edges.push({
+      id: `e-${sorted[i].node_id}-${sorted[i + 1].node_id}`,
+      source: sorted[i].node_id,
+      target: sorted[i + 1].node_id,
+      type: 'smoothstep',
+    });
+  }
+  return edges;
+}
 
 export function WorkflowCanvas() {
-  const [nodes, setNodes] = useState(INITIAL_NODES);
-  const [edges, setEdges] = useState(INITIAL_EDGES);
+  const { workflow, workflowId, swapNodeModel } = useWorkflowStore();
+
+  const onModelChange = useCallback(
+    (nodeId: string, model: string) => {
+      swapNodeModel(nodeId, model);
+      if (workflowId) {
+        updateNodeModel(workflowId, nodeId, model).catch((err) => {
+          console.error('[workflow] updateNodeModel failed', err);
+        });
+      }
+    },
+    [swapNodeModel, workflowId],
+  );
+
+  const initialNodes = useMemo(
+    () => (workflow ? buildFlowNodes(workflow.nodes, onModelChange) : []),
+    [workflow, onModelChange],
+  );
+  const initialEdges = useMemo(
+    () => (workflow ? buildFlowEdges(workflow.nodes) : []),
+    [workflow],
+  );
+
+  const [nodes, setNodes] = useState<TaskNode[]>(initialNodes);
+  const [edges, setEdges] = useState<Edge[]>(initialEdges);
   const [selected, setSelected] = useState<NodeDetail | null>(null);
+
+  // Rebuild when workflow changes OR assignedAi changes on any node
+  const workflowSig = useMemo(
+    () =>
+      workflow?.nodes
+        .map((n) => `${n.node_id}:${n.assigned_ai}:${n.status}`)
+        .join('|') ?? '',
+    [workflow],
+  );
+
+  useEffect(() => {
+    setNodes(initialNodes);
+    setEdges(initialEdges);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workflowSig]);
 
   const onNodesChange: OnNodesChange = useCallback(
     (changes) => setNodes((nds) => applyNodeChanges(changes, nds) as typeof nds),
-    []
+    [],
   );
   const onEdgesChange: OnEdgesChange = useCallback(
     (changes) => setEdges((eds) => applyEdgeChanges(changes, eds)),
-    []
+    [],
   );
   const onConnect = useCallback(
     (conn: Connection) =>
-      setEdges((eds) => addEdge({ ...conn, type: 'smoothstep', animated: true }, eds)),
-    []
+      setEdges((eds) => addEdge({ ...conn, type: 'smoothstep' }, eds)),
+    [],
   );
 
   const crumbs = useMemo(() => {
-    const base = [{ label: 'Workflows', href: '/workflows' }, { label: 'Weather App Workflow' }];
+    const title = workflow?.title_zh || workflow?.title || 'New Workflow';
+    const base = [{ label: 'Workflows', href: '/workflows' }, { label: title }];
     return selected ? [...base, { label: selected.title }] : base;
-  }, [selected]);
+  }, [selected, workflow]);
 
   return (
     <div className="relative h-full w-full">
@@ -139,37 +170,60 @@ export function WorkflowCanvas() {
 
       {/* Canvas */}
       <div className="relative h-[calc(100%-56px)] w-full bg-canvas-soft">
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          nodeTypes={nodeTypes}
-          fitView
-          fitViewOptions={{ padding: 0.25 }}
-          proOptions={{ hideAttribution: true }}
-          onNodeClick={(_e, n) => {
-            const d = n.data as TaskNodeData;
-            setSelected({ id: n.id, title: d.title, modelLabel: 'GPT 5.0' });
-          }}
-          defaultEdgeOptions={{
-            style: { stroke: '#d6d3d1', strokeWidth: 1.5 },
-          }}
-        >
-          <Background
-            variant={BackgroundVariant.Dots}
-            gap={22}
-            size={1.5}
-            color="#d6d3d1"
-          />
-          <Controls
-            showInteractive={false}
-            className="!rounded-[12px] !border-hairline !bg-surface !shadow-[0_4px_20px_-12px_rgba(28,25,23,0.2)]"
-          />
-        </ReactFlow>
+        {!workflow || workflow.nodes.length === 0 ? (
+          <EmptyState />
+        ) : (
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            nodeTypes={nodeTypes}
+            fitView
+            fitViewOptions={{ padding: 0.25 }}
+            proOptions={{ hideAttribution: true }}
+            onNodeClick={(_e, n) => {
+              const d = n.data as TaskNodeData;
+              setSelected({
+                id: n.id,
+                title: d.title,
+                modelLabel: MODEL_LABEL[d.assignedAi] ?? d.assignedAi,
+              });
+            }}
+            defaultEdgeOptions={{ style: { stroke: '#d6d3d1', strokeWidth: 1.5 } }}
+          >
+            <Background
+              variant={BackgroundVariant.Dots}
+              gap={22}
+              size={1.5}
+              color="#d6d3d1"
+            />
+            <Controls
+              showInteractive={false}
+              className="!rounded-[12px] !border-hairline !bg-surface !shadow-[0_4px_20px_-12px_rgba(28,25,23,0.2)]"
+            />
+          </ReactFlow>
+        )}
 
         <NodeDetailDrawer node={selected} onClose={() => setSelected(null)} />
+      </div>
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="grid h-full w-full place-items-center">
+      <div className="flex flex-col items-center gap-3 text-center">
+        <span className="grid h-14 w-14 place-items-center rounded-[16px] bg-brand-50 text-brand-500">
+          <WorkflowIcon className="h-7 w-7" strokeWidth={1.6} />
+        </span>
+        <p className="text-[15px] font-semibold text-ink">尚未生成工作流</p>
+        <p className="max-w-[360px] text-[12.5px] leading-[1.55] text-ink-muted">
+          前往 <span className="font-semibold text-ink">Orchestra</span> 与 AI 对话并确认计划，
+          工作流生成后将自动出现在这里。你也可以随时切换每个节点的 AI 模型。
+        </p>
       </div>
     </div>
   );

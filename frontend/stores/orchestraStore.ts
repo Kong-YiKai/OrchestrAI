@@ -3,11 +3,21 @@ import type { ChatMessage } from '@/types/chat';
 
 export type ConvState = 'idle' | 'clarifying' | 'awaiting_confirm' | 'generating' | 'complete';
 
+export interface ClarificationOption {
+  id: string;
+  label: string;
+  meta?: string;
+}
+
 export interface ClarificationQuestion {
   id: string;
   question: string;
   hint?: string;
   answer?: string;
+  options?: ClarificationOption[];
+  selected_option_id?: string | null;
+  custom_answer?: string;
+  confirmed?: boolean;
   status: 'pending' | 'answered';
 }
 
@@ -65,6 +75,8 @@ interface OrchestraStore {
   appendStreamToken: (messageId: string, token: string) => void;
   finalizeStream: (messageId: string, content: string) => void;
   setClarifications: (questions: ClarificationQuestion[]) => void;
+  updateClarificationDraft: (id: string, patch: Partial<ClarificationQuestion>) => void;
+  confirmClarifications: () => void;
   setPlan: (plan: Plan) => void;
   addBuildingLog: (log: BuildingLog) => void;
   setBuildingComplete: () => void;
@@ -117,6 +129,23 @@ export const useOrchestraStore = create<OrchestraStore>((set) => ({
     }),
 
   setClarifications: (questions) => set({ clarificationQuestions: questions }),
+
+  updateClarificationDraft: (id, patch) =>
+    set((state) => ({
+      clarificationQuestions: state.clarificationQuestions.map((q) =>
+        q.id === id ? { ...q, ...patch } : q
+      ),
+    })),
+
+  confirmClarifications: () =>
+    set((state) => ({
+      clarificationQuestions: state.clarificationQuestions.map((q) => ({
+        ...q,
+        confirmed: true,
+        status: 'answered' as const,
+      })),
+    })),
+
   setPlan: (plan) => set({ plan }),
 
   addBuildingLog: (log) =>

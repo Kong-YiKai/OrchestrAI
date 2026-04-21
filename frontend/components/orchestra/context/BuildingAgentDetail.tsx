@@ -1,78 +1,60 @@
 'use client';
 
-import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { CheckCircle2, Settings, Terminal, XCircle } from 'lucide-react';
+import { Settings, Terminal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ContextPanelNav } from '../ContextPanel';
-import { BUILDING_AGENTS } from './BuildingProcessList';
 import { DetailHeader } from './DetailHeader';
+import { useWorkflowStore } from '@/stores/workflowStore';
 
-type ApprovalItem = {
+// Stubs kept for backward compat (older imports in Phase 5 code)
+export type BuildingAgent = {
   id: string;
-  icon: 'terminal' | 'settings';
-  title: string;
-  detail: string;
+  name: string;
+  tone: 'orange' | 'teal';
+  task: string;
+  status: 'waiting' | 'running';
+  progress: number;
+  approvals: number;
+  subrole: string;
+};
+export const BUILDING_AGENTS: BuildingAgent[] = [];
+
+const AI_LABEL: Record<string, string> = {
+  claude: 'Claude-4.6',
+  gpt: 'GPT-4o',
+  gemini: 'Gemini',
+  grok: 'Grok',
 };
 
-const LOG_LINES_BY_AGENT: Record<string, string[]> = {
-  'claude-4-6': [
-    'Scanning project root...',
-    'Found package.json — valid Node project',
-    'Queuing npm install tasks...',
-  ],
-  deepseek: [
-    'Loading design tokens...',
-    'Generating component tree (WeatherHero, ForecastCard)...',
-    'Wiring Tailwind classes from token map...',
-  ],
+const AI_TONE: Record<string, { card: string; avatar: string }> = {
+  claude: { card: 'border-[#fde68a] bg-warning-50/30', avatar: 'bg-[#c2410c]' },
+  gpt: { card: 'border-[#8cc7a8] bg-[#f4faf6]', avatar: 'bg-[#2f855a]' },
+  gemini: { card: 'border-[#bde0fe] bg-[#f1f7ff]', avatar: 'bg-[#1d4ed8]' },
+  grok: { card: 'border-[#e9d5ff] bg-[#faf5ff]', avatar: 'bg-[#6d28d9]' },
 };
-
-const APPROVALS_BY_AGENT: Record<string, ApprovalItem[]> = {
-  'claude-4-6': [
-    {
-      id: 'install-deps',
-      icon: 'terminal',
-      title: 'Install 3D rendering dependencies.',
-      detail: 'npm install three @react-three/fiber @react-three/drei',
-    },
-    {
-      id: 'env-file',
-      icon: 'settings',
-      title: 'Set up environment variables file.',
-      detail: 'Create .env with OPENWEATHER_API_KEY placeholder',
-    },
-  ],
-  deepseek: [
-    {
-      id: 'extract-components',
-      icon: 'settings',
-      title: 'Extract shared Forecast component.',
-      detail: 'Create components/weather/ForecastCard.tsx',
-    },
-  ],
-};
-
-const TONE = {
-  orange: { card: 'border-[#fde68a] bg-warning-50/30', avatar: 'bg-[#c2410c]' },
-  teal: { card: 'border-[#99d6cc] bg-[#f0faf7]', avatar: 'bg-[#0f766e]' },
-} as const;
 
 export function BuildingAgentDetail({ nav, agentId }: { nav: ContextPanelNav; agentId: string }) {
-  const agent = BUILDING_AGENTS.find((a) => a.id === agentId) ?? BUILDING_AGENTS[0];
-  const tone = TONE[agent.tone];
-  const logLines = LOG_LINES_BY_AGENT[agent.id] ?? [];
-  const [approvals, setApprovals] = useState<ApprovalItem[]>(
-    APPROVALS_BY_AGENT[agent.id] ?? []
-  );
+  const { workflow } = useWorkflowStore();
+  const node = workflow?.nodes.find((n) => n.node_id === agentId);
 
-  const resolveApproval = (id: string) =>
-    setApprovals((prev) => prev.filter((a) => a.id !== id));
+  if (!node) {
+    return (
+      <>
+        <DetailHeader title="Agent Process" onBack={() => nav.goBack({ name: 'building' })} />
+        <div className="px-5 py-6 text-[12.5px] text-ink-muted">节点未找到。</div>
+      </>
+    );
+  }
+
+  const tone = AI_TONE[node.assigned_ai] ?? AI_TONE.claude;
+  const label = AI_LABEL[node.assigned_ai] ?? node.assigned_ai;
+  const progress = 0;
 
   return (
     <>
       <DetailHeader
-        title={`${agent.name} — Process`}
+        title={`${label} — Process`}
         onBack={() => nav.goBack({ name: 'building' })}
       />
       <div className="flex flex-col gap-5 px-5 py-5">
@@ -81,33 +63,30 @@ export function BuildingAgentDetail({ nav, agentId }: { nav: ContextPanelNav; ag
             <span
               className={cn(
                 'grid h-11 w-11 flex-shrink-0 place-items-center rounded-[12px] text-[14px] font-semibold text-white',
-                tone.avatar
+                tone.avatar,
               )}
             >
-              {agent.name.charAt(0)}
+              {label.charAt(0).toUpperCase()}
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-[14px] font-semibold text-ink">
-                {agent.name} <span className="text-ink-muted">·</span>{' '}
-                <span className="font-medium text-ink-soft">{agent.subrole}</span>
+              <p className="truncate text-[14px] font-semibold text-ink">
+                {label} <span className="text-ink-muted">·</span>{' '}
+                <span className="font-medium text-ink-soft">{node.assigned_tool || 'Agent'}</span>
               </p>
-              <p className="text-[12px] text-ink-muted">{agent.task}</p>
+              <p className="truncate text-[12px] text-ink-muted">{node.title}</p>
             </div>
-            <span
-              className="h-2 w-2 flex-shrink-0 rounded-full bg-warning-500 animate-pulse"
-              aria-hidden
-            />
+            <span className="h-2 w-2 flex-shrink-0 rounded-full bg-ink-muted" aria-hidden />
           </div>
           <div className="mt-3">
             <div className="flex items-center justify-between text-[11.5px] text-ink-muted">
               <span>Task progress</span>
-              <span className="font-semibold text-ink-soft">{agent.progress}%</span>
+              <span className="font-semibold text-ink-soft">{progress}%</span>
             </div>
             <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-canvas-soft">
               <motion.div
                 className="h-full rounded-full bg-gradient-to-r from-brand-400 to-brand-600"
                 initial={{ width: 0 }}
-                animate={{ width: `${agent.progress}%` }}
+                animate={{ width: `${progress}%` }}
                 transition={{ duration: 0.6, ease: 'easeOut' }}
               />
             </div>
@@ -122,12 +101,14 @@ export function BuildingAgentDetail({ nav, agentId }: { nav: ContextPanelNav; ag
           aria-live="polite"
           className="rounded-[12px] bg-[#1c1917] p-4 font-mono text-[12px] leading-[1.7] text-[#86efac]"
         >
-          {logLines.map((line, i) => (
-            <div key={i}>
-              <span className="text-[#86efac]/60">$ </span>
-              {line}
-            </div>
-          ))}
+          <div>
+            <span className="text-[#86efac]/60">$ </span>
+            Execution not started yet — Phase 3 设计完成，执行阶段尚未接入。
+          </div>
+          <div>
+            <span className="text-[#86efac]/60">$ </span>
+            Waiting for approval from orchestra to begin...
+          </div>
           <div>
             <span className="text-[#86efac]/60">$ </span>
             <span
@@ -137,20 +118,14 @@ export function BuildingAgentDetail({ nav, agentId }: { nav: ContextPanelNav; ag
           </div>
         </div>
 
-        {approvals.length > 0 && (
-          <>
-            <SectionLabel>Pending Approvals</SectionLabel>
-            <div className="flex flex-col gap-3">
-              {approvals.map((a) => (
-                <ApprovalCard
-                  key={a.id}
-                  item={a}
-                  onResolve={() => resolveApproval(a.id)}
-                />
-              ))}
-            </div>
-          </>
-        )}
+        <SectionLabel>Pending Approvals</SectionLabel>
+        <div className="rounded-[14px] border border-dashed border-hairline bg-canvas-soft/50 p-4 text-center">
+          <Settings className="mx-auto h-5 w-5 text-ink-muted" strokeWidth={1.6} />
+          <p className="mt-2 text-[12.5px] font-medium text-ink-soft">暂无待审批项</p>
+          <p className="mt-1 text-[11.5px] text-ink-muted">
+            节点执行开始后，需要人工决策的操作会显示在这里。
+          </p>
+        </div>
       </div>
     </>
   );
@@ -162,46 +137,5 @@ function SectionLabel({ children, icon }: { children: React.ReactNode; icon?: Re
       {icon}
       {children}
     </p>
-  );
-}
-
-function ApprovalCard({
-  item,
-  onResolve,
-}: {
-  item: ApprovalItem;
-  onResolve: () => void;
-}) {
-  const Icon = item.icon === 'terminal' ? Terminal : Settings;
-  return (
-    <div className="rounded-[14px] border border-[#fde68a] bg-warning-50/40 p-4">
-      <div className="flex items-start gap-2">
-        <Icon className="mt-0.5 h-4 w-4 flex-shrink-0 text-[#d97706]" strokeWidth={1.8} />
-        <div className="min-w-0 flex-1">
-          <p className="text-[13.5px] font-semibold text-ink">{item.title}</p>
-          <p className="mt-1 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[12px] text-ink-muted">
-            {item.detail}
-          </p>
-        </div>
-      </div>
-      <div className="mt-3 flex gap-2">
-        <button
-          type="button"
-          onClick={onResolve}
-          className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-[10px] bg-gradient-to-b from-success-400 to-success-500 text-[12.5px] font-semibold text-white hover:from-success-500 hover:to-success-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success-500"
-        >
-          <CheckCircle2 className="h-4 w-4" strokeWidth={2.2} />
-          Approve
-        </button>
-        <button
-          type="button"
-          onClick={onResolve}
-          className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-[10px] bg-surface text-[12.5px] font-semibold text-ink ring-1 ring-hairline hover:bg-canvas-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-        >
-          <XCircle className="h-4 w-4" strokeWidth={1.8} />
-          Deny
-        </button>
-      </div>
-    </div>
   );
 }

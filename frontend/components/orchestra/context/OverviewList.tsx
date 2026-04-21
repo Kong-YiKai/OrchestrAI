@@ -5,6 +5,7 @@ import type { ComponentType } from 'react';
 import { cn } from '@/lib/utils';
 import type { ContextPanelNav } from '../ContextPanel';
 import { useOrchestraStore } from '@/stores/orchestraStore';
+import { useWorkflowStore } from '@/stores/workflowStore';
 
 type Card = {
   key: 'clarifications' | 'building' | 'reports' | 'history';
@@ -19,8 +20,11 @@ type Card = {
 
 export function OverviewList({ nav }: { nav: ContextPanelNav }) {
   const { clarificationQuestions, buildingLogs, historyEntries, convState } = useOrchestraStore();
+  const { workflow } = useWorkflowStore();
 
+  const pendingClarCount = clarificationQuestions.filter((q) => !q.confirmed).length;
   const clarCount = clarificationQuestions.length;
+  const buildNodeCount = workflow?.nodes.length ?? 0;
   const buildCount = buildingLogs.length;
   const historyCount = historyEntries.length;
   const isLive = convState === 'generating';
@@ -29,21 +33,37 @@ export function OverviewList({ nav }: { nav: ContextPanelNav }) {
     {
       key: 'clarifications',
       title: 'Clarifications',
-      subtitle: clarCount > 0 ? `${clarCount} 个问题待回答` : '等待需求澄清',
+      subtitle:
+        pendingClarCount > 0
+          ? `${pendingClarCount} 个决策待确认`
+          : clarCount > 0
+            ? '全部已确认'
+            : '等待需求澄清',
       icon: Boxes,
       iconTile: 'bg-[#fde2ec] text-[#e11d74]',
-      cardBorder: clarCount > 0 ? 'border-[#f5c6d9]' : 'border-hairline',
-      badge: clarCount > 0 ? { kind: 'count', value: clarCount } : undefined,
+      cardBorder: pendingClarCount > 0 ? 'border-[#f5c6d9]' : 'border-hairline',
+      badge: pendingClarCount > 0 ? { kind: 'count', value: pendingClarCount } : undefined,
       onClick: () => nav.goTo({ name: 'clarifications' }),
     },
     {
       key: 'building',
       title: 'Building Process',
-      subtitle: buildCount > 0 ? `${buildCount} 条日志` : '等待开始生成',
+      subtitle:
+        buildNodeCount > 0
+          ? `${buildNodeCount} 个工作节点`
+          : buildCount > 0
+            ? `${buildCount} 条日志`
+            : '等待开始生成',
       icon: Settings2,
       iconTile: 'bg-warning-50 text-warning-500',
       cardBorder: isLive ? 'border-[#fde68a]' : 'border-hairline',
-      badge: isLive ? { kind: 'live' } : buildCount > 0 ? { kind: 'count', value: buildCount } : undefined,
+      badge: isLive
+        ? { kind: 'live' }
+        : buildNodeCount > 0
+          ? { kind: 'count', value: buildNodeCount }
+          : buildCount > 0
+            ? { kind: 'count', value: buildCount }
+            : undefined,
       onClick: () => nav.goTo({ name: 'building' }),
     },
     {

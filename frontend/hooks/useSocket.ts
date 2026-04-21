@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef } from 'react';
 import { getSocket } from '@/lib/socket';
+import { fetchWorkflow } from '@/lib/api';
 import { useChatStore } from '@/stores/chatStore';
 import { useWorkflowStore } from '@/stores/workflowStore';
 import { useOrchestraStore } from '@/stores/orchestraStore';
@@ -114,9 +115,13 @@ export function useSocket(sessionId: string) {
       orchestra.setBuildingComplete();
     });
 
-    socket.on('workflow:ready', ({ workflow_id }: { workflow_id: string; title: string; node_count: number }) => {
+    socket.on('workflow:ready', async ({ workflow_id }: { workflow_id: string; title: string; node_count: number }) => {
       orchestra.setReadyWorkflowId(workflow_id);
       orchestra.setConvState('complete');
+      const wf = await fetchWorkflow(workflow_id);
+      if (wf) {
+        setWorkflow(wf);
+      }
     });
 
     socket.on('history:update', ({ entries }: { entries: HistoryEntry[] }) => {

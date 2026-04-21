@@ -33,10 +33,21 @@ def append_history(session_id: str, role: str, content: str) -> None:
     get_state(session_id).history.append({"role": role, "content": content})
 
 
-def add_clarification(session_id: str, clar_id: str, question: str) -> None:
-    get_state(session_id).clarifications.append(
-        {"id": clar_id, "question": question, "answer": "", "status": "pending"}
-    )
+def add_clarification(
+    session_id: str,
+    clar_id: str,
+    question: str,
+    options: list | None = None,
+    hint: str = "",
+) -> None:
+    get_state(session_id).clarifications.append({
+        "id": clar_id,
+        "question": question,
+        "hint": hint,
+        "answer": "",
+        "options": options or [],
+        "status": "pending",
+    })
 
 
 def answer_clarification(session_id: str, clar_id: str, answer: str) -> None:

@@ -132,20 +132,41 @@ async def chat_confirm_start(sid, data):
     add_history_log(session_id, "用户确认", "开始生成工作流")
 
     workflow = await design_workflow(session_id, state, sio.emit)
-    if workflow:
+    if not workflow:
+        return
+
+    try:
         await save_workflow(workflow, session_id)
-        state.state = "complete"
-        add_history_log(session_id, "工作流生成", f"{workflow.title}（{len(workflow.nodes)} 个节点）")
+    except Exception as e:
+        print(f"[chat_confirm_start] save_workflow failed: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
         await sio.emit(
-            "workflow:ready",
-            {"workflow_id": workflow.workflow_id, "title": workflow.title, "node_count": len(workflow.nodes)},
+            "building:log",
+            {
+                "log_id": f"log_{uuid.uuid4().hex[:8]}",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "type": "error",
+                "message": f"保存工作流失败: {type(e).__name__}",
+                "detail": str(e)[:200],
+                "agent": "Workflow Designer",
+            },
             room=session_id,
         )
-        await sio.emit(
-            "history:update",
-            {"entries": state.history_log},
-            room=session_id,
-        )
+        return
+
+    state.state = "complete"
+    add_history_log(session_id, "工作流生成", f"{workflow.title}（{len(workflow.nodes)} 个节点）")
+    await sio.emit(
+        "workflow:ready",
+        {"workflow_id": workflow.workflow_id, "title": workflow.title, "node_count": len(workflow.nodes)},
+        room=session_id,
+    )
+    await sio.emit(
+        "history:update",
+        {"entries": state.history_log},
+        room=session_id,
+    )
 
 
 # ── ASGI mount ───────────────────────────────────────────────────────────────

@@ -23,7 +23,16 @@ Respond ONLY with valid JSON, no other text:
   "action": "ask" | "present_plan",
   "chat_message": "friendly message shown in chat (match user language)",
   "questions": [
-    {"id": "q1", "question": "...", "hint": "e.g. ..."}
+    {
+      "id": "q1",
+      "question": "...",
+      "hint": "e.g. ...",
+      "options": [
+        {"id": "opt_a", "label": "...", "meta": "one-line description"},
+        {"id": "opt_b", "label": "...", "meta": "..."},
+        {"id": "opt_c", "label": "...", "meta": "..."}
+      ]
+    }
   ],
   "plan": {
     "title": "...",
@@ -34,6 +43,15 @@ Respond ONLY with valid JSON, no other text:
     "confirmation_prompt": "计划如上，是否开始生成工作流？"
   }
 }
+
+## Question options (REQUIRED when action == "ask")
+- Every question MUST include an `options` array with **2-4 preset choices**, so the user can pick rather than type.
+- Each option has `{id, label, meta}` where `meta` is a short hint (tradeoff, recommendation, etc.) — keep labels under 40 chars.
+- Options should be concrete, mutually distinct choices (e.g. "Web only", "Mobile only", "Web + Mobile"), not vague.
+- Match the user's language for `label` and `meta` (Chinese if the user wrote Chinese).
+- Do NOT include an "other / custom" option yourself — the frontend adds it automatically.
+
+## Rules
 - Include "questions" ONLY when action == "ask"
 - Include "plan" ONLY when action == "present_plan"
 - Plan should have 3-7 nodes
