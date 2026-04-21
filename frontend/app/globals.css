@@ -5,12 +5,12 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   OrchestrAI Design System — source: Figma (file M0gvY5Z8G6HgI1rGci6Ksq)
-   Warm light theme: cream canvas + stone text + orange accent + Inter font
+   OrchestrAI Design System v2 — 2026-04-21
+   Warm light theme · refined elevation · curated radii · opinionated motion
    ───────────────────────────────────────────────────────────────────────────── */
 
 @theme inline {
-  /* Type scale */
+  /* ── Typography ────────────────────────────────────────────────────────── */
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, "Roboto Mono", Menlo, monospace;
   --font-heading: var(--font-inter), ui-sans-serif, sans-serif;
@@ -43,59 +43,72 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  /* Figma brand / status palettes (exposed for direct class use) */
+  /* Surface & text palette */
   --color-canvas: var(--canvas);
   --color-canvas-soft: var(--canvas-soft);
   --color-surface: var(--surface);
   --color-surface-subtle: var(--surface-subtle);
+  --color-surface-raised: var(--surface-raised);
   --color-ink: var(--ink);
   --color-ink-soft: var(--ink-soft);
   --color-ink-muted: var(--ink-muted);
   --color-hairline: var(--hairline);
+  --color-hairline-strong: var(--hairline-strong);
 
-  --color-brand-50: #ffedd4;
-  --color-brand-100: #fed7aa;
-  --color-brand-200: #fdba74;
-  --color-brand-300: #fb923c;
-  --color-brand-400: #fe9a00;
+  /* Brand palette */
+  --color-brand-50: #fff3e0;
+  --color-brand-100: #ffe0b2;
+  --color-brand-200: #ffcc80;
+  --color-brand-300: #ffb347;
+  --color-brand-400: #ff9f2e;
   --color-brand-500: #ff6900;
-  --color-brand-600: #e17100;
-  --color-brand-700: #bb4d00;
+  --color-brand-600: #e15b00;
+  --color-brand-700: #b44900;
+  --color-brand-800: #833300;
 
+  /* Semantic status */
   --color-warning-50: #fef3c6;
   --color-warning-100: #fee685;
   --color-warning-500: #ffb900;
 
-  --color-success-50: #d0fae5;
+  --color-success-50: #d8f6e7;
   --color-success-100: #a4f4cf;
   --color-success-400: #00d492;
   --color-success-500: #00bc7d;
   --color-success-600: #007a55;
   --color-success-700: #006644;
 
+  --color-danger-50: #ffe2e7;
   --color-danger-300: #ff637e;
   --color-danger-500: #ff2056;
 
-  /* Radii (Figma: 4 / 10 / 14 / 16 / 24) */
-  --radius: 0.625rem; /* 10 */
-  --radius-sm: 0.25rem; /* 4 */
-  --radius-md: 0.625rem; /* 10 */
-  --radius-lg: 0.875rem; /* 14 */
-  --radius-xl: 1rem; /* 16 */
-  --radius-2xl: 1.5rem; /* 24 */
+  /* ── Radii (4 ranks: sm 8 / md 12 / lg 16 / xl 20) ────────────────────── */
+  --radius: 0.75rem;         /* 12 — default */
+  --radius-sm: 0.5rem;       /* 8 */
+  --radius-md: 0.75rem;      /* 12 */
+  --radius-lg: 1rem;         /* 16 */
+  --radius-xl: 1.25rem;      /* 20 */
+  --radius-2xl: 1.5rem;      /* 24 — only hero / large surfaces */
   --radius-3xl: 2rem;
 }
 
-/* Light theme (default) — warm cream canvas matching Figma screens */
+/* ─────────────────────────────────────────────────────────────────────────────
+   Light theme — default
+   ───────────────────────────────────────────────────────────────────────────── */
 :root {
-  --canvas: #f5efe7;          /* page background (cream) */
-  --canvas-soft: #efe8df;     /* inset panel bg */
-  --surface: #ffffff;         /* cards */
-  --surface-subtle: #fafaf9;  /* nested surfaces */
-  --ink: #1c1917;             /* primary text */
-  --ink-soft: #44403b;        /* secondary text */
-  --ink-muted: #79716b;       /* tertiary / meta text */
-  --hairline: #e7e5e4;        /* subtle borders */
+  /* Layered canvas (from bottom → top: canvas → canvas-soft → surface-subtle → surface → surface-raised) */
+  --canvas: #f6f0e7;            /* deepest warm background */
+  --canvas-soft: #f0e9dd;       /* inset panels */
+  --surface-subtle: #faf7f1;    /* nested cards */
+  --surface: #ffffff;           /* primary cards */
+  --surface-raised: #ffffff;    /* modals, drawers (paired with shadow-xl) */
+
+  /* Text */
+  --ink: #1c1917;               /* primary */
+  --ink-soft: #3f3a35;          /* secondary */
+  --ink-muted: #6d6660;         /* tertiary — improved contrast vs prior #79716b */
+  --hairline: #eae3d6;          /* default border (warm-tinted) */
+  --hairline-strong: #d9cfbd;   /* emphatic border */
 
   --background: var(--canvas);
   --foreground: var(--ink);
@@ -104,13 +117,13 @@
   --popover: var(--surface);
   --popover-foreground: var(--ink);
 
-  --primary: #ff6900;                    /* brand-500 */
+  --primary: #ff6900;
   --primary-foreground: #ffffff;
-  --secondary: #f5f5f4;
+  --secondary: #f4ede0;
   --secondary-foreground: var(--ink);
-  --muted: #f5f5f4;
+  --muted: #f4ede0;
   --muted-foreground: var(--ink-muted);
-  --accent: #ffedd4;                     /* brand-50 wash */
+  --accent: #fff3e0;
   --accent-foreground: var(--ink);
   --destructive: #ff2056;
   --border: var(--hairline);
@@ -121,22 +134,56 @@
   --sidebar-foreground: var(--ink-soft);
   --sidebar-primary: #ff6900;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #ffedd4;
+  --sidebar-accent: #fff3e0;
   --sidebar-accent-foreground: var(--ink);
   --sidebar-border: var(--hairline);
   --sidebar-ring: #ff6900;
+
+  /* ── Elevation system (3 ranks) ──────────────────────────────────────── */
+  --shadow-xs:
+    0 1px 2px -0.5px rgba(41, 30, 17, 0.04),
+    0 0 0 1px rgba(41, 30, 17, 0.03);
+  --shadow-sm:
+    0 1px 2px rgba(41, 30, 17, 0.04),
+    0 2px 6px -2px rgba(41, 30, 17, 0.06);
+  --shadow-md:
+    0 2px 4px -1px rgba(41, 30, 17, 0.06),
+    0 8px 20px -8px rgba(41, 30, 17, 0.14);
+  --shadow-lg:
+    0 4px 8px -2px rgba(41, 30, 17, 0.08),
+    0 16px 32px -12px rgba(41, 30, 17, 0.18);
+  --shadow-xl:
+    0 8px 16px -4px rgba(41, 30, 17, 0.10),
+    0 24px 48px -16px rgba(41, 30, 17, 0.22);
+
+  /* Brand glow (for CTAs, focus states) */
+  --glow-brand:
+    0 1px 0 rgba(255, 255, 255, 0.35) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.08) inset,
+    0 2px 6px -1px rgba(255, 105, 0, 0.35),
+    0 14px 28px -10px rgba(255, 105, 0, 0.45);
+  --glow-brand-hover:
+    0 1px 0 rgba(255, 255, 255, 0.4) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.08) inset,
+    0 4px 10px -2px rgba(255, 105, 0, 0.45),
+    0 22px 40px -12px rgba(255, 105, 0, 0.55);
+
+  /* Noise / grain overlay used on hero surfaces */
+  --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.1 0 0 0 0 0.08 0 0 0 0 0.06 0 0 0 0.22 0'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='0.7'/></svg>");
 }
 
-/* Dark theme retained as an option but not applied by default */
+/* Dark theme retained */
 .dark {
-  --canvas: #1c1917;
-  --canvas-soft: #292524;
-  --surface: #292524;
-  --surface-subtle: #1c1917;
-  --ink: #fafaf9;
-  --ink-soft: #d6d3d1;
-  --ink-muted: #a8a29e;
-  --hairline: #44403b;
+  --canvas: #17120e;
+  --canvas-soft: #221c15;
+  --surface: #2b241c;
+  --surface-subtle: #201a13;
+  --surface-raised: #322a20;
+  --ink: #fbf5ea;
+  --ink-soft: #d7cfbf;
+  --ink-muted: #9e9485;
+  --hairline: #3a3228;
+  --hairline-strong: #4c4235;
 
   --background: var(--canvas);
   --foreground: var(--ink);
@@ -144,27 +191,57 @@
   --card-foreground: var(--ink);
   --popover: var(--surface);
   --popover-foreground: var(--ink);
-  --primary: #fe9a00;
+  --primary: #ff9f2e;
   --primary-foreground: #1c1917;
-  --secondary: #292524;
+  --secondary: #2b241c;
   --secondary-foreground: var(--ink);
-  --muted: #292524;
+  --muted: #2b241c;
   --muted-foreground: var(--ink-muted);
-  --accent: #44403b;
+  --accent: #3a3228;
   --accent-foreground: var(--ink);
-  --border: #44403b;
-  --input: #44403b;
-  --ring: #fe9a00;
-  --sidebar: #1c1917;
+  --border: #3a3228;
+  --input: #3a3228;
+  --ring: #ff9f2e;
+  --sidebar: #17120e;
   --sidebar-foreground: var(--ink-soft);
-  --sidebar-primary: #fe9a00;
+  --sidebar-primary: #ff9f2e;
   --sidebar-primary-foreground: #1c1917;
-  --sidebar-accent: #292524;
+  --sidebar-accent: #2b241c;
   --sidebar-accent-foreground: var(--ink);
-  --sidebar-border: #44403b;
-  --sidebar-ring: #fe9a00;
+  --sidebar-border: #3a3228;
+  --sidebar-ring: #ff9f2e;
+
+  --shadow-xs:
+    0 1px 2px -0.5px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(255, 255, 255, 0.03);
+  --shadow-sm:
+    0 1px 2px rgba(0, 0, 0, 0.3),
+    0 2px 6px -2px rgba(0, 0, 0, 0.4);
+  --shadow-md:
+    0 2px 4px -1px rgba(0, 0, 0, 0.3),
+    0 8px 20px -8px rgba(0, 0, 0, 0.6);
+  --shadow-lg:
+    0 4px 8px -2px rgba(0, 0, 0, 0.4),
+    0 16px 32px -12px rgba(0, 0, 0, 0.7);
+  --shadow-xl:
+    0 8px 16px -4px rgba(0, 0, 0, 0.5),
+    0 24px 48px -16px rgba(0, 0, 0, 0.8);
+
+  --glow-brand:
+    0 1px 0 rgba(255, 255, 255, 0.2) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.25) inset,
+    0 2px 6px -1px rgba(255, 159, 46, 0.45),
+    0 14px 28px -10px rgba(255, 159, 46, 0.55);
+  --glow-brand-hover:
+    0 1px 0 rgba(255, 255, 255, 0.25) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.3) inset,
+    0 4px 10px -2px rgba(255, 159, 46, 0.55),
+    0 22px 40px -12px rgba(255, 159, 46, 0.65);
 }
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   Base layer
+   ───────────────────────────────────────────────────────────────────────────── */
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -177,34 +254,153 @@
     background: var(--canvas);
     color: var(--ink);
     font-family: var(--font-sans);
+    font-feature-settings: "cv11", "ss01", "ss03";
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
+
+  /* Warm textured page background — subtle tonal gradient on canvas */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(1200px 800px at 85% -10%, rgba(255, 179, 71, 0.10) 0%, transparent 55%),
+      radial-gradient(900px 600px at -10% 110%, rgba(255, 105, 0, 0.06) 0%, transparent 60%);
+  }
+
+  /* Respect reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
-/* Custom scrollbar for dense panels */
+/* ─────────────────────────────────────────────────────────────────────────────
+   Utilities
+   ───────────────────────────────────────────────────────────────────────────── */
 @layer utilities {
+  /* Scrollbar */
   .scrollbar-thin::-webkit-scrollbar {
     width: 8px;
     height: 8px;
   }
-  .scrollbar-thin::-webkit-scrollbar-track {
-    background: transparent;
-  }
+  .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background: var(--hairline);
+    background: var(--hairline-strong);
     border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
   }
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
     background: var(--ink-muted);
+    background-clip: padding-box;
   }
 
+  /* Text tokens */
   .text-ink { color: var(--ink); }
   .text-ink-soft { color: var(--ink-soft); }
   .text-ink-muted { color: var(--ink-muted); }
+
+  /* Surface tokens */
   .bg-canvas { background: var(--canvas); }
   .bg-canvas-soft { background: var(--canvas-soft); }
   .bg-surface { background: var(--surface); }
   .bg-surface-subtle { background: var(--surface-subtle); }
+  .bg-surface-raised { background: var(--surface-raised); }
   .border-hairline { border-color: var(--hairline); }
+  .border-hairline-strong { border-color: var(--hairline-strong); }
+
+  /* Elevation */
+  .shadow-card { box-shadow: var(--shadow-xs); }
+  .shadow-card-md { box-shadow: var(--shadow-sm); }
+  .shadow-elevated { box-shadow: var(--shadow-md); }
+  .shadow-floating { box-shadow: var(--shadow-lg); }
+  .shadow-overlay { box-shadow: var(--shadow-xl); }
+
+  /* Brand glow (buttons / focus) */
+  .shadow-brand-glow { box-shadow: var(--glow-brand); }
+  .shadow-brand-glow-hover { box-shadow: var(--glow-brand-hover); }
+
+  /* Frosted glass — subtle, warm */
+  .bg-glass {
+    background: color-mix(in oklab, var(--canvas) 72%, transparent);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+  }
+  .bg-glass-surface {
+    background: color-mix(in oklab, var(--surface) 78%, transparent);
+    backdrop-filter: blur(18px) saturate(150%);
+    -webkit-backdrop-filter: blur(18px) saturate(150%);
+  }
+
+  /* Grain texture overlay */
+  .texture-grain::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: var(--grain);
+    mix-blend-mode: overlay;
+    opacity: 0.4;
+    border-radius: inherit;
+  }
+
+  /* Numeric alignment for stat cards */
+  .tabular { font-variant-numeric: tabular-nums; }
+
+  /* Card lift interaction */
+  .hover-lift {
+    transition:
+      transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .hover-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+
+  /* Brand text gradient */
+  .text-gradient-brand {
+    background: linear-gradient(135deg, #ffcc80 0%, #ff9f2e 30%, #ff6900 70%, #b44900 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  /* Sheen animation for hero orb etc. */
+  @keyframes sheen {
+    0% { background-position: -120% 0; }
+    100% { background-position: 220% 0; }
+  }
+  .animate-sheen {
+    background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.25) 50%, transparent 70%);
+    background-size: 200% 100%;
+    animation: sheen 3.5s linear infinite;
+  }
+
+  /* Soft pulse (replaces jarring ping) */
+  @keyframes softPulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.25); opacity: 0.6; }
+  }
+  .animate-soft-pulse { animation: softPulse 2.4s ease-in-out infinite; }
+
+  /* Focus ring */
+  .focus-ring {
+    outline: none;
+  }
+  .focus-ring:focus-visible {
+    box-shadow:
+      0 0 0 2px var(--canvas),
+      0 0 0 4px color-mix(in oklab, #ff6900 70%, transparent);
+  }
 }

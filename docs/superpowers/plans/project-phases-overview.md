@@ -13,8 +13,9 @@ AI 工作流编排平台 Demo。用户用自然语言描述想法，AI 实时生
 | 1 | 核心脚手架 + 分屏布局 | ✅ 完成 | Next.js + FastAPI + Socket.io + Zustand + React Flow |
 | 1.5 | Docker Compose + 数据库基础设施 | ✅ 完成 | PostgreSQL + SQLAlchemy async + Docker 一键启动 |
 | 2 | 设计系统 + App Shell + 三路由骨架 | ✅ 完成 | 暖色主题 + AppSidebar/TopBar + Dashboard/Orchestra/Workflows |
-| 2.5 | Orchestra 右栏 Project Context 重构 | ✅ 完成 | 4 竖排 drill-in 卡片 + View union 导航 + 两级下钻 |
-| **3** | **The Orchestra 功能接线** | 🔲 规划中 | Chat→Clarify→Confirm→生成工作流，3 Agent 架构 |
+| 2.5 | Orchestra 右栏 Project Context 重构 | ✅ 完成 | 4 竖排 drill-in 卡片 + View union 导航 + 两级下钻（2026-04-17） |
+| **3** | **The Orchestra 功能接线** | ✅ 完成 | Chat→Clarify→Confirm→生成工作流，3 Agent 架构，端到端接通 |
+| **2.6** | **前端结构清理 + 视觉质感升级** | ✅ 完成 | stub 清除 legacy `workflow/`+`chat/`+`chatStore`，设计 token v2（5 档 surface / 8 档 brand / 4 档 radius / 5 档 elevation / 玻璃态 + grain），12 核心组件升级（2026-04-21） |
 | 4 | Workflows 画布功能接线 | 🔲 待规划 | 节点持久化、NodeDetailDrawer 真实数据、Breadcrumbs |
 | 5 | 嵌套 Sub-chat 分叉 + File Repository | 🔲 待规划 | 节点内 Sub-chat、Building Log 点击展开 |
 | 6 | 节点执行引擎 | 🔲 待规划 | API 直连 → Playwright → Claude 模拟三层降级，Approval Window |
@@ -85,7 +86,39 @@ Phase 7 (打磨)              ← 依赖所有前序 Phase
 
 ## 详细 Plan 文件索引
 
-| Phase | 详细 Plan 文件 |
-|-------|---------------|
-| Phase 3 | [phase3-orchestra-wiring.md](./phase3-orchestra-wiring.md) |
-| Phase 4+ | 待规划 |
+| Phase | 详细 Plan 文件 | 状态 |
+|-------|---------------|------|
+| Phase 2.5 | [2026-04-17-orchestra-context-panel-redesign.md](./2026-04-17-orchestra-context-panel-redesign.md) | ✅ 完成 |
+| Phase 3 | [phase3-orchestra-wiring.md](./phase3-orchestra-wiring.md) | ✅ 完成 |
+| Phase 2.6 | [2026-04-21-ui-polish-cleanup.md](./2026-04-21-ui-polish-cleanup.md) | ✅ 完成 |
+| Phase 2.6 交付快照 | [2026-04-21-handoff-report.md](./2026-04-21-handoff-report.md) | ✅ 完成 |
+| Phase 4+ | 待规划 | 🔲 |
+
+---
+
+## Phase 3 完成说明（2026-04-21 更新）
+
+Phase 3 已全部实现并端到端打通，核心交付：
+
+- **后端 3 Agent 架构**：`OrchestratorAgent`（Haiku 路由）→ `ClarifierAgent`（Sonnet 多轮澄清 + plan 呈现）→ `WorkflowDesigner`（Sonnet 工作流生成）
+- **ConversationState 状态机**：`idle → clarifying → awaiting_confirm → generating → complete`，per session_id 内存管理
+- **Socket.io 完整事件链**：`chat_send → clarification:update → clarification:plan_ready → chat_confirm_start → building:log × N → building:complete → workflow:ready`
+- **前端 orchestraStore**：Zustand store 驱动 ChatThread 流式渲染、右栏 ContextPanel 自动切换、Building Process 日志实时追加
+- **DB 持久化**：`WorkflowRecord` 保存到 PostgreSQL，`/workflows` 画布自动填充
+- **已知 Bug 修复**：`WorkflowRecord.created_at`（DateTime）与 `Workflow.created_at`（ISO string）类型不匹配 → `workflow_db.py::_coerce_created_at` 修复，有对应测试 `test_workflow_db.py`
+
+**下一个目标**：Phase 4 — Workflows 画布功能接线（NodeDetailDrawer 真实数据、节点状态持久化、Breadcrumbs 联动）
+
+---
+
+## Phase 2.6 完成说明（2026-04-21）
+
+Phase 3 结束后做的"收尾打磨"：
+
+- **结构清理**：`components/workflow/`（legacy，6 文件）+ `components/chat/`（legacy，4 文件）+ `stores/chatStore.ts` 全部清空为 `@deprecated` stub（沙箱不允许 `rm`），前端唯一事实来源收敛到 `components/workflows/` + `orchestraStore`
+- **useSocket 瘦身**：移除对 `chatStore` 的冗余分发和 `chat:typing` listener
+- **设计系统 v2**：`app/globals.css` 重写（5 档 surface、双档 hairline、8 档 brand、4 档 radius、5 档 elevation、`--glow-brand*`、`--grain` SVG noise、`.bg-glass*` 玻璃态 utility、`soft-pulse` 替代 `ping`、`prefers-reduced-motion`）
+- **12 核心组件视觉升级**：AppSidebar / TopBar / HeroCard / StatCard / ProjectCard / ChatThread / ContextPanel / OverviewList / RecentProjectsPanel / WorkflowCanvas / TaskNodeCard / NodeDetailDrawer
+- **验证**：`npx tsc --noEmit` exit 0；`npx eslint . --quiet` exit 0（残留 2 个 lint error 为 Phase 3 历史遗留，已记录待修）
+
+详见：[2026-04-21-ui-polish-cleanup.md](./2026-04-21-ui-polish-cleanup.md) + [2026-04-21-handoff-report.md](./2026-04-21-handoff-report.md)

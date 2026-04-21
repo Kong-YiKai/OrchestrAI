@@ -1,82 +1,154 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Play, Plus, Zap } from 'lucide-react';
+import { Play, Plus, Sparkles, Zap } from 'lucide-react';
 
 export function HeroCard() {
   return (
-    <section
-      className="relative overflow-hidden rounded-[24px] px-10 py-12"
+    <motion.section
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+      className="texture-grain relative overflow-hidden rounded-[24px] px-10 py-14 shadow-overlay"
       style={{
         background:
-          'radial-gradient(120% 140% at 80% 20%, rgba(255,105,0,0.35) 0%, rgba(187,77,0,0.12) 30%, #1c1917 65%)',
+          'radial-gradient(110% 130% at 85% 15%, rgba(255,159,46,0.42) 0%, rgba(255,105,0,0.18) 25%, rgba(28,17,9,1) 62%)',
       }}
     >
-      {/* Orbiting accent orb */}
+      {/* Ambient orbs */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -left-24 -bottom-24 h-[420px] w-[420px] rounded-full opacity-60 blur-3xl"
+        style={{ background: 'radial-gradient(circle, rgba(255,105,0,0.55) 0%, transparent 60%)' }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute right-40 -top-10 h-[220px] w-[220px] rounded-full opacity-70 blur-3xl"
+        style={{ background: 'radial-gradient(circle, rgba(255,204,128,0.45) 0%, transparent 60%)' }}
+      />
+
+      {/* Orbiting accent composition */}
       <motion.div
         initial={{ opacity: 0, scale: 0.85 }}
         animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.6, ease: 'easeOut' }}
-        className="pointer-events-none absolute right-16 top-1/2 h-[260px] w-[260px] -translate-y-1/2"
+        transition={{ duration: 0.7, ease: 'easeOut', delay: 0.1 }}
+        className="pointer-events-none absolute right-14 top-1/2 h-[300px] w-[300px] -translate-y-1/2"
         aria-hidden
       >
-        <div className="absolute inset-0 rounded-full border border-dashed border-brand-500/30" />
-        <div className="absolute inset-8 rounded-full border border-dashed border-brand-500/20" />
+        {/* orbit rings */}
         <motion.div
-          animate={{ rotate: [0, 8, -4, 0] }}
-          transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
-          className="absolute left-1/2 top-1/2 h-[150px] w-[150px] -translate-x-1/2 -translate-y-1/2 rotate-12 rounded-[32px] bg-gradient-to-br from-[#fe9a00] via-[#ff6900] to-[#bb4d00] shadow-[0_30px_60px_-20px_rgba(255,105,0,0.6)]"
+          animate={{ rotate: 360 }}
+          transition={{ duration: 40, repeat: Infinity, ease: 'linear' }}
+          className="absolute inset-0 rounded-full border border-dashed border-brand-400/25"
         />
-        <span className="absolute -left-2 top-2 grid h-10 w-10 place-items-center rounded-2xl bg-[#292524] text-[18px]">
+        <motion.div
+          animate={{ rotate: -360 }}
+          transition={{ duration: 55, repeat: Infinity, ease: 'linear' }}
+          className="absolute inset-10 rounded-full border border-dashed border-brand-300/20"
+        />
+
+        {/* centerpiece cube */}
+        <motion.div
+          animate={{ y: [0, -8, 0], rotate: [12, 14, 12] }}
+          transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+          className="absolute left-1/2 top-1/2 h-[160px] w-[160px] -translate-x-1/2 -translate-y-1/2 rotate-12 overflow-hidden rounded-[28px] bg-gradient-to-br from-[#ffcc80] via-[#ff9f2e] via-55% to-[#b44900] shadow-[0_40px_80px_-20px_rgba(255,105,0,0.55),inset_0_1px_0_rgba(255,255,255,0.35)]"
+        >
+          <span className="absolute inset-0 animate-sheen" />
+          <span
+            className="pointer-events-none absolute inset-0"
+            style={{ background: 'radial-gradient(circle at 25% 20%, rgba(255,255,255,0.65) 0%, transparent 45%)' }}
+          />
+        </motion.div>
+
+        {/* orbiting chips */}
+        <motion.span
+          animate={{ y: [0, 4, 0] }}
+          transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut' }}
+          className="absolute -left-2 top-2 grid h-11 w-11 place-items-center rounded-2xl bg-[#2a221a] text-[18px] shadow-elevated ring-1 ring-white/10"
+        >
           🧁
-        </span>
-        <span className="absolute right-0 top-4 grid h-10 w-10 place-items-center rounded-2xl bg-[#292524] text-brand-400">
+        </motion.span>
+        <motion.span
+          animate={{ y: [0, -5, 0] }}
+          transition={{ duration: 4.2, repeat: Infinity, ease: 'easeInOut', delay: 0.8 }}
+          className="absolute right-2 top-6 grid h-11 w-11 place-items-center rounded-2xl bg-[#2a221a] text-brand-300 shadow-elevated ring-1 ring-white/10"
+        >
           <Zap className="h-4 w-4 fill-current" strokeWidth={0} />
-        </span>
-        <span className="absolute bottom-2 left-12 grid h-10 w-10 place-items-center rounded-2xl bg-[#292524] text-[18px]">
+        </motion.span>
+        <motion.span
+          animate={{ y: [0, 6, 0] }}
+          transition={{ duration: 4.6, repeat: Infinity, ease: 'easeInOut', delay: 1.4 }}
+          className="absolute bottom-4 left-12 grid h-11 w-11 place-items-center rounded-2xl bg-[#2a221a] text-[18px] shadow-elevated ring-1 ring-white/10"
+        >
           🧠
-        </span>
+        </motion.span>
       </motion.div>
 
-      <div className="relative max-w-[560px]">
+      <div className="relative max-w-[580px]">
         {/* Status chip */}
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#292524]/80 px-3 py-1.5 text-[12px] font-medium text-brand-100 ring-1 ring-brand-500/30">
-          <Zap className="h-3 w-3 fill-current text-brand-400" strokeWidth={0} />
-          Orchestrator AI v1.0 Online
-        </span>
+        <motion.span
+          initial={{ opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.15 }}
+          className="inline-flex items-center gap-1.5 rounded-full bg-[#2a221a]/85 px-3 py-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-brand-200 ring-1 ring-brand-500/30 backdrop-blur"
+        >
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-soft-pulse rounded-full bg-brand-300/50" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-brand-400" />
+          </span>
+          Orchestrator v1.0 · Online
+        </motion.span>
 
         {/* Layered title */}
-        <h1 className="relative mt-5 font-black tracking-tight text-white">
-          <span className="absolute inset-0 translate-x-1 -translate-y-0.5 text-[56px] leading-none text-white/15">
+        <motion.h1
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.2 }}
+          className="relative mt-6 font-black tracking-tight text-white"
+        >
+          <span className="absolute inset-0 translate-x-1 -translate-y-0.5 text-[60px] leading-[1.02] text-white/10">
             AI Orchestra
           </span>
-          <span className="relative text-[56px] leading-none bg-gradient-to-r from-[#ffb900] via-[#fe9a00] to-[#ff6900] bg-clip-text text-transparent">
+          <span className="relative text-[60px] leading-[1.02] text-gradient-brand">
             AI Orchestra
           </span>
-        </h1>
+        </motion.h1>
 
-        <p className="mt-5 text-[15px] leading-[1.55] text-[#d6d3d1]">
+        <motion.p
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.3 }}
+          className="mt-5 max-w-[520px] text-[15px] leading-[1.6] text-[#e6dcc9]"
+        >
           The collaborative platform where multiple leading AI models converse, plan, and
-          execute workflows in real-time. Turn isolation into a living symphony.
-        </p>
+          execute workflows in real time. Turn isolated prompts into a living symphony.
+        </motion.p>
 
-        <div className="mt-7 flex flex-wrap gap-3">
+        <motion.div
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.4 }}
+          className="mt-8 flex flex-wrap gap-3"
+        >
           <button
             type="button"
-            className="inline-flex h-12 items-center gap-2 rounded-[12px] bg-gradient-to-b from-brand-400 to-brand-500 px-5 text-[14px] font-semibold text-white shadow-[0_1px_0_rgba(255,255,255,0.3)_inset,0_8px_20px_-6px_rgba(255,105,0,0.6)] transition-transform active:scale-[0.98]"
+            className="group relative inline-flex h-12 items-center gap-2 overflow-hidden rounded-xl bg-gradient-to-b from-brand-400 to-brand-600 px-5 text-[14px] font-semibold text-white shadow-brand-glow transition-all hover:-translate-y-[1px] hover:shadow-brand-glow-hover active:scale-[0.98] focus-ring"
           >
-            <Plus className="h-[18px] w-[18px]" strokeWidth={2.4} />
-            New Workflow
+            <span className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.35),transparent_55%)]" />
+            <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/30 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
+            <Plus className="relative h-[18px] w-[18px]" strokeWidth={2.4} />
+            <span className="relative">New Workflow</span>
           </button>
           <button
             type="button"
-            className="inline-flex h-12 items-center gap-2 rounded-[12px] bg-[#292524] px-5 text-[14px] font-semibold text-white ring-1 ring-white/10 transition-colors hover:bg-[#3a3733]"
+            className="group inline-flex h-12 items-center gap-2 rounded-xl bg-[#2a221a]/95 px-5 text-[14px] font-semibold text-white ring-1 ring-white/10 backdrop-blur transition-all hover:bg-[#3a2f22] hover:-translate-y-[1px] focus-ring"
           >
-            <Play className="h-4 w-4 fill-current" strokeWidth={0} />
+            <Play className="h-4 w-4 fill-current text-brand-300" strokeWidth={0} />
             Join AI Werewolf
+            <Sparkles className="h-3.5 w-3.5 text-brand-300 opacity-0 transition-opacity group-hover:opacity-100" strokeWidth={2} />
           </button>
-        </div>
+        </motion.div>
       </div>
-    </section>
+    </motion.section>
   );
 }

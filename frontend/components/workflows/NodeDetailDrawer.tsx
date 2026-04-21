@@ -41,14 +41,14 @@ export function NodeDetailDrawer({ node, onClose }: Props) {
           animate={{ x: 0, opacity: 1 }}
           exit={{ x: '100%', opacity: 0 }}
           transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-          className="absolute right-0 top-0 z-20 flex h-full w-[440px] flex-col border-l border-hairline bg-canvas shadow-[0_0_40px_-20px_rgba(28,25,23,0.2)]"
+          className="absolute right-0 top-0 z-20 flex h-full w-[440px] flex-col border-l border-hairline bg-glass-surface shadow-overlay"
         >
           {/* Header */}
           <div className="border-b border-hairline px-5 pb-0 pt-5">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <h2 className="truncate text-[16px] font-semibold text-ink">{node.title}</h2>
-                <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-semibold text-brand-700">
+                <h2 className="truncate text-[16px] font-semibold tracking-tight text-ink">{node.title}</h2>
+                <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wider text-brand-700 ring-1 ring-brand-500/20">
                   {node.modelLabel}
                 </span>
               </div>
