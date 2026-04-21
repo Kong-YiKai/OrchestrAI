@@ -2,6 +2,7 @@
 
 import { CloudSun, Globe, Plus, ShoppingCart } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
 type Project = {
@@ -15,7 +16,7 @@ const RECENT_PROJECTS: Project[] = [
   {
     id: 'wx',
     title: '3D Weather App',
-    lastActive: 'Active · Claude 4.5',
+    lastActive: 'Active · Claude 4.6',
     icon: <CloudSun className="h-[18px] w-[18px]" strokeWidth={1.8} />,
   },
   {
@@ -42,14 +43,16 @@ export function RecentProjectsPanel({ activeId, onSelect }: Props) {
     <div className="flex h-full flex-col gap-5 p-5">
       <button
         type="button"
-        className="flex h-11 items-center justify-center gap-2 rounded-[12px] bg-gradient-to-b from-brand-400 to-brand-500 text-[14px] font-semibold text-white shadow-[0_1px_0_rgba(255,255,255,0.3)_inset,0_4px_12px_-4px_rgba(255,105,0,0.4)] transition-transform active:scale-[0.98]"
+        className="group relative flex h-11 items-center justify-center gap-2 overflow-hidden rounded-xl bg-gradient-to-b from-brand-400 to-brand-600 text-[13.5px] font-semibold text-white shadow-brand-glow transition-all hover:-translate-y-[1px] hover:shadow-brand-glow-hover active:scale-[0.98] focus-ring"
       >
-        <Plus className="h-[18px] w-[18px]" strokeWidth={2.4} />
-        New Project Chat
+        <span className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.35),transparent_55%)]" />
+        <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/35 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
+        <Plus className="relative h-[17px] w-[17px]" strokeWidth={2.4} />
+        <span className="relative">New Project Chat</span>
       </button>
 
       <div>
-        <p className="px-1 pb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
+        <p className="px-1 pb-2 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-ink-muted">
           Recent Projects
         </p>
         <ul className="flex flex-col gap-1">
@@ -61,21 +64,30 @@ export function RecentProjectsPanel({ activeId, onSelect }: Props) {
                   type="button"
                   onClick={() => onSelect(p.id)}
                   className={cn(
-                    'flex w-full items-center gap-3 rounded-[12px] px-3 py-2.5 text-left transition-colors',
+                    'relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors',
                     active
-                      ? 'bg-surface text-ink shadow-sm ring-1 ring-hairline'
-                      : 'text-ink-soft hover:bg-surface-subtle'
+                      ? 'text-ink'
+                      : 'text-ink-soft hover:bg-surface-subtle hover:text-ink'
                   )}
                 >
+                  {active && (
+                    <motion.span
+                      layoutId="recent-project-active"
+                      className="absolute inset-0 rounded-xl bg-surface shadow-card ring-1 ring-hairline"
+                      transition={{ type: 'spring', stiffness: 520, damping: 40 }}
+                    />
+                  )}
                   <span
                     className={cn(
-                      'grid h-8 w-8 flex-shrink-0 place-items-center rounded-[10px]',
-                      active ? 'bg-brand-50 text-brand-600' : 'bg-canvas-soft text-ink-muted'
+                      'relative grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg transition-colors',
+                      active
+                        ? 'bg-gradient-to-br from-brand-100 to-brand-300 text-brand-700 shadow-[0_4px_10px_-4px_rgba(255,105,0,0.35)]'
+                        : 'bg-canvas-soft text-ink-muted'
                     )}
                   >
                     {p.icon}
                   </span>
-                  <div className="min-w-0">
+                  <div className="relative min-w-0">
                     <p className="truncate text-[13.5px] font-medium">{p.title}</p>
                     <p className="truncate text-[11px] text-ink-muted">{p.lastActive}</p>
                   </div>

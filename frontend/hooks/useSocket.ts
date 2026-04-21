@@ -2,16 +2,32 @@
 import { useEffect, useRef } from 'react';
 import { getSocket } from '@/lib/socket';
 import { fetchWorkflow } from '@/lib/api';
-import { useChatStore } from '@/stores/chatStore';
 import { useWorkflowStore } from '@/stores/workflowStore';
 import { useOrchestraStore } from '@/stores/orchestraStore';
 import type { ChatMessage } from '@/types/chat';
 import type { WorkflowNode, NodeResult } from '@/types/workflow';
 import type { ClarificationQuestion, BuildingLog, HistoryEntry, Plan } from '@/stores/orchestraStore';
 
+/**
+ * Socket.io binding hook for the Orchestra page.
+ *
+ * Emits two client events:
+ *   - `chat_send`           — send user message
+ *   - `chat_confirm_start`  — user approves plan → backend starts workflow generation
+ *
+ * Subscribes to server events:
+ *   - chat:stream_start / chat:stream_token / chat:stream_end / chat:message
+ *   - clarification:update / clarification:plan_ready
+ *   - building:started / building:log / building:complete
+ *   - workflow:node_appeared / workflow:generation_complete / workflow:ready
+ *   - execution:* (Phase 6)
+ *   - history:update
+ *
+ * All chat and orchestration state flows through `orchestraStore`.
+ * Workflow graph state flows through `workflowStore`.
+ */
 export function useSocket(sessionId: string) {
   const initialized = useRef(false);
-  const { addMessage, appendToken, commitStreaming, setTyping } = useChatStore();
   const {
     addNode,
     setWorkflow,
@@ -20,7 +36,6 @@ export function useSocket(sessionId: string) {
     updateNodeError,
     appendNodeLog,
     setExecuting,
-    workflowId,
   } = useWorkflowStore();
   const orchestra = useOrchestraStore();
 
@@ -40,38 +55,17 @@ export function useSocket(sessionId: string) {
       console.log('[socket] disconnected');
     });
 
-    // ── Chat events ──────────────────────────────────────────────────────────
-    socket.on('chat:message', (msg: ChatMessage) => {
-      // If this message was being streamed, commit it now
-      commitStreaming(msg.message_id);
-      addMessage(msg);
-    });
-
-    socket.on('chat:stream_token', ({ message_id, token, sender_id }: { message_id: string; token: string; sender_id: string }) => {
-      appendToken(message_id, token, sender_id);
-    });
-
-    socket.on('chat:typing', ({ sender_id, is_typing }: { sender_id: string; is_typing: boolean }) => {
-      setTyping(sender_id, is_typing);
-    });
-
-    // ── Workflow events ──────────────────────────────────────────────────────
-    socket.on('workflow:node_appeared', (node: WorkflowNode) => {
-      addNode(node);
-    });
-
-    socket.on('workflow:generation_complete', ({ workflow_id }: { workflow_id: string }) => {
-      useWorkflowStore.setState((s) => ({
-        workflowId: workflow_id,
-        workflow: s.workflow ? { ...s.workflow, workflow_id } : null,
-      }));
-    });
-
-    // ── Phase 3: Orchestra events ────────────────────────────────────────────
+    // ── Chat / stream events ────────────────────────────────────────────────
     socket.on('chat:stream_start', ({ message_id, sender }: { message_id: string; sender: string }) => {
       orchestra.addMessage({
         message_id,
-        sender: { id: sender, name: sender === 'claude' ? 'Claude' : 'OrchestrAI', avatar: '', model: '', color: sender === 'claude' ? '#D97706' : '#EC4899' },
+        sender: {
+          id: sender,
+          name: sender === 'claude' ? 'Claude' : 'OrchestrAI',
+          avatar: '',
+          model: '',
+          color: sender === 'claude' ? '#D97706' : '#EC4899',
+        },
         content: '',
         message_type: 'text',
         timestamp: new Date().toISOString(),
@@ -91,6 +85,7 @@ export function useSocket(sessionId: string) {
       orchestra.addMessage(msg);
     });
 
+    // ── Clarification ───────────────────────────────────────────────────────
     socket.on('clarification:update', ({ questions }: { questions: ClarificationQuestion[] }) => {
       orchestra.setClarifications(questions);
       orchestra.setConvState('clarifying');
@@ -102,6 +97,7 @@ export function useSocket(sessionId: string) {
       orchestra.setConvState('awaiting_confirm');
     });
 
+    // ── Building / workflow generation ──────────────────────────────────────
     socket.on('building:started', () => {
       orchestra.setConvState('generating');
       orchestra.setPendingPanelView('building');
@@ -113,6 +109,17 @@ export function useSocket(sessionId: string) {
 
     socket.on('building:complete', () => {
       orchestra.setBuildingComplete();
+    });
+
+    socket.on('workflow:node_appeared', (node: WorkflowNode) => {
+      addNode(node);
+    });
+
+    socket.on('workflow:generation_complete', ({ workflow_id }: { workflow_id: string }) => {
+      useWorkflowStore.setState((s) => ({
+        workflowId: workflow_id,
+        workflow: s.workflow ? { ...s.workflow, workflow_id } : null,
+      }));
     });
 
     socket.on('workflow:ready', async ({ workflow_id }: { workflow_id: string; title: string; node_count: number }) => {
@@ -128,7 +135,7 @@ export function useSocket(sessionId: string) {
       orchestra.setHistoryEntries(entries);
     });
 
-    // ── Execution events ─────────────────────────────────────────────────────
+    // ── Execution (Phase 6) ─────────────────────────────────────────────────
     socket.on('execution:node_started', ({ node_id }: { node_id: string }) => {
       updateNodeStatus(node_id, 'running');
     });
@@ -156,7 +163,6 @@ export function useSocket(sessionId: string) {
       socket.off('chat:stream_token');
       socket.off('chat:stream_start');
       socket.off('chat:stream_end');
-      socket.off('chat:typing');
       socket.off('workflow:node_appeared');
       socket.off('workflow:generation_complete');
       socket.off('clarification:update');

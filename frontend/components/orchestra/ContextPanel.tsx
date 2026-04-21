@@ -50,10 +50,10 @@ export function ContextPanel() {
   };
 
   return (
-    <div className="flex h-full flex-col border-l border-hairline bg-canvas">
+    <div className="relative flex h-full flex-col border-l border-hairline bg-glass">
       {view.name === 'overview' && (
         <div className="border-b border-hairline px-5 pb-4 pt-5">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-ink-muted">
             Project Context
           </p>
         </div>

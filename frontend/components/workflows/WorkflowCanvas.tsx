@@ -150,18 +150,18 @@ export function WorkflowCanvas() {
   return (
     <div className="relative h-full w-full">
       {/* Top bar */}
-      <div className="flex h-14 items-center justify-between border-b border-hairline bg-canvas px-6">
+      <div className="flex h-[60px] items-center justify-between border-b border-hairline bg-glass px-6">
         <Breadcrumbs items={crumbs} />
         <div className="flex items-center gap-2">
           <button
             type="button"
-            className="inline-flex h-9 items-center gap-1.5 rounded-[10px] border border-dashed border-hairline bg-surface px-3 text-[12.5px] font-medium text-ink-soft hover:border-brand-300"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-dashed border-hairline bg-surface px-3.5 text-[12.5px] font-medium text-ink-soft shadow-card transition-all hover:border-brand-400 hover:text-ink focus-ring"
           >
             Import Link
           </button>
           <button
             type="button"
-            className="inline-flex h-9 items-center gap-1.5 rounded-[10px] bg-[#1c1917] px-3.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-[#2a2724]"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-gradient-to-b from-[#1f1a15] to-[#120e0a] px-3.5 text-[12.5px] font-semibold text-white shadow-[0_2px_8px_-3px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.08)] transition-all hover:scale-[1.02] active:scale-[0.98] focus-ring"
           >
             Save Draft
           </button>
@@ -169,7 +169,7 @@ export function WorkflowCanvas() {
       </div>
 
       {/* Canvas */}
-      <div className="relative h-[calc(100%-56px)] w-full bg-canvas-soft">
+      <div className="relative h-[calc(100%-60px)] w-full bg-canvas-soft">
         {!workflow || workflow.nodes.length === 0 ? (
           <EmptyState />
         ) : (
@@ -191,17 +191,20 @@ export function WorkflowCanvas() {
                 modelLabel: MODEL_LABEL[d.assignedAi] ?? d.assignedAi,
               });
             }}
-            defaultEdgeOptions={{ style: { stroke: '#d6d3d1', strokeWidth: 1.5 } }}
+            defaultEdgeOptions={{
+              style: { stroke: '#c9bea9', strokeWidth: 1.75 },
+              animated: false,
+            }}
           >
             <Background
               variant={BackgroundVariant.Dots}
-              gap={22}
-              size={1.5}
-              color="#d6d3d1"
+              gap={26}
+              size={1.6}
+              color="#d9cfbd"
             />
             <Controls
               showInteractive={false}
-              className="!rounded-[12px] !border-hairline !bg-surface !shadow-[0_4px_20px_-12px_rgba(28,25,23,0.2)]"
+              className="!overflow-hidden !rounded-xl !border-hairline !bg-surface !shadow-elevated"
             />
           </ReactFlow>
         )}
@@ -215,15 +218,22 @@ export function WorkflowCanvas() {
 function EmptyState() {
   return (
     <div className="grid h-full w-full place-items-center">
-      <div className="flex flex-col items-center gap-3 text-center">
-        <span className="grid h-14 w-14 place-items-center rounded-[16px] bg-brand-50 text-brand-500">
+      <div className="flex flex-col items-center gap-4 text-center">
+        <span className="relative grid h-16 w-16 place-items-center rounded-2xl bg-gradient-to-br from-brand-100 to-brand-300 text-brand-700 shadow-elevated ring-1 ring-white/50">
           <WorkflowIcon className="h-7 w-7" strokeWidth={1.6} />
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-0 rounded-2xl"
+            style={{ background: 'radial-gradient(circle at 30% 20%, rgba(255,255,255,0.5), transparent 55%)' }}
+          />
         </span>
-        <p className="text-[15px] font-semibold text-ink">尚未生成工作流</p>
-        <p className="max-w-[360px] text-[12.5px] leading-[1.55] text-ink-muted">
-          前往 <span className="font-semibold text-ink">Orchestra</span> 与 AI 对话并确认计划，
-          工作流生成后将自动出现在这里。你也可以随时切换每个节点的 AI 模型。
-        </p>
+        <div>
+          <p className="text-[16px] font-semibold tracking-tight text-ink">尚未生成工作流</p>
+          <p className="mt-1.5 max-w-[380px] text-[12.5px] leading-[1.6] text-ink-muted">
+            前往 <span className="font-semibold text-ink">Orchestra</span> 与 AI 对话并确认计划，
+            工作流生成后将自动出现在这里。你也可以随时切换每个节点的 AI 模型。
+          </p>
+        </div>
       </div>
     </div>
   );
