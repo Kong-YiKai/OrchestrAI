@@ -1,83 +1,76 @@
 'use client';
 
-import { useState } from 'react';
-import { CheckCircle2, Globe } from 'lucide-react';
+import { useMemo } from 'react';
+import { CheckCircle2, Code2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ContextPanelNav } from '../ContextPanel';
 import { CLARIFICATION_AGENTS } from './ClarificationsList';
 import { DetailHeader } from './DetailHeader';
+import { useOrchestraStore } from '@/stores/orchestraStore';
+import type { ClarificationQuestion } from '@/stores/orchestraStore';
+import { getSocket } from '@/lib/socket';
 
-type Option = {
-  id: string;
-  label: string;
-  meta: string;
-  recommended?: boolean;
-};
-
-type Decision = {
-  id: string;
-  title: string;
-  subtitle: string;
-  options: Option[];
-};
-
-const DECISIONS_BY_AGENT: Record<string, Decision[]> = {
-  'gpt-5-4': [
-    {
-      id: 'weather-api',
-      title: 'Weather API Provider',
-      subtitle: 'Select the primary data source for weather information.',
-      options: [
-        {
-          id: 'open',
-          label: 'OpenWeather API',
-          meta: 'Free tier available, reliable global data.',
-          recommended: true,
-        },
-        {
-          id: 'tomorrow',
-          label: 'Tomorrow.io',
-          meta: 'Hyper-local, excellent for 3D visualization.',
-        },
-        {
-          id: 'weatherbit',
-          label: 'WeatherBit',
-          meta: 'Cost-effective, broad global coverage.',
-        },
-      ],
-    },
-  ],
-  'claude-4-6': [
-    {
-      id: 'render-engine',
-      title: '3D Rendering Engine',
-      subtitle: 'Pick the rendering stack for the weather scene.',
-      options: [
-        {
-          id: 'three',
-          label: 'Three.js + R3F',
-          meta: 'Familiar React bindings, strong ecosystem.',
-          recommended: true,
-        },
-        {
-          id: 'babylon',
-          label: 'Babylon.js',
-          meta: 'Built-in physics and particle systems.',
-        },
-      ],
-    },
-  ],
-};
+const CUSTOM_OPTION_ID = '__custom__';
 
 const TONE = {
-  green: { card: 'border-[#8cc7a8] bg-[#f4faf6]', avatar: 'bg-[#2f855a]' },
   orange: { card: 'border-[#fde68a] bg-warning-50/40', avatar: 'bg-[#c2410c]' },
+  green: { card: 'border-[#8cc7a8] bg-[#f4faf6]', avatar: 'bg-[#2f855a]' },
 } as const;
 
 export function ClarificationDetail({ nav, agentId }: { nav: ContextPanelNav; agentId: string }) {
   const agent = CLARIFICATION_AGENTS.find((a) => a.id === agentId) ?? CLARIFICATION_AGENTS[0];
-  const decisions = DECISIONS_BY_AGENT[agent.id] ?? [];
   const tone = TONE[agent.tone];
+  const {
+    clarificationQuestions,
+    sessionId,
+    updateClarificationDraft,
+    confirmClarifications,
+  } = useOrchestraStore();
+
+  const allConfirmed = clarificationQuestions.length > 0 && clarificationQuestions.every((q) => q.confirmed);
+
+  const readyToConfirm = useMemo(
+    () =>
+      clarificationQuestions.length > 0 &&
+      clarificationQuestions.every((q) => {
+        if (q.selected_option_id === CUSTOM_OPTION_ID) return Boolean(q.custom_answer?.trim());
+        return Boolean(q.selected_option_id);
+      }),
+    [clarificationQuestions],
+  );
+
+  const handleSelect = (q: ClarificationQuestion, optionId: string) => {
+    if (q.confirmed) return;
+    updateClarificationDraft(q.id, { selected_option_id: optionId });
+  };
+
+  const handleCustomChange = (q: ClarificationQuestion, value: string) => {
+    if (q.confirmed) return;
+    updateClarificationDraft(q.id, { custom_answer: value });
+  };
+
+  const handleConfirmAll = () => {
+    if (!readyToConfirm || allConfirmed) return;
+
+    const lines = clarificationQuestions.map((q) => {
+      let answerText = '';
+      if (q.selected_option_id === CUSTOM_OPTION_ID) {
+        answerText = q.custom_answer?.trim() ?? '';
+      } else {
+        const opt = q.options?.find((o) => o.id === q.selected_option_id);
+        answerText = opt?.label ?? '';
+      }
+      return `Q: ${q.question}\nA: ${answerText}`;
+    });
+
+    confirmClarifications();
+
+    const socket = getSocket();
+    socket.emit('chat_send', {
+      content: lines.join('\n\n'),
+      session_id: sessionId,
+    });
+  };
 
   return (
     <>
@@ -90,7 +83,7 @@ export function ClarificationDetail({ nav, agentId }: { nav: ContextPanelNav; ag
           <span
             className={cn(
               'grid h-10 w-10 flex-shrink-0 place-items-center rounded-[10px] text-[13px] font-semibold text-white',
-              tone.avatar
+              tone.avatar,
             )}
           >
             {agent.name.charAt(0)}
@@ -104,66 +97,141 @@ export function ClarificationDetail({ nav, agentId }: { nav: ContextPanelNav; ag
           </div>
         </div>
 
-        {decisions.map((d) => (
-          <DecisionCard key={d.id} decision={d} />
-        ))}
+        {clarificationQuestions.length === 0 ? (
+          <p className="text-[12.5px] text-ink-muted">暂无待澄清问题。</p>
+        ) : (
+          clarificationQuestions.map((q) => (
+            <DecisionCard
+              key={q.id}
+              question={q}
+              onSelect={(optionId) => handleSelect(q, optionId)}
+              onCustomChange={(v) => handleCustomChange(q, v)}
+              disabled={Boolean(q.confirmed)}
+            />
+          ))
+        )}
 
         <button
           type="button"
-          onClick={() => nav.goBack({ name: 'clarifications' })}
-          className="mt-1 inline-flex h-10 w-full items-center justify-center gap-2 rounded-[12px] bg-[#1c1917] text-[13px] font-semibold text-white hover:bg-[#2a2724] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+          onClick={handleConfirmAll}
+          disabled={!readyToConfirm || allConfirmed}
+          className={cn(
+            'mt-1 inline-flex h-11 w-full items-center justify-center gap-2 rounded-[12px] text-[13px] font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500',
+            allConfirmed
+              ? 'cursor-default bg-success-500 text-white'
+              : readyToConfirm
+                ? 'bg-[#1c1917] text-white hover:bg-[#2a2724] active:scale-[0.99]'
+                : 'cursor-not-allowed bg-canvas-soft text-ink-muted',
+          )}
         >
           <CheckCircle2 className="h-4 w-4" strokeWidth={2.2} />
-          Confirm Selection
+          {allConfirmed ? 'Selection Confirmed' : 'Confirm Selection'}
         </button>
       </div>
     </>
   );
 }
 
-function DecisionCard({ decision }: { decision: Decision }) {
-  const [selected, setSelected] = useState<string>(
-    decision.options.find((o) => o.recommended)?.id ?? decision.options[0].id
-  );
+function DecisionCard({
+  question,
+  onSelect,
+  onCustomChange,
+  disabled,
+}: {
+  question: ClarificationQuestion;
+  onSelect: (optionId: string) => void;
+  onCustomChange: (value: string) => void;
+  disabled: boolean;
+}) {
+  const options = question.options ?? [];
+  const selected = question.selected_option_id ?? '';
+  const isCustom = selected === CUSTOM_OPTION_ID;
+
   return (
     <div className="rounded-[14px] border border-hairline bg-surface p-4">
       <div className="flex items-center gap-2">
-        <Globe className="h-4 w-4 text-warning-500" strokeWidth={1.8} />
-        <p className="text-[14px] font-semibold text-ink">{decision.title}</p>
+        <Code2 className="h-4 w-4 text-warning-500" strokeWidth={1.8} />
+        <p className="text-[14px] font-semibold text-ink">{question.question}</p>
       </div>
-      <p className="mt-1 text-[12px] text-ink-muted">{decision.subtitle}</p>
+      {question.hint && (
+        <p className="mt-1 text-[12px] text-ink-muted">{question.hint}</p>
+      )}
+
       <ul className="mt-3 flex flex-col gap-2">
-        {decision.options.map((o) => {
-          const active = o.id === selected;
-          return (
-            <li key={o.id}>
-              <button
-                type="button"
-                onClick={() => setSelected(o.id)}
-                className={cn(
-                  'flex w-full items-start gap-3 rounded-[12px] border px-3 py-2.5 text-left transition-colors',
-                  active
-                    ? 'border-[#fcd34d] bg-warning-50/60'
-                    : 'border-hairline bg-canvas hover:border-[#fcd34d]'
-                )}
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="text-[13.5px] font-semibold text-ink">{o.label}</p>
-                  <p className="text-[11.5px] text-ink-muted">{o.meta}</p>
-                </div>
-                <span
-                  className={cn(
-                    'grid h-4 w-4 flex-shrink-0 place-items-center rounded-full ring-1',
-                    active ? 'ring-warning-500' : 'ring-hairline'
-                  )}
-                >
-                  {active && <span className="h-2 w-2 rounded-full bg-warning-500" />}
-                </span>
-              </button>
-            </li>
-          );
-        })}
+        {options.map((o) => (
+          <OptionRow
+            key={o.id}
+            active={selected === o.id}
+            disabled={disabled}
+            onClick={() => onSelect(o.id)}
+            label={o.label}
+            meta={o.meta}
+          />
+        ))}
+        <OptionRow
+          active={isCustom}
+          disabled={disabled}
+          onClick={() => onSelect(CUSTOM_OPTION_ID)}
+          label="Others"
+          meta="自定义输入你的回答"
+        />
+        {isCustom && (
+          <li>
+            <input
+              type="text"
+              value={question.custom_answer ?? ''}
+              onChange={(e) => onCustomChange(e.target.value)}
+              disabled={disabled}
+              placeholder="输入你的自定义回答…"
+              className="h-10 w-full rounded-[10px] border border-hairline bg-canvas px-3 text-[13px] text-ink placeholder:text-ink-muted focus:border-brand-500 focus:outline-none disabled:opacity-60"
+            />
+          </li>
+        )}
       </ul>
     </div>
+  );
+}
+
+function OptionRow({
+  active,
+  disabled,
+  onClick,
+  label,
+  meta,
+}: {
+  active: boolean;
+  disabled: boolean;
+  onClick: () => void;
+  label: string;
+  meta?: string;
+}) {
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        className={cn(
+          'flex w-full items-start gap-3 rounded-[12px] border px-3 py-2.5 text-left transition-colors',
+          active
+            ? 'border-[#fcd34d] bg-warning-50/60'
+            : 'border-hairline bg-canvas hover:border-[#fcd34d]',
+          disabled && 'cursor-not-allowed opacity-70',
+        )}
+      >
+        <div className="min-w-0 flex-1">
+          <p className="text-[13.5px] font-semibold text-ink">{label}</p>
+          {meta && <p className="text-[11.5px] text-ink-muted">{meta}</p>}
+        </div>
+        <span
+          className={cn(
+            'mt-0.5 grid h-4 w-4 flex-shrink-0 place-items-center rounded-full ring-1',
+            active ? 'ring-warning-500' : 'ring-hairline',
+          )}
+        >
+          {active && <span className="h-2 w-2 rounded-full bg-warning-500" />}
+        </span>
+      </button>
+    </li>
   );
 }

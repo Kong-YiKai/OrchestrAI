@@ -62,7 +62,13 @@ async def clarify(
     if action == "ask":
         questions = parsed.get("questions", [])
         for q in questions:
-            add_clarification(session_id, q.get("id", uuid.uuid4().hex[:6]), q.get("question", ""))
+            add_clarification(
+                session_id,
+                q.get("id", uuid.uuid4().hex[:6]),
+                q.get("question", ""),
+                options=q.get("options", []),
+                hint=q.get("hint", ""),
+            )
         await sio_emit_fn("clarification:update", {"questions": questions}, room=session_id)
         add_history_log(session_id, "澄清问题", f"提出 {len(questions)} 个问题")
     else:

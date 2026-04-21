@@ -53,6 +53,52 @@ def test_parse_workflow_invalid_json_returns_none():
     assert _parse_workflow("<workflow_json>not json</workflow_json>") is None
 
 
+def test_parse_workflow_handles_markdown_fence_inside_tags():
+    wrapped = "<workflow_json>\n```json\n" + VALID_JSON.split("<workflow_json>")[1].split("</workflow_json>")[0] + "\n```\n</workflow_json>"
+    wf = _parse_workflow(wrapped)
+    assert wf is not None
+    assert wf.workflow_id == "wf_test123"
+
+
+def test_parse_workflow_handles_trailing_commas():
+    with_trailing = """<workflow_json>{
+      "workflow_id": "wf_tc",
+      "title": "T",
+      "title_zh": "T",
+      "description": "d",
+      "nodes": [
+        {
+          "node_id": "n1",
+          "order": 1,
+          "title": "A",
+          "title_zh": "A",
+          "description": "d",
+          "description_zh": "d",
+          "assigned_ai": "claude",
+          "assigned_tool": "Python",
+          "tool_type": "code",
+          "input_schema": {},
+          "output_schema": {},
+        },
+      ],
+    }</workflow_json>"""
+    wf = _parse_workflow(with_trailing)
+    assert wf is not None
+    assert wf.workflow_id == "wf_tc"
+
+
+def test_parse_workflow_no_tags_balanced_brace_fallback():
+    no_tags = "Here is the workflow:\n\n" + VALID_JSON.split("<workflow_json>")[1].split("</workflow_json>")[0] + "\n\nExtra trailing text."
+    wf = _parse_workflow(no_tags)
+    assert wf is not None
+    assert wf.workflow_id == "wf_test123"
+
+
+def test_parse_workflow_truncated_json_returns_none():
+    truncated = '<workflow_json>{"workflow_id": "wf_x", "nodes": [{"title": "A"'
+    assert _parse_workflow(truncated) is None
+
+
 def test_build_context_includes_original_request():
     state = ConversationState(original_request="Build a 3D tool")
     ctx = _build_context(state)

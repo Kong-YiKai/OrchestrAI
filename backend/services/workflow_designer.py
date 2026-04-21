@@ -57,11 +57,12 @@ async def design_workflow(
     log_messages = ["正在设计工作流结构...", "正在分配 AI 模型...", "正在定义节点输入输出..."]
     log_idx = 0
 
+    stop_reason: str | None = None
     try:
         await _emit_log(sio_emit_fn, session_id, "analyzing", "正在理解需求上下文...")
         async with _client.messages.stream(
             model="claude-sonnet-4-6",
-            max_tokens=2048,
+            max_tokens=8192,
             system=WORKFLOW_DESIGNER_SYSTEM,
             messages=messages,
         ) as stream:
@@ -72,16 +73,18 @@ async def design_workflow(
                     await _emit_log(sio_emit_fn, session_id, "generating", log_messages[log_idx])
                     log_idx += 1
                     last_log_time = now
+            final_message = await stream.get_final_message()
+            stop_reason = final_message.stop_reason
     except Exception as e:
         await _emit_log(sio_emit_fn, session_id, "error", f"生成失败: {str(e)[:40]}")
         return None
 
     workflow = _parse_workflow(full_text)
     if not workflow:
-        # Log the raw response tail to help diagnose future failures
         tail = full_text[-300:].replace('\n', ' ')
-        print(f"[designer] parse failed. response tail: {tail}")
-        await _emit_log(sio_emit_fn, session_id, "error", "解析工作流 JSON 失败")
+        print(f"[designer] parse failed. stop_reason={stop_reason} len={len(full_text)} tail={tail}")
+        detail = f"(stop_reason={stop_reason})" if stop_reason == "max_tokens" else ""
+        await _emit_log(sio_emit_fn, session_id, "error", f"解析工作流 JSON 失败 {detail}".strip())
         return None
 
     await _emit_log(sio_emit_fn, session_id, "done", f"工作流设计完成，共 {len(workflow.nodes)} 个节点")
@@ -91,17 +94,58 @@ async def design_workflow(
     return workflow
 
 
-def _parse_workflow(text: str) -> Workflow | None:
-    # Try tagged format first
+def _extract_raw_json(text: str) -> str | None:
     match = re.search(r'<workflow_json>(.*?)</workflow_json>', text, re.DOTALL)
     if match:
-        raw = match.group(1).strip()
-    else:
-        # Fallback: find the outermost JSON object in the response
-        obj_match = re.search(r'\{[\s\S]*"nodes"[\s\S]*\}', text)
-        if not obj_match:
+        return match.group(1).strip()
+    # Fallback: balanced-brace scan for the first JSON object containing "nodes"
+    start = 0
+    while True:
+        idx = text.find('{', start)
+        if idx == -1:
             return None
-        raw = obj_match.group(0)
+        depth = 0
+        in_str = False
+        escape = False
+        for i in range(idx, len(text)):
+            ch = text[i]
+            if escape:
+                escape = False
+                continue
+            if ch == '\\':
+                escape = True
+                continue
+            if ch == '"':
+                in_str = not in_str
+                continue
+            if in_str:
+                continue
+            if ch == '{':
+                depth += 1
+            elif ch == '}':
+                depth -= 1
+                if depth == 0:
+                    candidate = text[idx:i + 1]
+                    if '"nodes"' in candidate:
+                        return candidate
+                    break
+        start = idx + 1
+
+
+def _clean_raw_json(raw: str) -> str:
+    raw = raw.strip()
+    raw = re.sub(r'^```(?:json)?\s*', '', raw)
+    raw = re.sub(r'\s*```\s*$', '', raw)
+    # Strip trailing commas before } or ]
+    raw = re.sub(r',(\s*[}\]])', r'\1', raw)
+    return raw.strip()
+
+
+def _parse_workflow(text: str) -> Workflow | None:
+    raw = _extract_raw_json(text)
+    if not raw:
+        return None
+    raw = _clean_raw_json(raw)
     try:
         data = json.loads(raw)
         nodes = []

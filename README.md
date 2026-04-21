@@ -42,9 +42,9 @@ Full log of every action, visible in real time
 
 | Feature | Status |
 |---------|--------|
-| Natural language → workflow generation | 🔲 In progress (Phase 3) |
-| Multi-turn clarification before building | 🔲 In progress (Phase 3) |
-| Real-time streaming AI responses | 🔲 In progress (Phase 3) |
+| Natural language → workflow generation | ✅ Phase 3 |
+| Multi-turn clarification before building | ✅ Phase 3 |
+| Real-time streaming AI responses | ✅ Phase 3 |
 | Visual workflow canvas (React Flow) | ✅ UI ready |
 | Per-node AI model selection | ✅ UI ready |
 | Node execution engine (API / Browser / Simulation) | 🔲 Phase 6 |
@@ -244,7 +244,7 @@ The project is being built in phases. Current status:
 
 - **Infrastructure** ✅ — Docker Compose, PostgreSQL, FastAPI, Socket.io, Next.js app shell
 - **UI shell** ✅ — All pages and components built with placeholder data
-- **AI orchestration** 🔲 — Connecting the conversation loop to real Claude API calls (Phase 3, in progress)
+- **AI orchestration** ✅ — Phase 3 wired end-to-end: `chat_send → clarifier → plan_ready → chat_confirm_start → workflow_designer → building:log → workflow:ready`. `/workflows` canvas auto-populates, Building Process panel shows per-node agent cards.
 - **Workflow execution** 🔲 — Node-by-node execution engine with browser automation (Phase 6)
 
 Full roadmap: [`docs/superpowers/plans/project-phases-overview.md`](docs/superpowers/plans/project-phases-overview.md)
@@ -266,6 +266,16 @@ cat backend/.env | grep ANTHROPIC
 # Check backend logs
 docker compose logs -f backend
 ```
+
+**Workflow JSON parses but `/workflows` stays empty / Building Process doesn't switch from logs to agent cards**
+
+Check backend logs for a `save_workflow failed:` line. This path is now wrapped
+in an explicit try/except that also emits a `building:log` error entry
+(`backend/main.py`), so the panel no longer hangs silently. The Phase 3 root
+cause was `WorkflowRecord.created_at` being a DateTime column while
+`Workflow.created_at` is an ISO string — fixed in
+`backend/services/workflow_db.py::_coerce_created_at`, covered by
+`backend/tests/test_workflow_db.py`.
 
 **Port conflict**
 ```bash
