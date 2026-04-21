@@ -20,33 +20,33 @@ export type TaskNodeData = {
 
 export type TaskNode = Node<TaskNodeData, 'task'>;
 
-const ACCENT: Record<TaskNodeData['accent'], string> = {
-  brand: 'bg-brand-500',
-  success: 'bg-success-500',
-  violet: 'bg-[#7c3aed]',
-  sky: 'bg-[#0ea5e9]',
-  warning: 'bg-warning-500',
+const ACCENT_BAR: Record<TaskNodeData['accent'], string> = {
+  brand: 'bg-gradient-to-b from-brand-400 to-brand-700',
+  success: 'bg-gradient-to-b from-success-400 to-success-600',
+  violet: 'bg-gradient-to-b from-[#a78bfa] to-[#6d28d9]',
+  sky: 'bg-gradient-to-b from-[#38bdf8] to-[#0369a1]',
+  warning: 'bg-gradient-to-b from-warning-100 to-warning-500',
 };
 
 const STATUS_CHIP: Record<TaskNodeStatus, { label: string; cls: string; icon: React.ReactNode }> = {
   online: {
     label: 'Online',
-    cls: 'bg-success-50 text-success-700',
+    cls: 'bg-success-50 text-success-700 ring-success-500/20',
     icon: <span className="h-1.5 w-1.5 rounded-full bg-success-500" />,
   },
   running: {
     label: 'Running',
-    cls: 'bg-brand-50 text-brand-700',
+    cls: 'bg-brand-50 text-brand-700 ring-brand-500/20',
     icon: <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.4} />,
   },
   queued: {
     label: 'Queued',
-    cls: 'bg-canvas-soft text-ink-muted',
+    cls: 'bg-canvas-soft text-ink-muted ring-hairline',
     icon: <Clock className="h-3 w-3" strokeWidth={2.4} />,
   },
   complete: {
     label: 'Done',
-    cls: 'bg-success-50 text-success-700',
+    cls: 'bg-success-50 text-success-700 ring-success-500/20',
     icon: <Check className="h-3 w-3" strokeWidth={2.4} />,
   },
 };
@@ -71,42 +71,50 @@ export function TaskNodeCard({ data, selected }: NodeProps<TaskNode>) {
   return (
     <div
       className={cn(
-        'group relative w-[240px] overflow-visible rounded-[14px] border bg-surface shadow-[0_4px_18px_-10px_rgba(28,25,23,0.2)] transition-shadow',
+        'group relative w-[256px] overflow-visible rounded-2xl border bg-surface transition-all',
         selected
-          ? 'border-brand-500 shadow-[0_8px_28px_-12px_rgba(255,105,0,0.35)]'
-          : 'border-hairline hover:shadow-[0_8px_24px_-12px_rgba(28,25,23,0.2)]',
+          ? 'border-brand-500 shadow-[0_12px_36px_-14px_rgba(255,105,0,0.4),0_0_0_4px_rgba(255,105,0,0.1)]'
+          : 'border-hairline shadow-card-md hover:shadow-elevated hover:-translate-y-[1px]',
       )}
     >
-      <span className={cn('absolute left-0 top-0 h-full w-1 rounded-l-[14px]', ACCENT[d.accent])} />
+      {/* accent bar */}
+      <span className={cn('absolute left-0 top-0 h-full w-[3px] rounded-l-2xl', ACCENT_BAR[d.accent])} />
+      {/* subtle hover glow */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full opacity-0 blur-2xl transition-opacity duration-300 group-hover:opacity-100"
+        style={{ background: 'radial-gradient(circle, rgba(255,159,46,0.22) 0%, transparent 65%)' }}
+      />
+
       <Handle
         type="target"
         position={Position.Left}
         className="!h-2 !w-2 !border-0 !bg-ink-muted"
       />
 
-      <div className="px-4 py-3.5 pl-5">
-        <p className="text-[13.5px] font-semibold leading-tight text-ink">{d.title}</p>
-        <p className="mt-1 line-clamp-2 text-[11.5px] leading-[1.4] text-ink-muted">
+      <div className="relative px-4 py-3.5 pl-5">
+        <p className="text-[13.5px] font-semibold leading-tight tracking-tight text-ink">{d.title}</p>
+        <p className="mt-1 line-clamp-2 text-[11.5px] leading-[1.5] text-ink-muted">
           {d.summary}
         </p>
 
-        <div className="relative mt-3">
+        <div className="relative mt-3.5">
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               setOpen((v) => !v);
             }}
-            className="nodrag inline-flex w-full items-center justify-between gap-2 rounded-[10px] border border-hairline bg-canvas px-2.5 py-1.5 text-[11.5px] font-medium text-ink hover:border-brand-300"
+            className="nodrag inline-flex w-full items-center justify-between gap-2 rounded-lg border border-hairline bg-canvas-soft px-2.5 py-1.5 text-[11.5px] font-medium text-ink transition-all hover:border-brand-300 hover:bg-surface focus-ring"
           >
             <span className="inline-flex items-center gap-1.5">
               <span className={cn('h-2 w-2 rounded-full', model.dot)} />
               {model.label}
             </span>
-            <ChevronDown className="h-3.5 w-3.5 text-ink-muted" strokeWidth={2} />
+            <ChevronDown className={cn('h-3.5 w-3.5 text-ink-muted transition-transform', open && 'rotate-180')} strokeWidth={2} />
           </button>
           {open && (
-            <div className="absolute left-0 top-full z-50 mt-1 w-full overflow-hidden rounded-[10px] border border-hairline bg-surface shadow-[0_8px_20px_-10px_rgba(28,25,23,0.2)]">
+            <div className="absolute left-0 top-full z-50 mt-1.5 w-full overflow-hidden rounded-lg border border-hairline bg-surface shadow-floating">
               {MODEL_OPTIONS.map((opt) => {
                 const active = opt.id === d.assignedAi;
                 return (
@@ -121,7 +129,7 @@ export function TaskNodeCard({ data, selected }: NodeProps<TaskNode>) {
                       }
                     }}
                     className={cn(
-                      'nodrag flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[11.5px] transition-colors',
+                      'nodrag flex w-full items-center gap-2 px-2.5 py-2 text-left text-[11.5px] transition-colors',
                       active ? 'bg-brand-50 text-brand-700 font-semibold' : 'hover:bg-canvas-soft text-ink',
                     )}
                   >
@@ -138,7 +146,7 @@ export function TaskNodeCard({ data, selected }: NodeProps<TaskNode>) {
         <div className="mt-3 flex items-center justify-between gap-2">
           <span
             className={cn(
-              'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-semibold',
+              'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-semibold ring-1',
               chip.cls,
             )}
           >

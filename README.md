@@ -189,7 +189,9 @@ OrchestrAI/
 │       └── plans/                           # Phase planning docs
 │           ├── project-phases-overview.md
 │           ├── phase3-orchestra-wiring.md
-│           └── 2026-04-17-orchestra-context-panel-redesign.md
+│           ├── 2026-04-17-orchestra-context-panel-redesign.md
+│           ├── 2026-04-21-ui-polish-cleanup.md        # Phase 2.6 plan
+│           └── 2026-04-21-handoff-report.md           # Phase 2.6 handoff / key-file summary
 │
 ├── frontend/                                # Next.js 15 (Turbopack, App Router)
 │   ├── app/
@@ -231,25 +233,15 @@ OrchestrAI/
 │   │   │       ├── AgentReports.tsx         # Artifact report cards
 │   │   │       └── HistoryTimeline.tsx      # Undo/Redo timeline
 │   │   │
-│   │   ├── workflows/                       # /workflows page components
+│   │   ├── workflows/                       # /workflows page components (canonical)
 │   │   │   ├── WorkflowCanvas.tsx           # React Flow canvas with auto-layout
 │   │   │   ├── TaskNodeCard.tsx             # Custom React Flow node renderer
 │   │   │   ├── NodeDetailDrawer.tsx         # Side drawer for node detail
 │   │   │   └── Breadcrumbs.tsx              # Workflow breadcrumb nav
 │   │   │
-│   │   ├── workflow/                        # Legacy/alternative workflow components
-│   │   │   ├── WorkflowPanel.tsx
-│   │   │   ├── GraphView.tsx
-│   │   │   ├── CardView.tsx
-│   │   │   ├── NodeCard.tsx
-│   │   │   ├── NodeResultDrawer.tsx
-│   │   │   └── AIModelSelector.tsx
-│   │   │
-│   │   ├── chat/                            # Generic chat primitives (reused)
-│   │   │   ├── ChatPanel.tsx
-│   │   │   ├── ChatInput.tsx
-│   │   │   ├── MessageBubble.tsx
-│   │   │   └── TypingIndicator.tsx
+│   │   │   # NOTE: `components/workflow/` (legacy, 6 files) and `components/chat/` (legacy, 4 files)
+│   │   │   #       are `@deprecated` stubs as of 2026-04-21 (Phase 2.6). They can be physically
+│   │   │   #       removed via `rm -rf components/workflow components/chat` in any future cleanup.
 │   │   │
 │   │   └── ui/                              # shadcn/ui component wrappers
 │   │       ├── avatar.tsx
@@ -265,8 +257,8 @@ OrchestrAI/
 │   │   └── useSocket.ts                     # Socket.io event bindings → orchestraStore
 │   │
 │   ├── stores/                              # Zustand global state
-│   │   ├── orchestraStore.ts                # Conv state, messages, clarifications, building logs, history
-│   │   ├── chatStore.ts                     # Generic chat messages (legacy)
+│   │   ├── orchestraStore.ts                # Conv state, messages, clarifications, building logs, history (canonical)
+│   │   ├── chatStore.ts                     # @deprecated stub — removed 2026-04-21 (Phase 2.6)
 │   │   └── workflowStore.ts                 # Workflow nodes + selected node
 │   │
 │   └── lib/
@@ -354,51 +346,5 @@ The project is being built in phases. Current status:
 - **Infrastructure** ✅ — Docker Compose, PostgreSQL, FastAPI, Socket.io, Next.js app shell
 - **UI shell** ✅ — All pages and components built with placeholder data
 - **AI orchestration** ✅ — Phase 3 wired end-to-end: `chat_send → clarifier → plan_ready → chat_confirm_start → workflow_designer → building:log → workflow:ready`. `/workflows` canvas auto-populates, Building Process panel shows per-node agent cards.
-- **Workflow execution** 🔲 — Node-by-node execution engine with browser automation (Phase 6)
-
-Full roadmap: `[docs/superpowers/plans/project-phases-overview.md](docs/superpowers/plans/project-phases-overview.md)`
-
----
-
-## Troubleshooting
-
-**Page won't load**
-
-```bash
-docker compose ps              # Check all 3 containers are running
-curl http://localhost:8000/api/health  # Should return {"status":"ok"}
-```
-
-**Workflow not generating**
-
-```bash
-# Verify API key is set
-cat backend/.env | grep ANTHROPIC
-# Check backend logs
-docker compose logs -f backend
-```
-
-**Workflow JSON parses but `/workflows` stays empty / Building Process doesn't switch from logs to agent cards**
-
-Check backend logs for a `save_workflow failed:` line. This path is now wrapped
-in an explicit try/except that also emits a `building:log` error entry
-(`backend/main.py`), so the panel no longer hangs silently. The Phase 3 root
-cause was `WorkflowRecord.created_at` being a DateTime column while
-`Workflow.created_at` is an ISO string — fixed in
-`backend/services/workflow_db.py::_coerce_created_at`, covered by
-`backend/tests/test_workflow_db.py`.
-
-**Port conflict**
-
-```bash
-# Windows
-netstat -ano | findstr :3000
-taskkill /PID <pid> /F
-```
-
-**Reset everything**
-
-```bash
-docker compose down -v && docker compose up --build
-```
-
+- **Design system v2** ✅ — Phase 2.6 (2026-04-21) — 5-level surfaces, warm-tinted hairlines, 8-stop brand palette, unified radius/elevation/typescale, glass utilities, grain texture, soft-pulse motion, `prefers-reduced-motion` support. Legacy `components/workflow/` and `components/chat/` reduced to `@deprecated` stubs.
+- **Workflow execution** 🔲 — Node-by-node execution engine with browser autom

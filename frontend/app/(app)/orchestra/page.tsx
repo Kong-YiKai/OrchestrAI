@@ -43,7 +43,17 @@ export default function OrchestraPage() {
   }, [readyWorkflowId]);
 
   return (
-    <div className="flex h-full overflow-hidden bg-canvas-soft">
+    <div className="relative flex h-full overflow-hidden bg-canvas-soft">
+      {/* Ambient tint */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            'radial-gradient(800px 500px at 20% 0%, rgba(255,179,71,0.08) 0%, transparent 60%)',
+        }}
+      />
+
       {/* Left: Recent Projects (collapsible) */}
       <AnimatePresence initial={false}>
         {!leftCollapsed && (
@@ -53,7 +63,7 @@ export default function OrchestraPage() {
             animate={{ width: RECENT_PANEL_WIDTH, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
             transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-            className="relative flex-shrink-0 overflow-hidden border-r border-hairline bg-canvas"
+            className="relative flex-shrink-0 overflow-hidden border-r border-hairline bg-glass"
           >
             <div style={{ width: RECENT_PANEL_WIDTH }} className="h-full">
               <RecentProjectsPanel activeId={activeId} onSelect={setActiveId} />

@@ -2,6 +2,7 @@
 
 import { Boxes, ChevronRight, FileCode2, History, Settings2 } from 'lucide-react';
 import type { ComponentType } from 'react';
+import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import type { ContextPanelNav } from '../ContextPanel';
 import { useOrchestraStore } from '@/stores/orchestraStore';
@@ -13,8 +14,9 @@ type Card = {
   subtitle: string;
   icon: ComponentType<{ className?: string; strokeWidth?: number }>;
   iconTile: string;
-  cardBorder: string;
-  badge?: { kind: 'count'; value: number } | { kind: 'live' };
+  tint: string;
+  glow: string;
+  badge?: { kind: 'count'; value: number; color?: string } | { kind: 'live' };
   onClick: () => void;
 };
 
@@ -40,9 +42,10 @@ export function OverviewList({ nav }: { nav: ContextPanelNav }) {
             ? '全部已确认'
             : '等待需求澄清',
       icon: Boxes,
-      iconTile: 'bg-[#fde2ec] text-[#e11d74]',
-      cardBorder: pendingClarCount > 0 ? 'border-[#f5c6d9]' : 'border-hairline',
-      badge: pendingClarCount > 0 ? { kind: 'count', value: pendingClarCount } : undefined,
+      iconTile: 'bg-gradient-to-br from-[#fde2ec] to-[#f9c1d6] text-[#b1175a]',
+      tint: 'rgba(225,29,116,0.08)',
+      glow: 'rgba(225,29,116,0.18)',
+      badge: pendingClarCount > 0 ? { kind: 'count', value: pendingClarCount, color: 'danger' } : undefined,
       onClick: () => nav.goTo({ name: 'clarifications' }),
     },
     {
@@ -55,24 +58,26 @@ export function OverviewList({ nav }: { nav: ContextPanelNav }) {
             ? `${buildCount} 条日志`
             : '等待开始生成',
       icon: Settings2,
-      iconTile: 'bg-warning-50 text-warning-500',
-      cardBorder: isLive ? 'border-[#fde68a]' : 'border-hairline',
+      iconTile: 'bg-gradient-to-br from-warning-50 to-warning-100 text-warning-500',
+      tint: 'rgba(255,185,0,0.08)',
+      glow: 'rgba(255,185,0,0.22)',
       badge: isLive
         ? { kind: 'live' }
         : buildNodeCount > 0
-          ? { kind: 'count', value: buildNodeCount }
+          ? { kind: 'count', value: buildNodeCount, color: 'brand' }
           : buildCount > 0
-            ? { kind: 'count', value: buildCount }
+            ? { kind: 'count', value: buildCount, color: 'brand' }
             : undefined,
       onClick: () => nav.goTo({ name: 'building' }),
     },
     {
       key: 'reports',
       title: 'Agent Reports',
-      subtitle: 'Phase 7 中开放',
+      subtitle: 'Phase 7 · 敬请期待',
       icon: FileCode2,
-      iconTile: 'bg-canvas-soft text-ink-soft',
-      cardBorder: 'border-hairline',
+      iconTile: 'bg-gradient-to-br from-canvas-soft to-surface-subtle text-ink-soft',
+      tint: 'rgba(28,25,23,0.04)',
+      glow: 'rgba(28,25,23,0.08)',
       onClick: () => nav.goTo({ name: 'reports' }),
     },
     {
@@ -80,8 +85,9 @@ export function OverviewList({ nav }: { nav: ContextPanelNav }) {
       title: 'History',
       subtitle: historyCount > 0 ? `${historyCount} 条操作记录` : '暂无记录',
       icon: History,
-      iconTile: 'bg-canvas-soft text-ink-soft',
-      cardBorder: 'border-hairline',
+      iconTile: 'bg-gradient-to-br from-canvas-soft to-surface-subtle text-ink-soft',
+      tint: 'rgba(28,25,23,0.04)',
+      glow: 'rgba(28,25,23,0.08)',
       badge: historyCount > 0 ? { kind: 'count', value: historyCount } : undefined,
       onClick: () => nav.goTo({ name: 'history' }),
     },
@@ -89,45 +95,64 @@ export function OverviewList({ nav }: { nav: ContextPanelNav }) {
 
   return (
     <div className="flex flex-col gap-3">
-      {cards.map((c) => {
+      {cards.map((c, idx) => {
         const Icon = c.icon;
         return (
-          <button
+          <motion.button
             key={c.key}
             type="button"
             onClick={c.onClick}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.32, delay: idx * 0.04, ease: [0.22, 1, 0.36, 1] }}
             className={cn(
-              'flex w-full items-center gap-4 rounded-[16px] border bg-surface p-4 text-left transition-shadow',
-              'hover:shadow-[0_4px_20px_-12px_rgba(28,25,23,0.15)]',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500',
-              c.cardBorder
+              'hover-lift group relative flex w-full items-center gap-4 overflow-hidden rounded-2xl border border-hairline bg-surface p-4 text-left shadow-card focus-ring'
             )}
           >
+            {/* ambient glow on hover */}
+            <span
+              aria-hidden
+              className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full opacity-0 blur-2xl transition-opacity duration-300 group-hover:opacity-100"
+              style={{ background: `radial-gradient(circle, ${c.glow} 0%, transparent 65%)` }}
+            />
             <span
               className={cn(
-                'grid h-11 w-11 flex-shrink-0 place-items-center rounded-[12px]',
+                'relative grid h-11 w-11 flex-shrink-0 place-items-center rounded-xl shadow-card ring-1 ring-white/40',
                 c.iconTile
               )}
             >
-              <Icon className="h-5 w-5" strokeWidth={1.8} />
+              <Icon className="h-[19px] w-[19px]" strokeWidth={1.8} />
             </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-[15.5px] font-semibold text-ink">{c.title}</p>
-              <p className="mt-0.5 text-[12px] text-ink-muted">{c.subtitle}</p>
+            <div className="relative min-w-0 flex-1">
+              <p className="text-[14.5px] font-semibold tracking-tight text-ink">{c.title}</p>
+              <p className="mt-0.5 text-[11.5px] text-ink-muted">{c.subtitle}</p>
             </div>
             {c.badge?.kind === 'count' && (
-              <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-full bg-[#fde2ec] px-2 text-[12px] font-bold text-[#e11d74]">
+              <span
+                className={cn(
+                  'relative inline-flex h-6 min-w-[24px] items-center justify-center rounded-full px-2 text-[11.5px] font-bold',
+                  c.badge.color === 'brand'
+                    ? 'bg-brand-50 text-brand-700'
+                    : 'bg-[#fde2ec] text-[#b1175a]'
+                )}
+              >
                 {c.badge.value}
               </span>
             )}
             {c.badge?.kind === 'live' && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-warning-50 px-2.5 py-0.5 text-[11.5px] font-semibold text-[#d97706]">
-                <span className="h-1.5 w-1.5 rounded-full bg-warning-500" aria-hidden />
+              <span className="relative inline-flex items-center gap-1 rounded-full bg-warning-50 px-2.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wider text-[#c06a00]">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="absolute inline-flex h-full w-full animate-soft-pulse rounded-full bg-warning-500/60" />
+                  <span className="relative h-1.5 w-1.5 rounded-full bg-warning-500" />
+                </span>
                 Live
               </span>
             )}
-            <ChevronRight className="h-4 w-4 flex-shrink-0 text-ink-muted" strokeWidth={1.8} />
-          </button>
+            <ChevronRight
+              className="relative h-4 w-4 flex-shrink-0 text-ink-muted transition-transform group-hover:translate-x-0.5 group-hover:text-ink-soft"
+              strokeWidth={1.8}
+            />
+          </motion.button>
         );
       })}
     </div>
