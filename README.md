@@ -186,12 +186,10 @@ OrchestrAI/
 ├── docker-compose.yml
 ├── docs/
 │   └── superpowers/
-│       └── plans/                           # Phase planning docs
-│           ├── project-phases-overview.md
-│           ├── phase3-orchestra-wiring.md
-│           ├── 2026-04-17-orchestra-context-panel-redesign.md
-│           ├── 2026-04-21-ui-polish-cleanup.md        # Phase 2.6 plan
-│           └── 2026-04-21-handoff-report.md           # Phase 2.6 handoff / key-file summary
+│       └── plans/                           # Phase planning docs (consolidated 2026-04-22)
+│           ├── project-overview.md          # 30s 速览 + Phase 状态 + 架构决策 + 文件索引（开工第一件事）
+│           ├── phase-history-and-handoff.md # Phase 2.5 / 3 / 2.6 归档 + Phase 4 下一步任务清单
+│           └── *.md                         # 其余为 @deprecated stub，可在下一次清理一并 `rm`
 │
 ├── frontend/                                # Next.js 15 (Turbopack, App Router)
 │   ├── app/
