@@ -1,10 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { RecentProjectsPanel } from '@/components/orchestra/RecentProjectsPanel';
 import { ChatThread } from '@/components/orchestra/ChatThread';
 import { ContextPanel } from '@/components/orchestra/ContextPanel';
+import { useOrchestraStore } from '@/stores/orchestraStore';
+import { useSocket } from '@/hooks/useSocket';
+import { getSocket } from '@/lib/socket';
 
 const RECENT_PANEL_WIDTH = 280;
 const CONTEXT_PANEL_WIDTH = 360;
@@ -14,8 +17,43 @@ export default function OrchestraPage() {
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [contextOpen, setContextOpen] = useState(true);
 
+  const { setSessionId, readyWorkflowId } = useOrchestraStore();
+
+  const sessionId = useMemo(() => {
+    if (typeof window === 'undefined') return 'default';
+    const stored = localStorage.getItem('orchestrai_session');
+    if (stored) return stored;
+    const id = `session_${crypto.randomUUID().slice(0, 8)}`;
+    localStorage.setItem('orchestrai_session', id);
+    return id;
+  }, []);
+
+  useSocket(sessionId);
+
+  useEffect(() => {
+    const socket = getSocket();
+    socket.emit('join_session', { session_id: sessionId });
+    setSessionId(sessionId);
+  }, [sessionId, setSessionId]);
+
+  useEffect(() => {
+    if (!readyWorkflowId) return;
+    console.log(`[OrchestrAI] workflow ready: ${readyWorkflowId}`);
+    // Phase 4 will navigate to /workflows?wf=readyWorkflowId
+  }, [readyWorkflowId]);
+
   return (
-    <div className="flex h-full overflow-hidden bg-canvas-soft">
+    <div className="relative flex h-full overflow-hidden bg-canvas-soft">
+      {/* Ambient tint */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            'radial-gradient(800px 500px at 20% 0%, rgba(255,179,71,0.08) 0%, transparent 60%)',
+        }}
+      />
+
       {/* Left: Recent Projects (collapsible) */}
       <AnimatePresence initial={false}>
         {!leftCollapsed && (
@@ -25,7 +63,7 @@ export default function OrchestraPage() {
             animate={{ width: RECENT_PANEL_WIDTH, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
             transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-            className="relative flex-shrink-0 overflow-hidden border-r border-hairline bg-canvas"
+            className="relative flex-shrink-0 overflow-hidden border-r border-hairline bg-glass"
           >
             <div style={{ width: RECENT_PANEL_WIDTH }} className="h-full">
               <RecentProjectsPanel activeId={activeId} onSelect={setActiveId} />

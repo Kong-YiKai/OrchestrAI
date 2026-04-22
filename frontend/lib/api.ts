@@ -1,4 +1,12 @@
+import type { Workflow } from '@/types/workflow';
+
 const BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+
+export async function fetchWorkflow(workflowId: string): Promise<Workflow | null> {
+  const res = await fetch(`${BASE}/workflow/${workflowId}`);
+  if (!res.ok) return null;
+  return (await res.json()) as Workflow;
+}
 
 export async function runWorkflow(workflowId: string, sessionId: string) {
   const res = await fetch(`${BASE}/execution/run/${workflowId}`, {

@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Literal
 from enum import Enum
 
 
@@ -8,6 +8,9 @@ class MessageType(str, Enum):
     workflow_generated = "workflow_generated"
     node_update = "node_update"
     system = "system"
+    clarification = "clarification"
+    plan_ready = "plan_ready"
+    building = "building"
 
 
 class AISender(BaseModel):
@@ -27,6 +30,51 @@ class ChatMessage(BaseModel):
     timestamp: str
     is_streaming: bool = False
     workflow_ref: Optional[str] = None
+
+
+class ClarificationOption(BaseModel):
+    id: str
+    label: str
+    meta: str = ""
+
+
+class ClarificationQuestion(BaseModel):
+    id: str
+    question: str
+    hint: str = ""
+    answer: str = ""
+    options: list[ClarificationOption] = []
+    status: Literal["pending", "answered"] = "pending"
+
+
+class PlanNode(BaseModel):
+    order: int
+    title: str
+    description: str
+    recommended_ai: str = "claude"
+
+
+class PlanPayload(BaseModel):
+    title: str
+    summary: str
+    nodes: list[PlanNode]
+    confirmation_prompt: str
+
+
+class BuildingLog(BaseModel):
+    log_id: str
+    timestamp: str
+    type: Literal["thinking", "analyzing", "generating", "deciding", "done", "error"]
+    message: str
+    detail: str = ""
+    agent: str = "Workflow Designer"
+
+
+class HistoryEntry(BaseModel):
+    entry_id: str
+    timestamp: str
+    action: str
+    detail: str = ""
 
 
 AI_PERSONAS = {

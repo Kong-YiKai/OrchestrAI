@@ -1,14 +1,33 @@
 'use client';
 import { useEffect, useRef } from 'react';
 import { getSocket } from '@/lib/socket';
-import { useChatStore } from '@/stores/chatStore';
+import { fetchWorkflow } from '@/lib/api';
 import { useWorkflowStore } from '@/stores/workflowStore';
+import { useOrchestraStore } from '@/stores/orchestraStore';
 import type { ChatMessage } from '@/types/chat';
 import type { WorkflowNode, NodeResult } from '@/types/workflow';
+import type { ClarificationQuestion, BuildingLog, HistoryEntry, Plan } from '@/stores/orchestraStore';
 
+/**
+ * Socket.io binding hook for the Orchestra page.
+ *
+ * Emits two client events:
+ *   - `chat_send`           — send user message
+ *   - `chat_confirm_start`  — user approves plan → backend starts workflow generation
+ *
+ * Subscribes to server events:
+ *   - chat:stream_start / chat:stream_token / chat:stream_end / chat:message
+ *   - clarification:update / clarification:plan_ready
+ *   - building:started / building:log / building:complete
+ *   - workflow:node_appeared / workflow:generation_complete / workflow:ready
+ *   - execution:* (Phase 6)
+ *   - history:update
+ *
+ * All chat and orchestration state flows through `orchestraStore`.
+ * Workflow graph state flows through `workflowStore`.
+ */
 export function useSocket(sessionId: string) {
   const initialized = useRef(false);
-  const { addMessage, appendToken, commitStreaming, setTyping } = useChatStore();
   const {
     addNode,
     setWorkflow,
@@ -17,8 +36,8 @@ export function useSocket(sessionId: string) {
     updateNodeError,
     appendNodeLog,
     setExecuting,
-    workflowId,
   } = useWorkflowStore();
+  const orchestra = useOrchestraStore();
 
   useEffect(() => {
     if (initialized.current) return;
@@ -36,22 +55,62 @@ export function useSocket(sessionId: string) {
       console.log('[socket] disconnected');
     });
 
-    // ── Chat events ──────────────────────────────────────────────────────────
+    // ── Chat / stream events ────────────────────────────────────────────────
+    socket.on('chat:stream_start', ({ message_id, sender }: { message_id: string; sender: string }) => {
+      orchestra.addMessage({
+        message_id,
+        sender: {
+          id: sender,
+          name: sender === 'claude' ? 'Claude' : 'OrchestrAI',
+          avatar: '',
+          model: '',
+          color: sender === 'claude' ? '#D97706' : '#EC4899',
+        },
+        content: '',
+        message_type: 'text',
+        timestamp: new Date().toISOString(),
+        is_streaming: true,
+      });
+    });
+
+    socket.on('chat:stream_token', ({ message_id, token }: { message_id: string; token: string }) => {
+      orchestra.appendStreamToken(message_id, token);
+    });
+
+    socket.on('chat:stream_end', ({ message_id, content }: { message_id: string; content: string }) => {
+      orchestra.finalizeStream(message_id, content);
+    });
+
     socket.on('chat:message', (msg: ChatMessage) => {
-      // If this message was being streamed, commit it now
-      commitStreaming(msg.message_id);
-      addMessage(msg);
+      orchestra.addMessage(msg);
     });
 
-    socket.on('chat:stream_token', ({ message_id, token, sender_id }: { message_id: string; token: string; sender_id: string }) => {
-      appendToken(message_id, token, sender_id);
+    // ── Clarification ───────────────────────────────────────────────────────
+    socket.on('clarification:update', ({ questions }: { questions: ClarificationQuestion[] }) => {
+      orchestra.setClarifications(questions);
+      orchestra.setConvState('clarifying');
+      orchestra.setPendingPanelView('clarifications');
     });
 
-    socket.on('chat:typing', ({ sender_id, is_typing }: { sender_id: string; is_typing: boolean }) => {
-      setTyping(sender_id, is_typing);
+    socket.on('clarification:plan_ready', ({ plan }: { plan: Plan }) => {
+      orchestra.setPlan(plan);
+      orchestra.setConvState('awaiting_confirm');
     });
 
-    // ── Workflow events ──────────────────────────────────────────────────────
+    // ── Building / workflow generation ──────────────────────────────────────
+    socket.on('building:started', () => {
+      orchestra.setConvState('generating');
+      orchestra.setPendingPanelView('building');
+    });
+
+    socket.on('building:log', (log: BuildingLog) => {
+      orchestra.addBuildingLog(log);
+    });
+
+    socket.on('building:complete', () => {
+      orchestra.setBuildingComplete();
+    });
+
     socket.on('workflow:node_appeared', (node: WorkflowNode) => {
       addNode(node);
     });
@@ -63,7 +122,20 @@ export function useSocket(sessionId: string) {
       }));
     });
 
-    // ── Execution events ─────────────────────────────────────────────────────
+    socket.on('workflow:ready', async ({ workflow_id }: { workflow_id: string; title: string; node_count: number }) => {
+      orchestra.setReadyWorkflowId(workflow_id);
+      orchestra.setConvState('complete');
+      const wf = await fetchWorkflow(workflow_id);
+      if (wf) {
+        setWorkflow(wf);
+      }
+    });
+
+    socket.on('history:update', ({ entries }: { entries: HistoryEntry[] }) => {
+      orchestra.setHistoryEntries(entries);
+    });
+
+    // ── Execution (Phase 6) ─────────────────────────────────────────────────
     socket.on('execution:node_started', ({ node_id }: { node_id: string }) => {
       updateNodeStatus(node_id, 'running');
     });
@@ -89,9 +161,17 @@ export function useSocket(sessionId: string) {
       socket.off('disconnect');
       socket.off('chat:message');
       socket.off('chat:stream_token');
-      socket.off('chat:typing');
+      socket.off('chat:stream_start');
+      socket.off('chat:stream_end');
       socket.off('workflow:node_appeared');
       socket.off('workflow:generation_complete');
+      socket.off('clarification:update');
+      socket.off('clarification:plan_ready');
+      socket.off('building:started');
+      socket.off('building:log');
+      socket.off('building:complete');
+      socket.off('workflow:ready');
+      socket.off('history:update');
       socket.off('execution:node_started');
       socket.off('execution:node_log');
       socket.off('execution:node_complete');
@@ -107,5 +187,10 @@ export function useSocket(sessionId: string) {
     socket.emit('chat_send', { content, session_id: sessionId });
   };
 
-  return { sendMessage };
+  const confirmStart = (sid: string) => {
+    const socket = getSocket();
+    socket.emit('chat_confirm_start', { session_id: sid });
+  };
+
+  return { sendMessage, confirmStart };
 }
