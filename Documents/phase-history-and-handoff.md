@@ -4,13 +4,6 @@
 >
 > **前置阅读**：`project-overview.md`（项目速览 + Phase 路线图 + **Harness 六维度铁律**）。本文件侧重"发生了什么"和"接下来做什么"，不重复总览信息。
 >
-> **索引**：
-> - [Phase 2.5（2026-04-17）Orchestra Context Panel 重构](#phase-25-orchestra-context-panel-重构2026-04-17)
-> - [Phase 3 The Orchestra 功能接线](#phase-3-the-orchestra-功能接线)
-> - [Phase 2.6（2026-04-21）前端清理 + 视觉升级](#phase-26-前端清理--视觉升级2026-04-21)
-> - [Phase 路线图升级说明（2026-04-23）](#phase-路线图升级说明2026-04-23)
-> - [下一个 Agent 的任务（分层 Tier A → E）](#下一个-agent-的任务分层-tier-a--e)
-
 ---
 
 ## Phase 2.5 — Orchestra Context Panel 重构（2026-04-17）
