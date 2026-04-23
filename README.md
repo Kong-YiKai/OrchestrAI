@@ -275,7 +275,9 @@ OrchestrAI/
 │   │       ├── layout.tsx                   # AppSidebar + TopBar shell
 │   │       ├── dashboard/page.tsx           # Landing page
 │   │       ├── orchestra/page.tsx           # 3-col AI orchestration UI (core)
-│   │       ├── workflows/page.tsx           # React Flow workflow canvas (Phase 4 → list + [id] split)
+│   │       ├── workflows/
+│   │       │   ├── page.tsx                 # Grid list of workflows (Phase 4)
+│   │       │   └── [id]/page.tsx            # React Flow canvas detail page (Phase 4)
 │   │       ├── marketplace/page.tsx         # Placeholder (Phase 11)
 │   │       ├── arena/page.tsx               # Placeholder (Phase 11)
 │   │       ├── team/page.tsx                # Placeholder (Phase 11)
@@ -320,7 +322,7 @@ OrchestrAI/
     │   ├── tools/                           # (Phase 5-6) web_search / web_fetch / multimodal_preprocess / registry
     │   ├── executor/                        # (Phase 6) sandbox / evaluator / node_executor
     │   └── cua/                             # (Phase 7-8) perception / action / planner / safety / lifecycle
-    ├── routers/                             # REST endpoints
+    ├── routers/                             # REST endpoints (workflow.py item routes / workflows.py collection)
     ├── prompts/                             # System prompt markdown files
     ├── browser/                             # Playwright automation scaffold (migrated into services/tools in Phase 5)
     └── tests/                               # pytest suites
@@ -334,7 +336,7 @@ OrchestrAI/
 | --- | --- | --- |
 | GET | `/api/health` | Health check |
 | GET | `/api/workflow/{id}` | Get workflow by ID |
-| GET | `/api/workflows` | List workflows (Phase 4) |
+| GET | `/api/workflows` | List workflows as lightweight summaries, newest first |
 | PATCH | `/api/workflow/{id}/node/{node_id}` | Update node AI model |
 | POST | `/api/execution/run/{workflow_id}` | Execute workflow (Phase 6) |
 | POST | `/api/execution/node/{node_id}/retry` | Retry a failed node (Phase 6) |
@@ -360,14 +362,14 @@ OrchestrAI/
 
 ## Development Status
 
-The project is being built in phases. Current status (2026-04-23):
+The project is being built in phases. Current status (2026-04-24):
 
 - **Infrastructure** ✅ — Docker Compose, PostgreSQL, FastAPI, Socket.io, Next.js app shell
 - **UI shell** ✅ — All pages and components built with placeholder data
 - **AI orchestration** ✅ — Phase 3 wired end-to-end: `chat_send → clarifier → plan_ready → chat_confirm_start → workflow_designer → building:log → workflow:ready`. `/workflows` canvas auto-populates; Building Process panel shows per-node agent cards.
-- **Design system v2** ✅ — Phase 2.6 (2026-04-21): 5-level surfaces, warm-tinted hairlines, 8-stop brand palette, unified radius/elevation/typescale, glass utilities, grain texture, soft-pulse motion, `prefers-reduced-motion` support. Legacy `components/workflow/` and `components/chat/` reduced to `@deprecated` stubs.
-- **Workflow canvas data flow** 🔲 Phase 4 (next) — list page, detail page, live node status, breadcrumb routing.
-- **Agent Harness Foundation** 🔲 Phase 4.5 — structured logging, execution tracing, checkpoint & resume, HITL approval gate, context compaction.
+- **Design system v2** ✅ — Phase 2.6 (2026-04-21): 5-level surfaces, warm-tinted hairlines, 8-stop brand palette, unified radius/elevation/typescale, glass utilities, grain texture, soft-pulse motion, `prefers-reduced-motion` support. Legacy `components/workflow/`, `components/chat/`, and `stores/chatStore.ts` have been physically removed (Phase 4 cleanup).
+- **Workflow canvas data flow** 🟡 Phase 4 Steps 1-5 done (2026-04-24) — `GET /api/workflows` list endpoint, `/workflows` grid + `/workflows/[id]` detail route, Orchestra → Canvas "Open Canvas" CTA, NodeDetailDrawer wired to live `WorkflowNode` (Details tab: description / tool / I/O schemas; Result tab: status-aware — running / error / summary + raw JSON). Step 6 (live node status + mock execution events) deferred into Phase 4.5 D5.
+- **Agent Harness Foundation** 🔲 Phase 4.5 (next) — structured logging, execution tracing, checkpoint & resume, HITL approval gate, context compaction. Will also absorb Phase 4 Step 6.
 - **Universal Web Perception** 🔲 Phase 5 — unified search + fetch + multimodal preprocess (video / audio / 3D / Office).
 - **Tool Registry + Node Executor** 🔲 Phase 6 — multi-model tool calling, Docker sandbox, separate evaluator agent.
 - **Computer Use Agent** 🔲 Phase 7-8 — desktop perception (screenshot + UIA + OCR), action layer (pywinauto + pyautogui), planner-executor loop, safety + HITL, application lifecycle management, replay & kill switch.

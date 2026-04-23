@@ -1,7 +1,8 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ChevronRight } from 'lucide-react';
+import { ArrowRight, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ContextPanelNav } from '../ContextPanel';
 import { DetailHeader } from './DetailHeader';
@@ -68,7 +69,8 @@ function toneFor(ai: string) {
 }
 
 export function BuildingProcessList({ nav }: { nav: ContextPanelNav }) {
-  const { buildingLogs, isBuildingComplete } = useOrchestraStore();
+  const router = useRouter();
+  const { buildingLogs, isBuildingComplete, readyWorkflowId } = useOrchestraStore();
   const { workflow } = useWorkflowStore();
 
   const progress = isBuildingComplete
@@ -76,6 +78,7 @@ export function BuildingProcessList({ nav }: { nav: ContextPanelNav }) {
     : Math.min(Math.round((buildingLogs.length / EXPECTED_LOGS) * 100), 90);
 
   const nodes = workflow?.nodes ?? [];
+  const showOpenCanvasCta = isBuildingComplete && Boolean(readyWorkflowId);
 
   return (
     <>
@@ -96,6 +99,28 @@ export function BuildingProcessList({ nav }: { nav: ContextPanelNav }) {
             />
           </div>
         </div>
+
+        {/* Open Canvas CTA — shown once building is complete */}
+        {showOpenCanvasCta && readyWorkflowId && (
+          <motion.button
+            type="button"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+            onClick={() => router.push(`/workflows/${readyWorkflowId}`)}
+            className="group relative inline-flex h-11 w-full items-center justify-between overflow-hidden rounded-xl bg-gradient-to-b from-brand-500 to-brand-600 px-4 text-[13px] font-semibold text-white shadow-brand-glow transition-transform hover:scale-[1.01] active:scale-[0.99] focus-ring"
+          >
+            <span className="relative z-10 flex items-center gap-2">
+              <span aria-hidden>✨</span>
+              打开画布 · Open Canvas
+            </span>
+            <ArrowRight className="relative z-10 h-4 w-4 transition-transform group-hover:translate-x-0.5" strokeWidth={2} />
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 group-hover:translate-x-full"
+            />
+          </motion.button>
+        )}
 
         {/* Agent node cards (shown after workflow is ready) */}
         {nodes.length > 0 ? (

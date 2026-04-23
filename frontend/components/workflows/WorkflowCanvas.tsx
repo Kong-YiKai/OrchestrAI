@@ -18,7 +18,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { Workflow as WorkflowIcon } from 'lucide-react';
 import { TaskNodeCard, type TaskNode, type TaskNodeData, type TaskNodeStatus } from './TaskNodeCard';
-import { NodeDetailDrawer, type NodeDetail } from './NodeDetailDrawer';
+import { NodeDetailDrawer } from './NodeDetailDrawer';
 import { Breadcrumbs } from './Breadcrumbs';
 import { useWorkflowStore } from '@/stores/workflowStore';
 import { updateNodeModel } from '@/lib/api';
@@ -31,13 +31,6 @@ const ACCENT_BY_AI: Record<string, TaskNodeData['accent']> = {
   gpt: 'success',
   gemini: 'sky',
   grok: 'violet',
-};
-
-const MODEL_LABEL: Record<string, string> = {
-  claude: 'Claude-4.6',
-  gpt: 'GPT-4o',
-  gemini: 'Gemini',
-  grok: 'Grok',
 };
 
 function mapStatus(s: NodeStatus): TaskNodeStatus {
@@ -110,7 +103,7 @@ export function WorkflowCanvas() {
 
   const [nodes, setNodes] = useState<TaskNode[]>(initialNodes);
   const [edges, setEdges] = useState<Edge[]>(initialEdges);
-  const [selected, setSelected] = useState<NodeDetail | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
   // Rebuild when workflow changes OR assignedAi changes on any node
   const workflowSig = useMemo(
@@ -141,11 +134,18 @@ export function WorkflowCanvas() {
     [],
   );
 
+  const selectedNode = useMemo(
+    () => workflow?.nodes.find((n) => n.node_id === selectedNodeId) ?? null,
+    [workflow, selectedNodeId],
+  );
+
   const crumbs = useMemo(() => {
     const title = workflow?.title_zh || workflow?.title || 'New Workflow';
     const base = [{ label: 'Workflows', href: '/workflows' }, { label: title }];
-    return selected ? [...base, { label: selected.title }] : base;
-  }, [selected, workflow]);
+    if (!selectedNode) return base;
+    const nodeLabel = selectedNode.title || selectedNode.title_zh || 'Node';
+    return [...base, { label: nodeLabel }];
+  }, [selectedNode, workflow]);
 
   return (
     <div className="relative h-full w-full">
@@ -183,14 +183,7 @@ export function WorkflowCanvas() {
             fitView
             fitViewOptions={{ padding: 0.25 }}
             proOptions={{ hideAttribution: true }}
-            onNodeClick={(_e, n) => {
-              const d = n.data as TaskNodeData;
-              setSelected({
-                id: n.id,
-                title: d.title,
-                modelLabel: MODEL_LABEL[d.assignedAi] ?? d.assignedAi,
-              });
-            }}
+            onNodeClick={(_e, n) => setSelectedNodeId(n.id)}
             defaultEdgeOptions={{
               style: { stroke: '#c9bea9', strokeWidth: 1.75 },
               animated: false,
@@ -209,7 +202,7 @@ export function WorkflowCanvas() {
           </ReactFlow>
         )}
 
-        <NodeDetailDrawer node={selected} onClose={() => setSelected(null)} />
+        <NodeDetailDrawer nodeId={selectedNodeId} onClose={() => setSelectedNodeId(null)} />
       </div>
     </div>
   );

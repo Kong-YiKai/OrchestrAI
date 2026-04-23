@@ -279,6 +279,90 @@ rm -rf components/workflow components/chat stores/chatStore.ts
 
 ---
 
+## Phase 4 — Workflows 画布功能接线（2026-04-24）
+
+**状态**：🟡 部分完成（Step 1-5 ✅，Step 6 P3 节点实时状态延后到 Phase 4.5）
+**范围**：关闭 Tier A UI 闭环——stub 物理清理、两条历史 lint、Orchestra → Canvas 跳转、`/workflows` 列表 + 详情路由、NodeDetailDrawer 接真数据。
+
+### 本 Phase 对 Harness 六维度的贡献
+
+| 维度 | 贡献 |
+|------|------|
+| ① 上下文 | — |
+| ② 工具编排 | — |
+| ③ 验证 | — |
+| ④ 状态 | `workflowStore.loadWorkflow(id)`：支持 REST 去水化；"已有就跳过" 优化让 Orchestra → Canvas 不双拉数据 |
+| ⑤ 可观测 | NodeDetailDrawer 把每节点的 `status / error / result.summary / result.raw / execution_method` 全量暴露给用户，便于排查节点失败原因 |
+| ⑥ HITL | CTA "打开画布" 明确由用户触发跳转，不自动 redirect（避免对用户造成 "被带走" 的意外） |
+
+### 设计决策
+
+- **URL 方案改用路径参数**：原 handoff 建议 `/workflows?wf=<id>`，实际改为 `/workflows/[id]`，更符合 REST 语义；对应 `workflows/page.tsx` 改列表、`workflows/[id]/page.tsx` 新建详情
+- **Orchestra → Canvas 不自动跳转**：用户可能想继续看 Building log，于是用 CTA 按钮（`isBuildingComplete && readyWorkflowId` 时出现）而非 useEffect redirect
+- **NodeDetailDrawer 接口改 `nodeId`-only**：drawer 内部从 `workflowStore` selector 拿 live `WorkflowNode`，这样 `running → complete` 状态流会实时回流
+- **ContextPanel view state 彻底提升到 store**：原 handoff 建议"在 setPendingPanelView setter 里直接更新"，实际采用更彻底的重构——把 `ContextView` 作为 discriminated union 存到 `orchestraStore.contextView`，ContextPanel 直接消费，消除 `useEffect + setState` 反模式
+- **zustand `(set, get)` pattern**：`workflowStore.loadWorkflow` 避免自引用 `useWorkflowStore.getState()`（会触发 TS 循环推导把整个 store 打成 `any`），改用 zustand 的 `get()` + 显式返回类型标注
+- **ESLint `react-hooks/set-state-in-effect`**：详情页 `workflows/[id]/page.tsx` 的 `ready/loading` 从 store 派生，只保留 `notFoundId` 一个 state 且仅在 `.then()` 异步 callback 里 set
+
+### 新增 / 修改文件
+
+#### 前端
+
+| 文件 | 动作 |
+|------|------|
+| `stores/orchestraStore.ts` | **重构**：新增 `ContextView` discriminated union；把 `pendingPanelView` 替换为 `contextView: ContextView` + `contextDirection: 1 \| -1` + `setContextView(view, direction?)` action |
+| `components/orchestra/ContextPanel.tsx` | **重写**：直接 subscribe `orchestraStore.contextView`，去掉 `useEffect + setState`，`nav.goTo/goBack` 直接调 `setContextView` |
+| `stores/workflowStore.ts` | 新增 `loadWorkflow(id)` async action（有 "已加载就跳过" 优化，会重置 `newNodeIds/nodeLogs`）；`create` 改 `(set, get)` pattern；`updateNodeResult.method` 类型从 `string` 收紧为 `ExecutionMethod`，删掉 `as any` |
+| `types/workflow.ts` | 新增 `toExecutionMethod()` type guard；新增 `WorkflowSummary` 接口（列表页用） |
+| `lib/api.ts` | 新增 `listWorkflows() -> WorkflowSummary[]` |
+| `hooks/useSocket.ts` | `setPendingPanelView('clarifications/building')` → `setContextView({name:...})`；`execution:node_complete` 用 `toExecutionMethod()` 收窄入参 |
+| `app/(app)/workflows/page.tsx` | **重写**：从占位改列表视图（PageHeader + WorkflowGrid / LoadingSkeleton / EmptyState / ErrorState），卡片跳 `/workflows/[id]`，右上"New Workflow" → Orchestra |
+| `app/(app)/workflows/[id]/page.tsx` | **新建**：详情页，三态渲染 `LoadingState / NotFoundState / WorkflowCanvas`；如果 store 已有目标 workflow 则直接复用不走 REST |
+| `components/orchestra/context/BuildingProcessList.tsx` | 新增"打开画布 · Open Canvas" CTA（`isBuildingComplete && readyWorkflowId` 时出现），点击 `router.push(/workflows/${readyWorkflowId})` |
+| `app/(app)/orchestra/page.tsx` | 清理占位 useEffect（注释里提到 `Phase 4 will navigate to /workflows?wf=...`，已被 CTA 取代） |
+| `components/workflows/NodeDetailDrawer.tsx` | **重写**：接口从 `NodeDetail {id,title,modelLabel}` 改 `nodeId: string \| null`；内部 subscribe live node；两个 tab —— Details（描述 zh+en / Tool assignment / I/O schemas）、Result（按 status 分支：error/running/idle/complete + summary + execution_method + raw JSON）；header 加状态 chip |
+| `components/workflows/WorkflowCanvas.tsx` | 适配 drawer 新接口：`selected: NodeDetail` → `selectedNodeId: string`；crumb 从 store 查当前 node 派生；删 `MODEL_LABEL` |
+
+**实际未改动**（探索后确认已符合要求）：
+- `components/workflows/Breadcrumbs.tsx` 早已在 `href && !isLast` 时渲染 `<Link>`，handoff 列的 P4 是 no-op
+- `components/workflow/` / `components/chat/` / `stores/chatStore.ts` 三组 stub 文件在 Phase 2.6 之后已被物理删除，本次只需同步 README 措辞
+
+#### 后端
+
+| 文件 | 动作 |
+|------|------|
+| `routers/workflows.py` | **新建**：`GET /api/workflows` → `List[WorkflowSummary]`，调 `workflow_db.load_all_workflows()`，按 `created_at` 倒序 |
+| `main.py` | 注册新 router：`app.include_router(workflows.router, prefix="/api")` |
+| `tests/test_workflows_router.py` | **新建**：2 个 async test（空列表 + 多 workflow 倒序）；沿用 monkeypatch in-memory sqlite 的 pattern |
+
+### 技术难点与应对
+
+| 难点 | 方案 |
+|------|------|
+| Zustand 自引用触发 TS `any` 级联 | `loadWorkflow` 内原本写 `useWorkflowStore.getState()`，TS 判定 `useWorkflowStore` implicitly `any`，从而把 11 个消费点（`ContextPanel`, `BuildingAgentDetail` 等）全打成 `any`。改 `(set, get) => ...)` 形态 + 显式 `Promise<Workflow \| null>` 返回类型 |
+| ESLint `react-hooks/set-state-in-effect` | 详情页不能在 effect body 同步 `setState('ready'/'loading')`。做法：从 store 派生 `isReady`；只保留 `notFoundId` 一个 state，且**仅在 `.then()` 异步 callback 里 `setNotFoundId(id)`** |
+| REST 前缀冲突 | 已有 `/workflow`（单数）用于 item 路由，新集合路由若叫 `/workflow` 会冲突——新建**单独 router `/workflows`（复数）**解决，付出小量代码重复但不破坏现有前端调用 |
+| Cowork 沙箱 `pytest` | 原 `backend/venv` 是 Windows-style（`Scripts/`），Linux 沙箱用不了。用 `pip install --break-system-packages pytest pytest-asyncio ...` 直装；PATH 加 `~/.local/bin` |
+
+### 验证结果
+
+| 命令 | 结果 |
+|------|------|
+| `cd frontend && npx tsc --noEmit` | ✅ exit 0 |
+| `cd frontend && npx eslint . --quiet` | ✅ exit 0 |
+| `cd backend && pytest -q` | ✅ **33 passed**（其中 2 个是本 Phase 新增：`test_list_workflows_empty` / `test_list_workflows_returns_summaries_newest_first`） |
+
+### 本 Phase 延后到下一 Phase 的项
+
+- **Step 6 / P3 节点实时状态 + mock 执行事件**：`workflowStore.updateNodeStatus` 已存在但没人发 socket 事件。真执行事件要等 Phase 6 的 Node Executor；若真要 mock，事件半径小，建议与 **Phase 4.5** 的结构化 tracing 一并做（都是"执行状态如何可观测"的一体化设计）
+
+### 兼容性备注
+
+- `readyWorkflowId` 的**清理时机**未显式处理——用户在同一 session 里完成工作流后若直接再开始新对话，`isBuildingComplete` / `readyWorkflowId` 仍为 true 直到 Clarifier 启动下一轮。CTA 显示条件是 `isBuildingComplete && readyWorkflowId`，在新一轮 `building:started` 触发前有极短的"陈旧状态"窗口期。未造成功能缺陷但是设计债，建议在 Phase 4.5 的 session checkpoint 工作里一并解决
+- 所有改动对 Phase 3 端到端流程 **backward compatible**：老的 `chat_send → clarification:update → workflow:ready` 链路行为不变，只是右栏 view 切换机制从 `pendingPanelView` 迁到 `contextView`
+
+---
+
 ## Phase 路线图升级说明（2026-04-23）
 
 ### 背景：Vision 升级
@@ -324,58 +408,22 @@ rm -rf components/workflow components/chat stores/chatStore.ts
 
 > **每个 Phase 开工前的仪式**：在 `phase-<N>-plan.md` 新建文件（或在本文件追加章节），写一段**"本 Phase 对 Harness 六维度各贡献什么"**。这是宪法级约束，不可跳过。
 
-### Tier A — Phase 4（Workflows 画布功能接线，**立即开工**）
+### Tier A — Phase 4 收尾（仅剩 Step 6，可与 Phase 4.5 合并）
 
-估时：1-2 天。**先完成这个再动 Tier B**，让项目有完整能跑的 UI 闭环。
+估时：0.5 天。P0-P2 + P4-P5 已在 2026-04-24 归档完成，见上方「Phase 4」章节。**仅剩 P3（节点实时状态 + mock 执行事件）**——因为真正的执行事件来自 Phase 6 的 Node Executor，且 Phase 4.5 会统一做 tracing 体系，**建议延后到 Phase 4.5 一起做**，不单独开工。
 
-#### P0 — 物理删除 stub 文件
+#### P3（延后） — 节点实时状态
 
-```bash
-cd frontend
-rm -rf components/workflow components/chat stores/chatStore.ts
-# 然后更新 README.md 的 Project Structure 段（移除 workflow/ 和 chat/）
-```
-
-#### P0 — 修两个历史 ESLint 错误
-
-- `components/orchestra/ContextPanel.tsx:36` — 移掉 effect 里的 `setState`，改在 `orchestraStore.setPendingPanelView` setter 里直接更新 view
-- `stores/workflowStore.ts:83` — 把 `as any` 替换成正确的泛型
-
-#### P1 — 工作流数据流打通
-
-`orchestra/page.tsx` 第 39-43 行的 `readyWorkflowId` 监听：`console.log` 改为 `router.push(\`/workflows?wf=${readyWorkflowId}\`)`。
-
-`workflows/page.tsx`：`useSearchParams` 拿 `wf`，调 `loadWorkflow(id)`（在 `workflowStore` 新增 action，内部调 `getWorkflow(id)` REST）。
-
-#### P2 — NodeDetailDrawer 接真数据
-
-- 扩展 `NodeDetail` 类型：`{ id, title, modelLabel, description, prompt, execution_method, tools_used[] }`
-- `WorkflowCanvas.onNodeClick` 从 `workflow.nodes` 找到完整节点数据传入
-- `NodeDetailDrawer` Config Tab 替换 mock（plugins / skills / permissions）为真实字段（先只显 `description` / `prompt`）
-- Sub-Agent Chat Tab 留给 Phase 10
-
-#### P3 — 节点实时状态
-
-- `workflowStore` 新增 `updateNodeStatus(nodeId, status)` action
-- `useSocket.ts` 订阅 `execution:start / execution:complete / execution:error`（Phase 6 会真发，Phase 4 可先 mock）
+- `workflowStore.updateNodeStatus(nodeId, status)` 已存在，socket 层的 `execution:node_started / node_complete / node_error` listener 也在 `useSocket.ts` 里（见 Phase 3 代码）
+- 缺的是：**服务端**尚未发这些事件。要么写一个 mock 触发器（Phase 4 tactical），要么直接等 Phase 6 的 Node Executor（战略正确做法）
 - `TaskNodeCard` 的 `status` 字段已支持 `queued / running / complete`，无需改 UI
-
-#### P4 — Breadcrumbs 可点
-
-- `Breadcrumbs.tsx` 把 `span + href` 改成 `<Link href={item.href}>` 当 `href` 存在
-- `WorkflowCanvas` 里 crumbs 第一项 `href: '/workflows'` 需要列表页存在 → 触发 P5
-
-#### P5 — 新建 `/workflows` 列表页
-
-- 后端 REST：`GET /api/workflows` 返回当前用户所有 workflow（`workflow_db.list_workflows()` 已有，包一个 router 即可）
-- 前端：`app/(app)/workflows/page.tsx` 改为列表视图，网格卡片（复用 `ProjectCard` 样式）
-- 新建 `app/(app)/workflows/[id]/page.tsx`，挂 `<WorkflowCanvas />` + 从 URL 拿 id
+- **决策**：并入 Phase 4.5 D5 "接通 building:log + execution:trace" 一起处理
 
 ---
 
-### Tier B — Phase 4.5（Agent Harness Foundation）
+### Tier B — Phase 4.5（Agent Harness Foundation）**— 当前下一优先级**
 
-估时：5-7 天。**所有后续 Phase 的地基**，优先级紧跟 Phase 4。
+估时：5-7 天。**所有后续 Phase 的地基**。Phase 4 收尾已集成进此 Phase 的 D5。
 
 #### B1 — 结构化日志 + 执行追踪
 

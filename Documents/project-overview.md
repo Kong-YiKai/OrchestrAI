@@ -2,7 +2,7 @@
 
 > **用途**：任何接手本项目的 agent 第一个要读的文件。包含速览、Phase 路线图、技术栈、核心架构决策、Harness 六维度铁律、文件索引。历史细节请查 `phase-history-and-handoff.md`。
 >
-> **最新状态锚点（2026-04-23）**：**Vision 升级完成**——项目定位从"AI workflow 编排 demo"升级为"Agent Harness 框架 + Computer Use Agent 平台"。Phase 3（Orchestra 接线）+ Phase 2.6（视觉升级）已完成，下一步 = Phase 4（Workflows 画布接线，保留原计划最后冲刺）→ Phase 4.5（Harness 基础设施）→ Phase 5（Universal Web Perception）→ Phase 6（Tool Registry + Executor）→ Phase 7/8（CUA）。
+> **最新状态锚点（2026-04-24）**：Phase 4 **Step 1-5 已归档完成**（stub 清理 + 历史 lint 修复 + `/workflows` 列表/详情路由 + Orchestra→Canvas CTA + NodeDetailDrawer 接真数据）。Step 6（节点实时状态 + mock 执行事件）已决定并入 Phase 4.5 D5 一起做，不再单独开工。**下一步 = Phase 4.5（Harness Foundation）**——结构化日志 / 执行追踪 / checkpoint & resume / HITL approval / context compaction。
 
 ---
 
@@ -40,8 +40,8 @@
 | 2.5 | 前置 | Orchestra Context Panel 重构 | ✅ | drill-in 导航 + View union（2026-04-17） |
 | 3 | 前置 | The Orchestra 功能接线 | ✅ | Chat→Clarify→Confirm→生成工作流，3 Agent 架构，端到端打通 |
 | 2.6 | 前置 | 前端清理 + 视觉质感升级 | ✅ | 设计 token v2，12 核心组件升级（2026-04-21） |
-| **4** | **A** | **Workflows 画布功能接线** | 🔲 **next** | 节点持久化、NodeDetailDrawer 真实数据、Breadcrumbs 可点、新建 `/workflows` 列表页 |
-| **4.5** | **B** | **Agent Harness Foundation** | 🔲 | 结构化日志 + 执行追踪 + checkpoint & resume + HITL approval 框架 + context compaction 基础设施 |
+| **4** | **A** | **Workflows 画布功能接线** | 🟡 Step 1-5 ✅ | Stub 清理 ✅、`/workflows` 列表 + `[id]` 详情 ✅、Orchestra → Canvas CTA ✅、NodeDetailDrawer 真数据 ✅；**Step 6 节点实时状态并入 Phase 4.5 D5** |
+| **4.5** | **B** | **Agent Harness Foundation** | 🔲 **next** | 结构化日志 + 执行追踪 + checkpoint & resume + HITL approval 框架 + context compaction 基础设施 |
 | **5** | **C** | **Universal Web Perception** | 🔲 | Search 层（Tavily + Brave）+ Fetch 两档（HTTP / Playwright）+ 多模态预处理（视频/音频/3D/Office）+ 统一产出结构 |
 | **6** | **C** | **Tool Registry + Node Executor** | 🔲 | 多模型 tool-calling 适配层 + Docker sandbox + 生成/评估分离的验证循环 + Linter/测试作为确定性约束 |
 | **7** | **D** | **CUA MVP（桌面感知 + 基础动作）** | 🔲 | `mss` 截图 + UIA 树 + OCR + `pywinauto`/`pyautogui` + Planner-Executor loop + 首版 capability scoping & audit |
@@ -124,7 +124,8 @@ Phase 4（UI 闭环）───┐
 
 /dashboard          落地页，项目概览
 /orchestra          The Orchestra：三栏 AI 编排（核心功能）
-/workflows          Workflows 列表（Phase 4 后）+ 画布详情页
+/workflows          Workflows 列表（grid）
+/workflows/[id]     Workflows 画布详情页
 /marketplace        占位（Phase 11）
 /arena              占位（Phase 11）
 /team               占位（Phase 11）
@@ -272,19 +273,22 @@ Server → Client（Phase 4.5 新增）
 | 文件 | 职责 |
 |------|------|
 | `app/(app)/layout.tsx` | AppSidebar + TopBar 壳 |
-| `app/(app)/orchestra/page.tsx` | 三栏布局（左 Recent / 中 Chat / 右 Context），`readyWorkflowId` 监听 |
-| `app/(app)/workflows/page.tsx` | Phase 4 前：直接挂画布；Phase 4 后：列表 + `[id]/page.tsx` 详情 |
+| `app/(app)/orchestra/page.tsx` | 三栏布局（左 Recent / 中 Chat / 右 Context） |
+| `app/(app)/workflows/page.tsx` | Workflows 列表页（Phase 4）：PageHeader + 网格卡片 + Loading/Empty/Error 态 |
+| `app/(app)/workflows/[id]/page.tsx` | Workflows 详情页（Phase 4）：Loading/NotFound/WorkflowCanvas 三态，store 已加载则跳过 REST |
 | `app/globals.css` | 设计 token v2 |
+| `lib/api.ts` | REST client：`fetchWorkflow` / `listWorkflows` / `runWorkflow` / `updateNodeModel` |
 | `components/orchestra/ChatThread.tsx` | 流式渲染消息、EmptyState chips、发送按钮 |
-| `components/orchestra/ContextPanel.tsx` | 右栏 View union 导航壳（有 Phase 4 要修的 lint:36 历史问题） |
-| `components/orchestra/context/*.tsx` | 8 个 drill-in 视图组件 |
-| `components/workflows/WorkflowCanvas.tsx` | React Flow 画布 |
+| `components/orchestra/ContextPanel.tsx` | 右栏 View union 导航壳（直接 subscribe `orchestraStore.contextView`） |
+| `components/orchestra/context/*.tsx` | 8 个 drill-in 视图组件；`BuildingProcessList` 含 "打开画布" CTA |
+| `components/workflows/WorkflowCanvas.tsx` | React Flow 画布，`selectedNodeId` 驱动 drawer |
 | `components/workflows/TaskNodeCard.tsx` | 自定义节点 |
-| `components/workflows/NodeDetailDrawer.tsx` | 侧抽屉 |
-| `stores/orchestraStore.ts` | Orchestra 唯一事实来源 |
-| `stores/workflowStore.ts` | Workflows 画布唯一事实来源 |
-| `hooks/useSocket.ts` | Socket.io 事件绑定 |
-| `types/workflow.ts` | `Workflow` / `WorkflowNode` / `NodeStatus` TS 类型 |
+| `components/workflows/NodeDetailDrawer.tsx` | 侧抽屉，接 `nodeId` + workflowStore selector，Details / Result 两 tab |
+| `components/workflows/Breadcrumbs.tsx` | 面包屑，`href && !last` 时渲染 `<Link>` |
+| `stores/orchestraStore.ts` | Orchestra 唯一事实来源（含 `ContextView` discriminated union、`readyWorkflowId`） |
+| `stores/workflowStore.ts` | Workflows 画布唯一事实来源，含 `loadWorkflow(id)` REST 去水化 |
+| `hooks/useSocket.ts` | Socket.io 事件绑定；`execution:node_complete` 用 `toExecutionMethod()` 收窄 |
+| `types/workflow.ts` | `Workflow` / `WorkflowNode` / `WorkflowSummary` / `NodeStatus` / `ExecutionMethod` + `toExecutionMethod()` 类型卫士 |
 
 ### 5.3 后端热文件（路径相对 `backend/`）
 
@@ -301,6 +305,8 @@ Server → Client（Phase 4.5 新增）
 | `models/chat.py` | Pydantic 模型 |
 | `models/db.py` | SQLAlchemy ORM |
 | `routers/workflow.py` | `GET /api/workflow/{id}`、`PATCH /api/workflow/{id}/node/{node_id}` |
+| `routers/workflows.py` | `GET /api/workflows` → `List[WorkflowSummary]`（Phase 4 新增，按 `created_at` 倒序） |
+| `tests/test_workflows_router.py` | 2 个 async test：空列表 + 多 workflow 倒序（Phase 4 新增） |
 
 #### 即将新增（Phase 4.5+）
 
@@ -321,11 +327,9 @@ Server → Client（Phase 4.5 新增）
 | `services/cua/safety.py` | Capability scoping + audit log | 7 |
 | `services/cua/lifecycle.py` | 软件安装 / 卸载 / 进程管理 | 8 |
 
-### 5.4 Stub 文件（Phase 2.6 置为 `@deprecated`）
+### 5.4 Legacy 清理备忘
 
-```bash
-cd frontend && rm -rf components/workflow components/chat stores/chatStore.ts
-```
+`components/workflow/`、`components/chat/`、`stores/chatStore.ts` 三组 stub 文件在 Phase 2.6 之后已被物理删除，Phase 4 Step 1 验证后更新 README 措辞；前端现仅保留 `components/workflows/`（复数）+ `components/orchestra/ChatThread.tsx` 一套实现。
 
 ---
 

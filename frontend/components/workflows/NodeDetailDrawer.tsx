@@ -1,42 +1,82 @@
 'use client';
 
-import { useState, type KeyboardEvent } from 'react';
+import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-  Check,
-  ChevronRight,
-  Code2,
-  FileText,
-  MessageSquare,
-  Search,
-  Send,
-  Shield,
-  Terminal,
+  AlertTriangle,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  CheckCircle2,
+  Loader2,
+  ScrollText,
+  Sparkles,
+  Wrench,
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useWorkflowStore } from '@/stores/workflowStore';
+import type { NodeStatus, ToolType, WorkflowNode } from '@/types/workflow';
 
-type DrawerTab = 'config' | 'chat';
+type DrawerTab = 'details' | 'result';
 
-export interface NodeDetail {
-  id: string;
-  title: string;
-  modelLabel: string; // e.g. "GPT 5.0"
-}
+const MODEL_LABEL: Record<string, string> = {
+  claude: 'Claude 4.6',
+  gpt: 'GPT-4o',
+  gemini: 'Gemini',
+  grok: 'Grok',
+};
+
+const TOOL_TYPE_LABEL: Record<ToolType, string> = {
+  api: 'API',
+  web_automation: 'Web Automation',
+  llm: 'LLM',
+  code: 'Code',
+};
+
+const STATUS_TONE: Record<NodeStatus, { label: string; dot: string; chip: string }> = {
+  idle: {
+    label: 'Queued',
+    dot: 'bg-ink-muted',
+    chip: 'bg-canvas-soft text-ink-soft ring-hairline',
+  },
+  running: {
+    label: 'Running',
+    dot: 'bg-brand-500',
+    chip: 'bg-brand-50 text-brand-700 ring-brand-500/25',
+  },
+  complete: {
+    label: 'Complete',
+    dot: 'bg-success-500',
+    chip: 'bg-success-100 text-success-700 ring-success-500/25',
+  },
+  error: {
+    label: 'Error',
+    dot: 'bg-danger-500',
+    chip: 'bg-danger-50 text-danger-500 ring-danger-500/25',
+  },
+};
 
 interface Props {
-  node: NodeDetail | null;
+  nodeId: string | null;
   onClose: () => void;
 }
 
-export function NodeDetailDrawer({ node, onClose }: Props) {
-  const [tab, setTab] = useState<DrawerTab>('config');
+export function NodeDetailDrawer({ nodeId, onClose }: Props) {
+  const node = useWorkflowStore(
+    (s) => s.workflow?.nodes.find((n) => n.node_id === nodeId) ?? null,
+  );
+
+  const [tab, setTab] = useState<DrawerTab>('details');
+
+  const modelLabel = node ? MODEL_LABEL[node.assigned_ai] ?? node.assigned_ai : '';
+  const displayTitle = node?.title || node?.title_zh || '';
+  const tone = node ? STATUS_TONE[node.status] : null;
 
   return (
     <AnimatePresence>
       {node && (
         <motion.aside
-          key={node.id}
+          key={node.node_id}
           initial={{ x: '100%', opacity: 0.4 }}
           animate={{ x: 0, opacity: 1 }}
           exit={{ x: '100%', opacity: 0 }}
@@ -45,17 +85,36 @@ export function NodeDetailDrawer({ node, onClose }: Props) {
         >
           {/* Header */}
           <div className="border-b border-hairline px-5 pb-0 pt-5">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <h2 className="truncate text-[16px] font-semibold tracking-tight text-ink">{node.title}</h2>
-                <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wider text-brand-700 ring-1 ring-brand-500/20">
-                  {node.modelLabel}
-                </span>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-muted">
+                  Node · Order {node.order + 1}
+                </p>
+                <h2 className="mt-1 truncate text-[16px] font-semibold tracking-tight text-ink">
+                  {displayTitle}
+                </h2>
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wider text-brand-700 ring-1 ring-brand-500/20">
+                    <Sparkles className="h-3 w-3" strokeWidth={2} />
+                    {modelLabel}
+                  </span>
+                  {tone && (
+                    <span
+                      className={cn(
+                        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wider ring-1',
+                        tone.chip,
+                      )}
+                    >
+                      <span className={cn('h-1.5 w-1.5 rounded-full', tone.dot)} />
+                      {tone.label}
+                    </span>
+                  )}
+                </div>
               </div>
               <button
                 type="button"
                 onClick={onClose}
-                className="grid h-8 w-8 place-items-center rounded-full text-ink-muted transition-colors hover:bg-canvas-soft hover:text-ink"
+                className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-full text-ink-muted transition-colors hover:bg-canvas-soft hover:text-ink"
                 aria-label="Close"
               >
                 <X className="h-4 w-4" strokeWidth={2} />
@@ -65,23 +124,23 @@ export function NodeDetailDrawer({ node, onClose }: Props) {
             {/* Tabs */}
             <div className="mt-4 flex gap-1">
               <TabButton
-                active={tab === 'config'}
-                onClick={() => setTab('config')}
-                label="Configurations & Permissions"
-                icon={<Shield className="h-3.5 w-3.5" strokeWidth={1.8} />}
+                active={tab === 'details'}
+                onClick={() => setTab('details')}
+                label="Details"
+                icon={<ScrollText className="h-3.5 w-3.5" strokeWidth={1.8} />}
               />
               <TabButton
-                active={tab === 'chat'}
-                onClick={() => setTab('chat')}
-                label="Node Sub-Agent Chat"
-                icon={<MessageSquare className="h-3.5 w-3.5" strokeWidth={1.8} />}
+                active={tab === 'result'}
+                onClick={() => setTab('result')}
+                label="Result"
+                icon={<CheckCircle2 className="h-3.5 w-3.5" strokeWidth={1.8} />}
               />
             </div>
           </div>
 
           {/* Body */}
           <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
-            {tab === 'config' ? <ConfigBody /> : <SubAgentChatBody />}
+            {tab === 'details' ? <DetailsBody node={node} /> : <ResultBody node={node} />}
           </div>
         </motion.aside>
       )}
@@ -121,70 +180,197 @@ function TabButton({
   );
 }
 
-/* ───────────────── Config & Permissions ───────────────── */
+/* ───────────────── Details tab ───────────────── */
 
-function ConfigBody() {
+function DetailsBody({ node }: { node: WorkflowNode }) {
+  const description = node.description?.trim();
+  const descriptionZh = node.description_zh?.trim();
+  const inputEntries = useMemo(() => Object.entries(node.input_schema ?? {}), [node.input_schema]);
+  const outputEntries = useMemo(() => Object.entries(node.output_schema ?? {}), [node.output_schema]);
+
   return (
     <div className="flex flex-col gap-6 p-5">
-      <Section title="Installed Plugins" tone="brand">
-        <div className="grid grid-cols-2 gap-2">
-          <PluginPill icon={<FileText className="h-3.5 w-3.5" />} label="File System" />
-          <PluginPill icon={<Search className="h-3.5 w-3.5" />} label="Web Search" />
-          <PluginPill icon={<Terminal className="h-3.5 w-3.5" />} label="Linux" />
+      <Section title="Description">
+        <div className="space-y-2 rounded-[12px] border border-hairline bg-surface p-3.5">
+          {descriptionZh && (
+            <p className="text-[12.5px] leading-[1.6] text-ink">{descriptionZh}</p>
+          )}
+          {description && description !== descriptionZh && (
+            <p className="text-[12px] leading-[1.6] text-ink-muted">{description}</p>
+          )}
+          {!description && !descriptionZh && (
+            <p className="text-[12px] italic text-ink-muted">No description provided.</p>
+          )}
         </div>
       </Section>
 
-      <Section title="Action Skills" tone="success">
-        <div className="flex flex-col gap-2">
-          <SkillRow icon={<Terminal className="h-3.5 w-3.5" />} label="Bash Executor" enabled />
-          <SkillRow icon={<Code2 className="h-3.5 w-3.5" />} label="Code Analysis" enabled />
-        </div>
-      </Section>
-
-      <Section title="Required Permissions" tone="warning">
+      <Section title="Tool Assignment">
         <div className="rounded-[12px] border border-hairline bg-surface p-3.5">
-          <p className="text-[12px] font-medium text-ink">Execution Authority</p>
-          <p className="mt-1 text-[11px] leading-[1.5] text-ink-muted">
-            Allow this node to execute dependencies, spawn sub-agents, and write to the shared file repository.
-          </p>
-          <div className="mt-3 flex items-center gap-2">
-            <input
-              type="text"
-              placeholder="Authorised by…"
-              className="h-9 flex-1 rounded-[10px] border border-hairline bg-canvas px-3 text-[12.5px] placeholder:text-ink-muted focus:border-brand-500 focus:outline-none"
-            />
-            <button
-              type="button"
-              className="inline-flex h-9 items-center gap-1 rounded-[10px] bg-brand-500 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-600"
-            >
-              <Check className="h-3.5 w-3.5" strokeWidth={2.4} />
-              Grant
-            </button>
+          <div className="flex items-center justify-between gap-2">
+            <span className="inline-flex items-center gap-2 text-[12.5px] font-semibold text-ink">
+              <span className="grid h-7 w-7 place-items-center rounded-lg bg-canvas-soft text-ink-soft">
+                <Wrench className="h-3.5 w-3.5" strokeWidth={1.8} />
+              </span>
+              {node.assigned_tool || 'Unassigned'}
+            </span>
+            <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wider text-brand-700 ring-1 ring-brand-500/20">
+              {TOOL_TYPE_LABEL[node.tool_type] ?? node.tool_type}
+            </span>
           </div>
         </div>
       </Section>
+
+      <Section title="Input Schema" icon={<ArrowDownToLine className="h-3 w-3" strokeWidth={2} />}>
+        <SchemaList entries={inputEntries} emptyLabel="No inputs declared." />
+      </Section>
+
+      <Section title="Output Schema" icon={<ArrowUpFromLine className="h-3 w-3" strokeWidth={2} />}>
+        <SchemaList entries={outputEntries} emptyLabel="No outputs declared." />
+      </Section>
+    </div>
+  );
+}
+
+function SchemaList({ entries, emptyLabel }: { entries: [string, string][]; emptyLabel: string }) {
+  if (entries.length === 0) {
+    return (
+      <p className="rounded-[12px] border border-dashed border-hairline bg-surface/40 px-3.5 py-2.5 text-[12px] italic text-ink-muted">
+        {emptyLabel}
+      </p>
+    );
+  }
+  return (
+    <ul className="flex flex-col gap-1.5">
+      {entries.map(([key, type]) => (
+        <li
+          key={key}
+          className="flex items-center justify-between gap-3 rounded-[10px] border border-hairline bg-surface px-3 py-2 text-[12.5px]"
+        >
+          <span className="truncate font-mono text-ink">{key}</span>
+          <span className="truncate rounded-md bg-canvas-soft px-1.5 py-0.5 font-mono text-[11.5px] text-ink-soft">
+            {type || '—'}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/* ───────────────── Result tab ───────────────── */
+
+function ResultBody({ node }: { node: WorkflowNode }) {
+  if (node.status === 'error') {
+    return (
+      <div className="p-5">
+        <div className="rounded-[14px] border border-danger-500/20 bg-danger-50/40 p-4">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-danger-500" strokeWidth={2} />
+            <p className="text-[13px] font-semibold text-danger-500">Execution failed</p>
+          </div>
+          <p className="mt-2 whitespace-pre-wrap text-[12.5px] leading-[1.6] text-ink-soft">
+            {node.error || 'No error message captured.'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (node.status === 'running') {
+    return (
+      <Placeholder
+        icon={<Loader2 className="h-5 w-5 animate-spin text-brand-600" strokeWidth={1.8} />}
+        title="Running…"
+        description="Live output will appear here once the node finishes."
+      />
+    );
+  }
+
+  if (node.status === 'idle' || !node.result) {
+    return (
+      <Placeholder
+        icon={<CheckCircle2 className="h-5 w-5 text-ink-muted" strokeWidth={1.6} />}
+        title="Not yet executed"
+        description="Queue this workflow to populate the node's result."
+      />
+    );
+  }
+
+  const { summary, summary_zh, raw } = node.result;
+  const rawJson = safeStringify(raw);
+  const methodLabel = node.execution_method
+    ? node.execution_method.charAt(0).toUpperCase() + node.execution_method.slice(1)
+    : null;
+
+  return (
+    <div className="flex flex-col gap-5 p-5">
+      <Section title="Summary">
+        <div className="space-y-2 rounded-[12px] border border-hairline bg-surface p-3.5">
+          {summary_zh && (
+            <p className="text-[12.5px] leading-[1.6] text-ink">{summary_zh}</p>
+          )}
+          {summary && summary !== summary_zh && (
+            <p className="text-[12px] leading-[1.6] text-ink-muted">{summary}</p>
+          )}
+          {!summary && !summary_zh && (
+            <p className="text-[12px] italic text-ink-muted">No summary returned.</p>
+          )}
+        </div>
+      </Section>
+
+      {methodLabel && (
+        <Section title="Execution Method">
+          <span className="inline-flex items-center gap-1 rounded-full bg-canvas-soft px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-ink-soft ring-1 ring-hairline">
+            {methodLabel}
+          </span>
+        </Section>
+      )}
+
+      <Section title="Raw Output">
+        <pre className="max-h-[280px] overflow-auto rounded-[12px] border border-hairline bg-canvas-soft p-3 text-[11.5px] leading-[1.55] text-ink-soft scrollbar-thin">
+          <code>{rawJson}</code>
+        </pre>
+      </Section>
+    </div>
+  );
+}
+
+function Placeholder({
+  icon,
+  title,
+  description,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="grid h-full min-h-[260px] place-items-center p-5">
+      <div className="flex flex-col items-center gap-3 text-center">
+        <span className="grid h-12 w-12 place-items-center rounded-2xl bg-canvas-soft ring-1 ring-hairline">
+          {icon}
+        </span>
+        <div className="max-w-[280px]">
+          <p className="text-[13.5px] font-semibold text-ink">{title}</p>
+          <p className="mt-1 text-[12px] leading-[1.55] text-ink-muted">{description}</p>
+        </div>
+      </div>
     </div>
   );
 }
 
 function Section({
   title,
-  tone,
+  icon,
   children,
 }: {
   title: string;
-  tone: 'brand' | 'success' | 'warning';
+  icon?: React.ReactNode;
   children: React.ReactNode;
 }) {
-  const dot: Record<typeof tone, string> = {
-    brand: 'bg-brand-500',
-    success: 'bg-success-500',
-    warning: 'bg-warning-500',
-  } as const;
   return (
     <div>
-      <p className="mb-2.5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
-        <span className={cn('h-1.5 w-1.5 rounded-full', dot[tone])} />
+      <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
+        {icon}
         {title}
       </p>
       {children}
@@ -192,143 +378,10 @@ function Section({
   );
 }
 
-function PluginPill({ icon, label }: { icon: React.ReactNode; label: string }) {
-  return (
-    <div className="flex items-center justify-between rounded-[10px] border border-hairline bg-surface px-3 py-2 text-[12px] font-medium text-ink">
-      <span className="inline-flex items-center gap-2">
-        <span className="grid h-6 w-6 place-items-center rounded-md bg-canvas-soft text-ink-soft">
-          {icon}
-        </span>
-        {label}
-      </span>
-      <span className="grid h-4 w-4 place-items-center rounded-full bg-success-500 text-white">
-        <Check className="h-2.5 w-2.5" strokeWidth={3} />
-      </span>
-    </div>
-  );
-}
-
-function SkillRow({
-  icon,
-  label,
-  enabled,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  enabled: boolean;
-}) {
-  return (
-    <div className="flex items-center justify-between rounded-[10px] border border-hairline bg-surface px-3 py-2.5">
-      <span className="inline-flex items-center gap-2 text-[12.5px] font-medium text-ink">
-        <span className="grid h-6 w-6 place-items-center rounded-md bg-canvas-soft text-ink-soft">
-          {icon}
-        </span>
-        {label}
-      </span>
-      <span
-        className={cn(
-          'relative h-5 w-9 rounded-full transition-colors',
-          enabled ? 'bg-success-500' : 'bg-hairline'
-        )}
-      >
-        <span
-          className={cn(
-            'absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform',
-            enabled ? 'left-[18px]' : 'left-0.5'
-          )}
-        />
-      </span>
-    </div>
-  );
-}
-
-/* ───────────────── Sub-agent chat ───────────────── */
-
-type SubMsg = { id: string; role: 'user' | 'agent'; body: string };
-
-function SubAgentChatBody() {
-  const [messages, setMessages] = useState<SubMsg[]>([
-    {
-      id: 'sm1',
-      role: 'agent',
-      body:
-        'I will use the installed plugins for this workflow step. I spawn sub-agents independently from the main Orchestra session. Ask me anything to narrow the scope.',
-    },
-  ]);
-  const [draft, setDraft] = useState('');
-
-  const send = () => {
-    const text = draft.trim();
-    if (!text) return;
-    setMessages((p) => [...p, { id: crypto.randomUUID(), role: 'user', body: text }]);
-    setDraft('');
-  };
-
-  const handleKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      send();
-    }
-  };
-
-  return (
-    <div className="flex h-full flex-col">
-      {/* Breadcrumb inside sub-chat */}
-      <div className="flex items-center gap-1 border-b border-hairline px-5 py-3 text-[11.5px] text-ink-muted">
-        <span className="font-medium text-ink">Main Thread</span>
-        <ChevronRight className="h-3 w-3" strokeWidth={2} />
-        <span>Sub-Agent · Requirements</span>
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin p-5">
-        <ul className="flex flex-col gap-3">
-          {messages.map((m) => (
-            <li
-              key={m.id}
-              className={cn('flex', m.role === 'user' ? 'justify-end' : 'justify-start')}
-            >
-              <div
-                className={cn(
-                  'max-w-[85%] rounded-[14px] px-3.5 py-2.5 text-[13px] leading-[1.5]',
-                  m.role === 'user'
-                    ? 'rounded-tr-[4px] bg-brand-500 text-white'
-                    : 'rounded-tl-[4px] border border-hairline bg-surface text-ink-soft'
-                )}
-              >
-                {m.body}
-              </div>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <div className="border-t border-hairline p-4">
-        <button
-          type="button"
-          className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-warning-50 px-3 py-1 text-[11.5px] font-semibold text-warning-500"
-        >
-          ↓ View Parallel Iteration
-        </button>
-        <div className="flex items-end gap-2 rounded-[14px] border border-hairline bg-surface px-3 py-2 focus-within:ring-2 focus-within:ring-brand-500/40">
-          <textarea
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={handleKey}
-            placeholder="Message this sub-agent…"
-            rows={1}
-            className="min-h-[28px] flex-1 resize-none bg-transparent py-1 text-[13px] placeholder:text-ink-muted focus:outline-none"
-          />
-          <button
-            type="button"
-            onClick={send}
-            disabled={!draft.trim()}
-            className="grid h-8 w-8 place-items-center rounded-full bg-brand-500 text-white transition-transform active:scale-95 disabled:opacity-50"
-            aria-label="Send"
-          >
-            <Send className="h-3.5 w-3.5" strokeWidth={1.8} />
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+function safeStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
 }

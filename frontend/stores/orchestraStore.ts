@@ -51,10 +51,20 @@ export interface HistoryEntry {
   detail?: string;
 }
 
+export type ContextView =
+  | { name: 'overview' }
+  | { name: 'clarifications' }
+  | { name: 'clarification-agent'; agentId: string }
+  | { name: 'building' }
+  | { name: 'building-agent'; agentId: string }
+  | { name: 'reports' }
+  | { name: 'history' };
+
 interface OrchestraStore {
   sessionId: string;
   convState: ConvState;
-  pendingPanelView: string | null;
+  contextView: ContextView;
+  contextDirection: 1 | -1;
 
   messages: ChatMessage[];
   streamingBuffers: Record<string, string>;
@@ -70,7 +80,7 @@ interface OrchestraStore {
 
   setSessionId: (id: string) => void;
   setConvState: (s: ConvState) => void;
-  setPendingPanelView: (view: string | null) => void;
+  setContextView: (view: ContextView, direction?: 1 | -1) => void;
   addMessage: (msg: ChatMessage) => void;
   appendStreamToken: (messageId: string, token: string) => void;
   finalizeStream: (messageId: string, content: string) => void;
@@ -89,7 +99,8 @@ interface OrchestraStore {
 const initialState = {
   sessionId: 'default',
   convState: 'idle' as ConvState,
-  pendingPanelView: null,
+  contextView: { name: 'overview' } as ContextView,
+  contextDirection: 1 as 1 | -1,
   messages: [] as ChatMessage[],
   streamingBuffers: {} as Record<string, string>,
   clarificationQuestions: [] as ClarificationQuestion[],
@@ -105,7 +116,8 @@ export const useOrchestraStore = create<OrchestraStore>((set) => ({
 
   setSessionId: (id) => set({ sessionId: id }),
   setConvState: (s) => set({ convState: s }),
-  setPendingPanelView: (view) => set({ pendingPanelView: view }),
+  setContextView: (view, direction = 1) =>
+    set({ contextView: view, contextDirection: direction }),
 
   addMessage: (msg) =>
     set((state) => ({ messages: [...state.messages, msg] })),
