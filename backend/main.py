@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
 from socket_manager import sio
-from routers import chat, workflow, execution
+from routers import chat, workflow, workflows, execution
 from models.chat import AI_PERSONAS, ChatMessage, MessageType
 from services.conversation_manager import (
     get_state, append_history, add_history_log,
@@ -45,6 +45,7 @@ app.add_middleware(
 
 app.include_router(chat.router, prefix="/api")
 app.include_router(workflow.router, prefix="/api")
+app.include_router(workflows.router, prefix="/api")
 app.include_router(execution.router, prefix="/api")
 
 

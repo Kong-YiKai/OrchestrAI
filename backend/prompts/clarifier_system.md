@@ -38,7 +38,7 @@ Respond ONLY with valid JSON, no other text:
     "title": "...",
     "summary": "2-3 sentence description of what will be built",
     "nodes": [
-      {"order": 1, "title": "...", "description": "one sentence", "recommended_ai": "claude|gpt|gemini"}
+      {"order": 1, "title": "...", "description": "one sentence", "recommended_ai": "claude|gpt|gemini", "node_type": "phase|task", "depends_on": []}
     ],
     "confirmation_prompt": "计划如上，是否开始生成工作流？"
   }
@@ -54,4 +54,6 @@ Respond ONLY with valid JSON, no other text:
 ## Rules
 - Include "questions" ONLY when action == "ask"
 - Include "plan" ONLY when action == "present_plan"
-- Plan should have 3-7 nodes
+- Plan should usually have 4-8 stage-level nodes. For complex products, create phases that can later be subdivided on the workflow canvas instead of compressing everything into a few implementation steps.
+- Plan nodes may include `depends_on` and `node_type` so parallelizable work is visible before generation.
+- If the user asks for a product that current AI cannot realistically complete end-to-end, present a feasible MVP / simulation / phased build plan and explain the limitation in the plan summary.

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+
 import { AnimatePresence, motion } from 'framer-motion';
 import { RecentProjectsPanel } from '@/components/orchestra/RecentProjectsPanel';
 import { ChatThread } from '@/components/orchestra/ChatThread';
@@ -17,7 +18,7 @@ export default function OrchestraPage() {
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [contextOpen, setContextOpen] = useState(true);
 
-  const { setSessionId, readyWorkflowId } = useOrchestraStore();
+  const setSessionId = useOrchestraStore((s) => s.setSessionId);
 
   const sessionId = useMemo(() => {
     if (typeof window === 'undefined') return 'default';
@@ -35,12 +36,6 @@ export default function OrchestraPage() {
     socket.emit('join_session', { session_id: sessionId });
     setSessionId(sessionId);
   }, [sessionId, setSessionId]);
-
-  useEffect(() => {
-    if (!readyWorkflowId) return;
-    console.log(`[OrchestrAI] workflow ready: ${readyWorkflowId}`);
-    // Phase 4 will navigate to /workflows?wf=readyWorkflowId
-  }, [readyWorkflowId]);
 
   return (
     <div className="relative flex h-full overflow-hidden bg-canvas-soft">

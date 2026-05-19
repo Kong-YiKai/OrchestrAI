@@ -73,7 +73,8 @@ High-risk actions pause for your approval
 | Visual workflow canvas (React Flow) | ✅ UI ready |
 | Per-node AI model selection | ✅ UI ready |
 | Design system v2 (warm palette, 5-level surfaces, glass, grain) | ✅ Phase 2.6 |
-| Workflow canvas end-to-end data flow (list page + detail page + live node status) | 🔲 Phase 4 |
+| Workflow canvas end-to-end data flow (list page + detail page + live node status) | ✅ Phase 4 |
+| Phase 4.5 pre-foundation canvas controls (node run/stop/edit + DAG subdivision) | ✅ Done |
 | Agent Harness foundation (structured logs, tracing, checkpoint & resume, HITL approval gate) | 🔲 Phase 4.5 |
 | Universal Web Perception (search + fetch + multimodal preprocess for video / audio / 3D / Office) | 🔲 Phase 5 |
 | Tool Registry + Node Executor (multi-model tool calling, Docker sandbox, separate evaluator) | 🔲 Phase 6 |
@@ -275,7 +276,9 @@ OrchestrAI/
 │   │       ├── layout.tsx                   # AppSidebar + TopBar shell
 │   │       ├── dashboard/page.tsx           # Landing page
 │   │       ├── orchestra/page.tsx           # 3-col AI orchestration UI (core)
-│   │       ├── workflows/page.tsx           # React Flow workflow canvas (Phase 4 → list + [id] split)
+│   │       ├── workflows/
+│   │       │   ├── page.tsx                 # Grid list of workflows (Phase 4)
+│   │       │   └── [id]/page.tsx            # React Flow canvas detail page (Phase 4)
 │   │       ├── marketplace/page.tsx         # Placeholder (Phase 11)
 │   │       ├── arena/page.tsx               # Placeholder (Phase 11)
 │   │       ├── team/page.tsx                # Placeholder (Phase 11)
@@ -288,7 +291,7 @@ OrchestrAI/
 │   │   │   ├── ChatThread.tsx
 │   │   │   ├── ContextPanel.tsx
 │   │   │   ├── RecentProjectsPanel.tsx
-│   │   │   └── context/                     # 8 drill-in views (Overview / Clarifications / Building / Reports / History)
+│   │   │   └── context/                     # 9 drill-in views (Overview / Clarifications / ClarificationDetail / PlanDetail / Building / BuildingAgent / Reports / History / DetailHeader)
 │   │   ├── workflows/                       # Canonical workflow canvas stack
 │   │   │   ├── WorkflowCanvas.tsx
 │   │   │   ├── TaskNodeCard.tsx
@@ -296,7 +299,9 @@ OrchestrAI/
 │   │   │   └── Breadcrumbs.tsx
 │   │   └── ui/                              # shadcn/ui wrappers
 │   │
-│   ├── hooks/useSocket.ts                   # Socket.io event bindings → orchestraStore
+│   ├── hooks/
+│   │   ├── useSocket.ts                     # Full Socket.io bindings on the Orchestra page → orchestraStore + workflowStore
+│   │   └── useExecutionSocket.ts            # Scoped execution:* bindings on /workflows/[id] (Phase 4)
 │   ├── stores/
 │   │   ├── orchestraStore.ts                # Conv state, messages, clarifications, logs, history
 │   │   └── workflowStore.ts                 # Workflow nodes + selected node
@@ -314,13 +319,16 @@ OrchestrAI/
     │   ├── clarifier_agent.py
     │   ├── workflow_designer.py
     │   ├── workflow_db.py
+    │   ├── executor.py                      # NodeExecutor (api / playwright / simulated / mock paths) — Phase 4/4.5 pre-work
+    │   ├── execution_control.py             # In-process node stop registry (Phase 4.5 pre-work)
+    │   ├── workflow_refinement.py           # Deterministic node subdivision + DAG scaffold
     │   ├── observability/                   # (Phase 4.5)
     │   ├── checkpoint/                      # (Phase 4.5)
     │   ├── approval/                        # (Phase 4.5)
     │   ├── tools/                           # (Phase 5-6) web_search / web_fetch / multimodal_preprocess / registry
-    │   ├── executor/                        # (Phase 6) sandbox / evaluator / node_executor
+    │   ├── executor/                        # (Phase 6) sandbox / evaluator — expanded Docker-per-node layer
     │   └── cua/                             # (Phase 7-8) perception / action / planner / safety / lifecycle
-    ├── routers/                             # REST endpoints
+    ├── routers/                             # REST endpoints (workflow.py item / workflows.py collection / execution.py run+retry)
     ├── prompts/                             # System prompt markdown files
     ├── browser/                             # Playwright automation scaffold (migrated into services/tools in Phase 5)
     └── tests/                               # pytest suites
@@ -334,10 +342,13 @@ OrchestrAI/
 | --- | --- | --- |
 | GET | `/api/health` | Health check |
 | GET | `/api/workflow/{id}` | Get workflow by ID |
-| GET | `/api/workflows` | List workflows (Phase 4) |
-| PATCH | `/api/workflow/{id}/node/{node_id}` | Update node AI model |
-| POST | `/api/execution/run/{workflow_id}` | Execute workflow (Phase 6) |
-| POST | `/api/execution/node/{node_id}/retry` | Retry a failed node (Phase 6) |
+| GET | `/api/workflows` | List workflows as lightweight summaries, newest first |
+| PATCH | `/api/workflow/{id}/node/{node_id}` | Update node plan fields: title, descriptions, model, tool, schemas, `node_type`, `depends_on`, `parallel_group` |
+| POST | `/api/workflow/{id}/node/{node_id}/subdivide` | Convert a phase node into child task nodes with dependency edges and parallel tracks |
+| POST | `/api/execution/run/{workflow_id}` | Execute workflow; `mock: true` runs a staged demo emitter (Phase 4), `mock: false` uses the real API/Playwright/Claude strategies |
+| POST | `/api/execution/node/{node_id}/run` | Run a single workflow node; `mock: true` is used by the canvas demo controls |
+| POST | `/api/execution/node/{node_id}/stop` | Request cooperative stop for a running node |
+| POST | `/api/execution/node/{node_id}/retry` | Retry a failed node; same `mock` switch |
 | POST | `/api/sessions/{id}/resume` | Resume from checkpoint (Phase 4.5) |
 
 **Socket.io Events (key)**
@@ -346,6 +357,8 @@ OrchestrAI/
 | --- | --- | --- |
 | Client → Server | `chat_send` | Send a message |
 | Client → Server | `chat_confirm_start` | Confirm plan, trigger generation |
+| Client → Server | `execution:node/run` via REST | Run one node from the canvas |
+| Client → Server | `execution:node/stop` via REST | Request node stop from the canvas |
 | Client → Server | `execution:approve` | Approve / deny a pending action (Phase 4.5) |
 | Client → Server | `execution:kill` | Kill switch — stop current session (Phase 4.5) |
 | Server → Client | `chat:stream_token` | Streaming AI response token |
@@ -353,6 +366,7 @@ OrchestrAI/
 | Server → Client | `clarification:plan_ready` | Plan ready for user approval |
 | Server → Client | `building:log` | Agent activity log entry |
 | Server → Client | `workflow:ready` | Workflow generated and saved |
+| Server → Client | `execution:node_started` / `node_log` / `node_complete` / `node_error` / `node_stopping` / `node_stopped` / `workflow_complete` | Node-level lifecycle emitted by the executor |
 | Server → Client | `execution:approval_required` | Blocked on human approval (Phase 4.5) |
 | Server → Client | `execution:trace` | Tool / LLM call span (Phase 4.5) |
 
@@ -360,14 +374,15 @@ OrchestrAI/
 
 ## Development Status
 
-The project is being built in phases. Current status (2026-04-23):
+The project is being built in phases. Current status (2026-05-19):
 
 - **Infrastructure** ✅ — Docker Compose, PostgreSQL, FastAPI, Socket.io, Next.js app shell
 - **UI shell** ✅ — All pages and components built with placeholder data
 - **AI orchestration** ✅ — Phase 3 wired end-to-end: `chat_send → clarifier → plan_ready → chat_confirm_start → workflow_designer → building:log → workflow:ready`. `/workflows` canvas auto-populates; Building Process panel shows per-node agent cards.
-- **Design system v2** ✅ — Phase 2.6 (2026-04-21): 5-level surfaces, warm-tinted hairlines, 8-stop brand palette, unified radius/elevation/typescale, glass utilities, grain texture, soft-pulse motion, `prefers-reduced-motion` support. Legacy `components/workflow/` and `components/chat/` reduced to `@deprecated` stubs.
-- **Workflow canvas data flow** 🔲 Phase 4 (next) — list page, detail page, live node status, breadcrumb routing.
-- **Agent Harness Foundation** 🔲 Phase 4.5 — structured logging, execution tracing, checkpoint & resume, HITL approval gate, context compaction.
+- **Design system v2** ✅ — Phase 2.6 (2026-04-21): 5-level surfaces, warm-tinted hairlines, 8-stop brand palette, unified radius/elevation/typescale, glass utilities, grain texture, soft-pulse motion, `prefers-reduced-motion` support. Legacy `components/workflow/`, `components/chat/`, and `stores/chatStore.ts` have been physically removed (Phase 4 cleanup).
+- **Workflow canvas data flow** ✅ Phase 4 complete (2026-04-27) — `GET /api/workflows` list endpoint, `/workflows` grid + `/workflows/[id]` detail route, Orchestra → Canvas "Open Canvas" CTA, NodeDetailDrawer restored to the prototype's two-tab contract (**Configuration & Permissions**: live description / tool / I/O schemas + mock Installed Plugins / Active Skills / Required Permissions UI; **Node Sub-Agent Chat**: Phase 10 placeholder with greeting bubble, Files / Create Parallel Branches chips, disabled composer), canvas `Run` button + mock execution pipeline (staged `execution:node_started → node_log → node_complete` events from backend, scoped `useExecutionSocket` on the detail page) so node cards animate through queued → running → complete without external API keys, and the Clarifications panel now ships as a drill-in card list — the agent card and a new "开始生成工作流" card both require a click-through; the latter opens a dedicated `PlanDetail` view with an edit-toggle for the plan steps and a start button that locks the plan once workflow generation begins.
+- **Phase 4.5 pre-foundation canvas controls** ✅ (2026-05-19) — NodeDetailDrawer is now a larger prototype-aligned configuration panel; each node can be run/stopped independently in mock mode; node title/description/tool/schema/graph fields can be edited; workflow nodes support `node_type`, `parent_node_id`, `depends_on`, and `parallel_group`; the canvas draws dependency edges instead of forcing a linear chain; `Subdivide` creates child task nodes with parallel implementation tracks.
+- **Agent Harness Foundation** 🔲 Phase 4.5 (next) — structured logging, execution tracing, checkpoint & resume, HITL approval gate, context compaction.
 - **Universal Web Perception** 🔲 Phase 5 — unified search + fetch + multimodal preprocess (video / audio / 3D / Office).
 - **Tool Registry + Node Executor** 🔲 Phase 6 — multi-model tool calling, Docker sandbox, separate evaluator agent.
 - **Computer Use Agent** 🔲 Phase 7-8 — desktop perception (screenshot + UIA + OCR), action layer (pywinauto + pyautogui), planner-executor loop, safety + HITL, application lifecycle management, replay & kill switch.

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
-import { Check, ChevronDown, Clock, Loader2, Users } from 'lucide-react';
+import { Check, ChevronDown, Clock, Loader2, Play, Square, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export type TaskNodeStatus = 'online' | 'running' | 'queued' | 'complete';
@@ -15,7 +15,11 @@ export type TaskNodeData = {
   status: TaskNodeStatus;
   accent: 'brand' | 'success' | 'violet' | 'sky' | 'warning';
   assignedAi: string;
+  nodeType: 'phase' | 'task';
+  parallelGroup?: string | null;
   onModelChange?: (nodeId: string, model: string) => void;
+  onRun?: (nodeId: string) => void;
+  onStop?: (nodeId: string) => void;
 };
 
 export type TaskNode = Node<TaskNodeData, 'task'>;
@@ -94,6 +98,16 @@ export function TaskNodeCard({ data, selected }: NodeProps<TaskNode>) {
 
       <div className="relative px-4 py-3.5 pl-5">
         <p className="text-[13.5px] font-semibold leading-tight tracking-tight text-ink">{d.title}</p>
+        <div className="mt-1 flex flex-wrap gap-1.5">
+          <span className="rounded-full bg-canvas-soft px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider text-ink-muted ring-1 ring-hairline">
+            {d.nodeType}
+          </span>
+          {d.parallelGroup && (
+            <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider text-brand-700 ring-1 ring-brand-500/20">
+              Parallel
+            </span>
+          )}
+        </div>
         <p className="mt-1 line-clamp-2 text-[11.5px] leading-[1.5] text-ink-muted">
           {d.summary}
         </p>
@@ -157,6 +171,33 @@ export function TaskNodeCard({ data, selected }: NodeProps<TaskNode>) {
             <Users className="h-3 w-3" strokeWidth={1.8} />
             {d.agents}
           </span>
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              d.onRun?.(d.nodeId);
+            }}
+            disabled={d.status === 'running'}
+            className="nodrag inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-ink px-2 text-[11px] font-semibold text-white transition-all hover:bg-[#2b241d] focus-ring disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Play className="h-3 w-3 fill-white" strokeWidth={2.2} />
+            Run
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              d.onStop?.(d.nodeId);
+            }}
+            disabled={d.status !== 'running'}
+            className="nodrag inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-hairline bg-surface px-2 text-[11px] font-semibold text-ink-soft transition-all hover:border-danger-500/40 hover:text-danger-500 focus-ring disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Square className="h-3 w-3" strokeWidth={2.2} />
+            Stop
+          </button>
         </div>
       </div>
 
