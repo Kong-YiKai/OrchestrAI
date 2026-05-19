@@ -6,6 +6,7 @@ import { useWorkflowStore } from '@/stores/workflowStore';
 import { useOrchestraStore } from '@/stores/orchestraStore';
 import type { ChatMessage } from '@/types/chat';
 import type { WorkflowNode, NodeResult } from '@/types/workflow';
+import { toExecutionMethod } from '@/types/workflow';
 import type { ClarificationQuestion, BuildingLog, HistoryEntry, Plan } from '@/stores/orchestraStore';
 
 /**
@@ -89,7 +90,7 @@ export function useSocket(sessionId: string) {
     socket.on('clarification:update', ({ questions }: { questions: ClarificationQuestion[] }) => {
       orchestra.setClarifications(questions);
       orchestra.setConvState('clarifying');
-      orchestra.setPendingPanelView('clarifications');
+      orchestra.setContextView({ name: 'clarifications' });
     });
 
     socket.on('clarification:plan_ready', ({ plan }: { plan: Plan }) => {
@@ -100,7 +101,7 @@ export function useSocket(sessionId: string) {
     // ── Building / workflow generation ──────────────────────────────────────
     socket.on('building:started', () => {
       orchestra.setConvState('generating');
-      orchestra.setPendingPanelView('building');
+      orchestra.setContextView({ name: 'building' });
     });
 
     socket.on('building:log', (log: BuildingLog) => {
@@ -145,7 +146,7 @@ export function useSocket(sessionId: string) {
     });
 
     socket.on('execution:node_complete', ({ node_id, result, execution_method }: { node_id: string; result: NodeResult; execution_method: string }) => {
-      updateNodeResult(node_id, result, execution_method);
+      updateNodeResult(node_id, result, toExecutionMethod(execution_method));
     });
 
     socket.on('execution:node_error', ({ node_id, error }: { node_id: string; error: string }) => {

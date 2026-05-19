@@ -5,11 +5,24 @@ from datetime import datetime, timezone
 from models.workflow import Workflow, WorkflowNode, NodeStatus, NodeResult, ExecutionMethod
 from socket_manager import sio
 from config import settings
+from services.execution_control import execution_control
+
+
+# Mock-mode timings. Kept small so tests stay fast; UI still feels like something
+# is happening because each node goes through queued → running → several logs →
+# complete. Tunable in one place if the demo feels too snappy or too sluggish.
+MOCK_LOG_DELAY = 0.25       # seconds between log lines for a single node
+MOCK_BETWEEN_NODES = 0.10   # seconds of breathing room between nodes
 
 
 class NodeExecutor:
-    def __init__(self, session_id: str):
+    def __init__(self, session_id: str, mock: bool = False):
         self.session_id = session_id
+        # When mock=True we skip all real API/Playwright/Claude work and just
+        # emit a realistic-looking event sequence. This is what the Run button
+        # on /workflows/[id] uses for demos, so the canvas can be exercised
+        # without external API keys.
+        self.mock = mock
 
     async def _log(self, node_id: str, line: str):
         await sio.emit(
@@ -28,6 +41,13 @@ class NodeExecutor:
             {"node_id": node.node_id, "workflow_id": workflow_id},
             room=self.session_id,
         )
+
+        # Mock branch: emit a staged, deterministic event sequence without
+        # touching any external service. Used by the canvas Run button for
+        # demos and by tests to assert the event contract.
+        if self.mock:
+            await self._execute_node_mock(node)
+            return
 
         result: NodeResult | None = None
         method: ExecutionMethod | None = None
@@ -74,6 +94,78 @@ class NodeExecutor:
                 "result": result.model_dump(),
                 "execution_method": method.value if method else "simulated",
             },
+            room=self.session_id,
+        )
+
+    async def _execute_node_mock(self, node: WorkflowNode):
+        """Emit a realistic queued → running → complete sequence without any
+        real API calls. Stages are tailored to the node's tool_type so demos
+        look plausible, but no secrets or network are required.
+        """
+        tool = node.assigned_tool or node.assigned_ai or "tool"
+        ai = node.assigned_ai or "claude"
+
+        if node.tool_type.value == "api":
+            stages = [
+                f"🔌 Calling {tool} API...",
+                "📥 Received response (200 OK).",
+                "✅ Parsed payload successfully.",
+            ]
+            method = ExecutionMethod.api
+        elif node.tool_type.value == "web_automation":
+            stages = [
+                f"🌐 Launching browser for {tool}...",
+                "🧭 Navigating and locating target element...",
+                "📋 Extracted result from page.",
+            ]
+            method = ExecutionMethod.playwright
+        else:  # llm / code / anything else
+            stages = [
+                f"🤖 {ai} picking up the task...",
+                "🧠 Thinking through the step...",
+                "✅ Draft result ready.",
+            ]
+            method = ExecutionMethod.simulated
+
+        for line in stages:
+            if execution_control.is_node_cancelled(self.session_id, node.node_id):
+                await self._stop_node(node)
+                return
+            await self._log(node.node_id, line)
+            await asyncio.sleep(MOCK_LOG_DELAY)
+
+        title_en = node.title or node.title_zh or "Step"
+        title_zh = node.title_zh or node.title or "步骤"
+        result = NodeResult(
+            raw={"mock": True, "tool": tool, "ai": ai},
+            summary=f"{title_en} completed successfully (mock).",
+            summary_zh=f"{title_zh} 已完成（模拟执行）。",
+        )
+
+        # Persist on the in-memory node so the Workflow we later save reflects
+        # the mock run — mirrors what the real strategies do.
+        node.status = NodeStatus.complete
+        node.result = result
+        node.execution_method = method
+
+        await sio.emit(
+            "execution:node_complete",
+            {
+                "node_id": node.node_id,
+                "result": result.model_dump(),
+                "execution_method": method.value,
+            },
+            room=self.session_id,
+        )
+        await asyncio.sleep(MOCK_BETWEEN_NODES)
+
+    async def _stop_node(self, node: WorkflowNode):
+        execution_control.clear_node_cancel(self.session_id, node.node_id)
+        node.status = NodeStatus.idle
+        node.error = "Stopped by user."
+        await sio.emit(
+            "execution:node_stopped",
+            {"node_id": node.node_id, "reason": "user_requested"},
             room=self.session_id,
         )
 

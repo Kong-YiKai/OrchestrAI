@@ -10,8 +10,11 @@ RUN apt-get update && \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install playwright browsers (chromium only to keep image small)
-RUN playwright install --with-deps chromium
+# Install playwright browsers (chromium only to keep image small).
+# Skipped by default — only Phase 6 (real web_automation node execution) needs
+# the Chromium binary, and pulling it adds ~500MB / ~10 min to the first build.
+# Re-enable when starting Phase 6.
+# RUN playwright install --with-deps chromium
 
 COPY . .
 
