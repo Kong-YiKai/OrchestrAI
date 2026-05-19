@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 from enum import Enum
 
@@ -23,6 +23,11 @@ class ToolType(str, Enum):
     code = "code"
 
 
+class NodeType(str, Enum):
+    phase = "phase"
+    task = "task"
+
+
 class NodeResult(BaseModel):
     raw: Dict[str, Any] = {}
     summary: str = ""
@@ -41,6 +46,10 @@ class WorkflowNode(BaseModel):
     tool_type: ToolType = ToolType.llm
     input_schema: Dict[str, str] = {}
     output_schema: Dict[str, str] = {}
+    node_type: NodeType = NodeType.task
+    parent_node_id: Optional[str] = None
+    depends_on: List[str] = Field(default_factory=list)
+    parallel_group: Optional[str] = None
     status: NodeStatus = NodeStatus.idle
     result: Optional[NodeResult] = None
     error: Optional[str] = None

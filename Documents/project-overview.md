@@ -2,7 +2,7 @@
 
 > **用途**：任何接手本项目的 agent 第一个要读的文件。包含速览、Phase 路线图、技术栈、核心架构决策、Harness 六维度铁律、文件索引。历史细节请查 `phase-history-and-handoff.md`。
 >
-> **最新状态锚点（2026-04-24）**：Phase 4 **Step 1-5 已归档完成**（stub 清理 + 历史 lint 修复 + `/workflows` 列表/详情路由 + Orchestra→Canvas CTA + NodeDetailDrawer 接真数据）。Step 6（节点实时状态 + mock 执行事件）已决定并入 Phase 4.5 D5 一起做，不再单独开工。**下一步 = Phase 4.5（Harness Foundation）**——结构化日志 / 执行追踪 / checkpoint & resume / HITL approval / context compaction。
+> **最新状态锚点（2026-05-19）**：Phase 4 UI 闭环已完成；Phase 4.5 前置补强已落地。画布现在支持整图 mock Run、单节点 Run/Stop、节点内容编辑、DAG 依赖字段（`node_type` / `parent_node_id` / `depends_on` / `parallel_group`）、按依赖绘制 React Flow 边，以及 `Subdivide` 将阶段节点拆成带并行实现分支的子任务。生成 prompt 已从固定少量串联节点改为阶段级规划 + 可并行依赖表达，并要求对超出当前 AI 能力的复杂产品引导到 MVP / 模拟产品 / 分阶段方案。**下一步仍是 Phase 4.5 正式 Harness Foundation**——结构化日志 / 执行追踪 / checkpoint & resume / HITL approval / context compaction，把当前 in-process stop/mock 执行升级为可恢复、可审计的任务运行时。
 
 ---
 
@@ -40,7 +40,8 @@
 | 2.5 | 前置 | Orchestra Context Panel 重构 | ✅ | drill-in 导航 + View union（2026-04-17） |
 | 3 | 前置 | The Orchestra 功能接线 | ✅ | Chat→Clarify→Confirm→生成工作流，3 Agent 架构，端到端打通 |
 | 2.6 | 前置 | 前端清理 + 视觉质感升级 | ✅ | 设计 token v2，12 核心组件升级（2026-04-21） |
-| **4** | **A** | **Workflows 画布功能接线** | 🟡 Step 1-5 ✅ | Stub 清理 ✅、`/workflows` 列表 + `[id]` 详情 ✅、Orchestra → Canvas CTA ✅、NodeDetailDrawer 真数据 ✅；**Step 6 节点实时状态并入 Phase 4.5 D5** |
+| **4** | **A** | **Workflows 画布功能接线** | ✅ | Stub 清理 ✅、`/workflows` 列表 + `[id]` 详情 ✅、Orchestra → Canvas CTA ✅、NodeDetailDrawer 原型双 tab（Config & Permissions / Sub-Agent Chat）✅、canvas Run 按钮 + mock 执行事件全链路 ✅、Clarifications drill-in 重构（agent + plan 卡片 + PlanDetail 编辑/锁定）✅ |
+| **4.5-pre** | **B 前置** | **Canvas 节点控制 + DAG 细分** | ✅ | NodeDetailDrawer 大面板化；节点级 Run/Stop；节点标题/描述/工具/schema/graph 字段编辑；`depends_on` DAG 边；`parallel_group` 并行标记；`Subdivide` 确定性生成阶段子任务 |
 | **4.5** | **B** | **Agent Harness Foundation** | 🔲 **next** | 结构化日志 + 执行追踪 + checkpoint & resume + HITL approval 框架 + context compaction 基础设施 |
 | **5** | **C** | **Universal Web Perception** | 🔲 | Search 层（Tavily + Brave）+ Fetch 两档（HTTP / Playwright）+ 多模态预处理（视频/音频/3D/Office）+ 统一产出结构 |
 | **6** | **C** | **Tool Registry + Node Executor** | 🔲 | 多模型 tool-calling 适配层 + Docker sandbox + 生成/评估分离的验证循环 + Linter/测试作为确定性约束 |
@@ -181,7 +182,13 @@ Server → Client（已有）
   clarification:update / plan_ready
   building:started / log / complete
   workflow:ready
+  workflow:node_appeared / generation_complete
   history:update
+  execution:node_started      { node_id, workflow_id }
+  execution:node_log          { node_id, log_line }
+  execution:node_complete     { node_id, result: NodeResult, execution_method }
+  execution:node_error        { node_id, error }
+  execution:workflow_complete { workflow_id }
 
 Server → Client（Phase 4.5 新增）
   execution:approval_required  { approval_id, action, risk_level, context }
@@ -275,20 +282,21 @@ Server → Client（Phase 4.5 新增）
 | `app/(app)/layout.tsx` | AppSidebar + TopBar 壳 |
 | `app/(app)/orchestra/page.tsx` | 三栏布局（左 Recent / 中 Chat / 右 Context） |
 | `app/(app)/workflows/page.tsx` | Workflows 列表页（Phase 4）：PageHeader + 网格卡片 + Loading/Empty/Error 态 |
-| `app/(app)/workflows/[id]/page.tsx` | Workflows 详情页（Phase 4）：Loading/NotFound/WorkflowCanvas 三态，store 已加载则跳过 REST |
+| `app/(app)/workflows/[id]/page.tsx` | Workflows 详情页（Phase 4）：Loading/NotFound/WorkflowCanvas 三态，store 已加载则跳过 REST；挂载 `useExecutionSocket` 订阅 live 执行事件 |
 | `app/globals.css` | 设计 token v2 |
-| `lib/api.ts` | REST client：`fetchWorkflow` / `listWorkflows` / `runWorkflow` / `updateNodeModel` |
+| `lib/api.ts` | REST client：`fetchWorkflow` / `listWorkflows` / `runWorkflow` / `runNode` / `stopNode` / `updateWorkflowNode` / `subdivideWorkflowNode` |
 | `components/orchestra/ChatThread.tsx` | 流式渲染消息、EmptyState chips、发送按钮 |
 | `components/orchestra/ContextPanel.tsx` | 右栏 View union 导航壳（直接 subscribe `orchestraStore.contextView`） |
-| `components/orchestra/context/*.tsx` | 8 个 drill-in 视图组件；`BuildingProcessList` 含 "打开画布" CTA |
-| `components/workflows/WorkflowCanvas.tsx` | React Flow 画布，`selectedNodeId` 驱动 drawer |
-| `components/workflows/TaskNodeCard.tsx` | 自定义节点 |
-| `components/workflows/NodeDetailDrawer.tsx` | 侧抽屉，接 `nodeId` + workflowStore selector，Details / Result 两 tab |
+| `components/orchestra/context/*.tsx` | 9 个 drill-in 视图组件；`BuildingProcessList` 含 "打开画布" CTA；`PlanDetail` 承载计划查看/编辑/启动 |
+| `components/workflows/WorkflowCanvas.tsx` | React Flow 画布，`selectedNodeId` 驱动 drawer；顶栏整图 Run；节点级 Run/Stop；优先按 `depends_on` 生成 DAG 边，旧数据 fallback 串联 |
+| `components/workflows/TaskNodeCard.tsx` | 自定义节点；显示 phase/task、parallel 标记、模型切换、节点级 Run/Stop |
+| `components/workflows/NodeDetailDrawer.tsx` | 大型节点配置面板，接 `nodeId` + workflowStore selector；支持 Config/Permissions、Sub-Agent Chat 占位、节点编辑、Graph Structure、Subdivide |
 | `components/workflows/Breadcrumbs.tsx` | 面包屑，`href && !last` 时渲染 `<Link>` |
-| `stores/orchestraStore.ts` | Orchestra 唯一事实来源（含 `ContextView` discriminated union、`readyWorkflowId`） |
-| `stores/workflowStore.ts` | Workflows 画布唯一事实来源，含 `loadWorkflow(id)` REST 去水化 |
-| `hooks/useSocket.ts` | Socket.io 事件绑定；`execution:node_complete` 用 `toExecutionMethod()` 收窄 |
-| `types/workflow.ts` | `Workflow` / `WorkflowNode` / `WorkflowSummary` / `NodeStatus` / `ExecutionMethod` + `toExecutionMethod()` 类型卫士 |
+| `stores/orchestraStore.ts` | Orchestra 唯一事实来源（含 `ContextView` discriminated union — `overview`/`clarifications`/`clarification-agent`/`plan-detail`/`building`/`building-agent`/`reports`/`history`、`readyWorkflowId`、`updatePlanNode` 用于 PlanDetail 编辑） |
+| `stores/workflowStore.ts` | Workflows 画布唯一事实来源，含 `loadWorkflow(id)`、`updateNode`、`addNodes`、执行状态与日志 |
+| `hooks/useSocket.ts` | Orchestra 页全量 Socket.io 事件绑定；`execution:node_complete` 用 `toExecutionMethod()` 收窄 |
+| `hooks/useExecutionSocket.ts` | detail 页专用 scoped hook，只订阅 `execution:*` 五事件，共享 socket singleton + session room |
+| `types/workflow.ts` | `Workflow` / `WorkflowNode` / `WorkflowSummary` / `NodeStatus` / `NodeType` / `ExecutionMethod` + `toExecutionMethod()` 类型卫士 |
 
 ### 5.3 后端热文件（路径相对 `backend/`）
 
@@ -304,9 +312,15 @@ Server → Client（Phase 4.5 新增）
 | `services/workflow_db.py` | `WorkflowRecord` CRUD |
 | `models/chat.py` | Pydantic 模型 |
 | `models/db.py` | SQLAlchemy ORM |
-| `routers/workflow.py` | `GET /api/workflow/{id}`、`PATCH /api/workflow/{id}/node/{node_id}` |
+| `routers/workflow.py` | `GET /api/workflow/{id}`、`PATCH /api/workflow/{id}/node/{node_id}`、`POST /api/workflow/{id}/node/{node_id}/subdivide` |
 | `routers/workflows.py` | `GET /api/workflows` → `List[WorkflowSummary]`（Phase 4 新增，按 `created_at` 倒序） |
+| `routers/execution.py` | `POST /api/execution/run/{workflow_id}`、`POST /api/execution/node/{node_id}/run|stop|retry`；`RunRequest.mock` 切换真/假执行路径 |
+| `services/executor.py` | `NodeExecutor` 三档策略（API / Playwright / Claude simulated）+ mock 路径；支持 in-process stop 检查 |
+| `services/execution_control.py` | Phase 4.5 前置：节点级 stop 请求的内存 registry，后续由正式 task runtime 替换 |
+| `services/workflow_refinement.py` | Phase 4.5 前置：确定性 `Subdivide`，生成带并行分支的子任务 DAG |
 | `tests/test_workflows_router.py` | 2 个 async test：空列表 + 多 workflow 倒序（Phase 4 新增） |
+| `tests/test_executor_mock.py` | mock executor 事件序列 + tool_type→execution_method 分支 |
+| `tests/test_node_operations.py` | 节点编辑、单节点运行持久化、stop registry、DAG 字段 roundtrip、Subdivide 行为 |
 
 #### 即将新增（Phase 4.5+）
 

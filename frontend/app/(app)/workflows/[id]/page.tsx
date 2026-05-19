@@ -2,10 +2,11 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Loader2, SearchX } from 'lucide-react';
 import { WorkflowCanvas } from '@/components/workflows/WorkflowCanvas';
 import { useWorkflowStore } from '@/stores/workflowStore';
+import { useExecutionSocket } from '@/hooks/useExecutionSocket';
 
 export default function WorkflowDetailPage() {
   const params = useParams<{ id: string }>();
@@ -14,6 +15,16 @@ export default function WorkflowDetailPage() {
   const workflowId = useWorkflowStore((s) => s.workflowId);
   const workflow = useWorkflowStore((s) => s.workflow);
   const loadWorkflow = useWorkflowStore((s) => s.loadWorkflow);
+
+  // Reuse the session id minted on the Orchestra page so the user stays in
+  // the same Socket.io room they started in. Fall back to "default" if the
+  // user deep-linked to /workflows/[id] without ever opening Orchestra.
+  const sessionId = useMemo(() => {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem('orchestrai_session') || 'default';
+  }, []);
+
+  useExecutionSocket(sessionId);
 
   // Tracks which id was confirmed missing by REST so we can render the
   // not-found state without holding duplicate ready/loading state in React

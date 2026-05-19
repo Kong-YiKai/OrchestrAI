@@ -34,6 +34,10 @@ The workflow JSON MUST follow this exact schema:
       "assigned_ai": "<one of: claude, gpt, gemini, grok>",
       "assigned_tool": "<specific tool, API, or service name>",
       "tool_type": "<one of: api, web_automation, llm, code>",
+      "node_type": "<one of: phase, task>",
+      "parent_node_id": null,
+      "depends_on": ["<node_id of prerequisite node>"],
+      "parallel_group": "<optional group id for parallel nodes, or null>",
       "input_schema": {"<key>": "<type>"},
       "output_schema": {"<key>": "<type>"},
       "status": "idle",
@@ -45,7 +49,9 @@ The workflow JSON MUST follow this exact schema:
 }
 
 Rules:
-- Generate 3-5 nodes. Each node should be a meaningful, executable step.
+- Generate 4-8 stage-level nodes by default. For complex products, create phases that can later be subdivided on the workflow canvas.
+- If the request is beyond current AI capability end-to-end, guide the user toward a realistic MVP, simulation, or phased development workflow instead of claiming full automation is possible.
+- Use depends_on and parallel_group instead of forcing every node into a single linear chain.
 - Choose the most appropriate AI for each step (vary them for visual interest).
 - assigned_tool should be a real tool/API/service name (e.g. "OpenWeatherMap API", "GPT-4o Vision", "Playwright Browser", "Python script").
 - tool_type "api" = has a direct REST API; "llm" = AI model call; "web_automation" = needs browser; "code" = runs code.

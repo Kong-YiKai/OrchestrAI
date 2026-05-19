@@ -5,6 +5,7 @@ import { useOrchestraStore, type ContextView } from '@/stores/orchestraStore';
 import { OverviewList } from './context/OverviewList';
 import { ClarificationsList } from './context/ClarificationsList';
 import { ClarificationDetail } from './context/ClarificationDetail';
+import { PlanDetail } from './context/PlanDetail';
 import { BuildingProcessList } from './context/BuildingProcessList';
 import { BuildingAgentDetail } from './context/BuildingAgentDetail';
 import { AgentReports } from './context/AgentReports';
@@ -75,6 +76,8 @@ function renderView(view: ContextView, nav: ContextPanelNav) {
       return <ClarificationsList nav={nav} />;
     case 'clarification-agent':
       return <ClarificationDetail nav={nav} agentId={view.agentId} />;
+    case 'plan-detail':
+      return <PlanDetail nav={nav} />;
     case 'building':
       return <BuildingProcessList nav={nav} />;
     case 'building-agent':

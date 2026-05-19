@@ -2,7 +2,11 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from services.workflow_designer import _parse_workflow, _build_context
+from services.workflow_designer import (
+    _build_context,
+    _build_fallback_workflow,
+    _parse_workflow,
+)
 from services.conversation_manager import ConversationState
 
 VALID_JSON = """<workflow_json>{
@@ -43,6 +47,55 @@ def test_parse_workflow_node_fields():
     assert node.order == 1
     assert node.assigned_ai == "claude"
     assert node.tool_type.value == "code"
+
+
+def test_parse_workflow_node_dag_fields():
+    raw = """<workflow_json>{
+      "workflow_id": "wf_dag",
+      "title": "DAG",
+      "title_zh": "DAG",
+      "description": "d",
+      "nodes": [
+        {
+          "node_id": "phase_1",
+          "order": 1,
+          "title": "Architecture",
+          "title_zh": "架构",
+          "description": "d",
+          "description_zh": "d",
+          "assigned_ai": "claude",
+          "assigned_tool": "Claude",
+          "tool_type": "llm",
+          "node_type": "phase",
+          "depends_on": [],
+          "input_schema": {},
+          "output_schema": {}
+        },
+        {
+          "node_id": "task_1",
+          "order": 2,
+          "title": "Frontend",
+          "title_zh": "前端",
+          "description": "d",
+          "description_zh": "d",
+          "assigned_ai": "gpt",
+          "assigned_tool": "React",
+          "tool_type": "code",
+          "node_type": "task",
+          "parent_node_id": "phase_1",
+          "depends_on": ["phase_1"],
+          "parallel_group": "build",
+          "input_schema": {},
+          "output_schema": {}
+        }
+      ]
+    }</workflow_json>"""
+    wf = _parse_workflow(raw)
+    assert wf is not None
+    assert wf.nodes[0].node_type == "phase"
+    assert wf.nodes[1].parent_node_id == "phase_1"
+    assert wf.nodes[1].depends_on == ["phase_1"]
+    assert wf.nodes[1].parallel_group == "build"
 
 
 def test_parse_workflow_missing_tags_returns_none():
@@ -129,3 +182,62 @@ def test_build_context_includes_plan_summary():
     state = ConversationState(original_request="Build X", plan_summary="3 nodes: load, process, output")
     ctx = _build_context(state)
     assert "3 nodes" in ctx
+
+
+def test_build_fallback_workflow_from_plan_preview():
+    state = ConversationState(
+        original_request="帮我创建一个12306买票系统的模拟产品开发工作流",
+        plan_summary="阶段级开发方案",
+    )
+    state.plan_nodes_preview = [
+        {
+            "order": 1,
+            "title": "需求分析",
+            "description": "梳理范围",
+            "recommended_ai": "claude",
+            "node_type": "phase",
+            "depends_on": [],
+        },
+        {
+            "order": 2,
+            "title": "前端开发",
+            "description": "实现界面",
+            "recommended_ai": "gpt",
+            "node_type": "phase",
+            "depends_on": [1],
+        },
+        {
+            "order": 3,
+            "title": "后端开发",
+            "description": "实现 API",
+            "recommended_ai": "gpt",
+            "node_type": "phase",
+            "depends_on": [1],
+        },
+        {
+            "order": 4,
+            "title": "测试发布",
+            "description": "验收交付",
+            "recommended_ai": "claude",
+            "node_type": "phase",
+            "depends_on": [2, 3],
+        },
+    ]
+
+    wf = _build_fallback_workflow(state)
+
+    assert wf.title_zh
+    assert len(wf.nodes) == 4
+    assert wf.nodes[0].node_type == "phase"
+    assert wf.nodes[1].depends_on == [wf.nodes[0].node_id]
+    assert wf.nodes[2].depends_on == [wf.nodes[0].node_id]
+    assert wf.nodes[3].depends_on == [wf.nodes[1].node_id, wf.nodes[2].node_id]
+
+
+def test_build_fallback_workflow_without_plan_preview_has_safe_default():
+    state = ConversationState(original_request="Build a demo product")
+
+    wf = _build_fallback_workflow(state)
+
+    assert len(wf.nodes) >= 6
+    assert wf.nodes[0].title_zh == "需求分析与产品定义"

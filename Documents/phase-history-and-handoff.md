@@ -6,6 +6,135 @@
 >
 ---
 
+## Phase 4.5 前置补强 — Canvas 节点控制 + DAG 细分（2026-05-19）
+
+**状态**：✅ 完成
+**定位**：不是完整 Phase 4.5 Harness Foundation，而是为正式 Harness 铺路的画布与节点操作层补强。
+
+### 交付
+
+| 范围 | 结果 |
+|------|------|
+| 节点详情面板 | `NodeDetailDrawer` 从窄侧栏升级为更接近原型的大型配置面板，保留 Configuration & Permissions / Node Sub-Agent Chat 双 tab |
+| 节点级执行 | 节点卡片和详情面板支持 Run / Stop；`runNode` 默认 mock，不消耗外部 API key |
+| 节点编辑 | PATCH 支持标题、描述、模型、工具、tool_type、input/output schema、graph 字段 |
+| DAG 数据模型 | `WorkflowNode` 新增 `node_type`、`parent_node_id`、`depends_on`、`parallel_group` |
+| 画布依赖 | React Flow 优先按 `depends_on` 画边；旧工作流无依赖字段时 fallback 到 order 串联 |
+| 节点细分 | `Subdivide` 将阶段节点标记为 `phase`，并确定性生成 4 个子任务：规划 → 两条并行实现 → 验证 |
+| 生成策略 | Clarifier / WorkflowDesigner / legacy orchestrator prompt 改为 4-8 个阶段级节点，允许并行依赖，并要求对超出现实 AI 能力的复杂产品引导到 MVP / 模拟产品 / 分阶段方案 |
+
+### 新增 / 修改文件
+
+| 文件 | 说明 |
+|------|------|
+| `backend/models/workflow.py` | 新增 `NodeType` 和 DAG 字段 |
+| `backend/services/execution_control.py` | in-process node stop registry（正式 Phase 4.5 会替换为 task runtime） |
+| `backend/services/workflow_refinement.py` | 确定性节点细分逻辑 |
+| `backend/routers/workflow.py` | 节点 PATCH 扩展；新增 `/subdivide` |
+| `backend/routers/execution.py` | 新增单节点 run/stop；单节点运行后持久化 node result |
+| `frontend/components/workflows/WorkflowCanvas.tsx` | DAG 边、分层布局、节点级 run/stop |
+| `frontend/components/workflows/TaskNodeCard.tsx` | phase/task、parallel 标记和节点按钮 |
+| `frontend/components/workflows/NodeDetailDrawer.tsx` | 大面板、编辑态、Graph Structure、Subdivide |
+| `frontend/lib/api.ts` | `runNode` / `stopNode` / `updateWorkflowNode` / `subdivideWorkflowNode` |
+| `frontend/stores/workflowStore.ts` | `updateNode` / `addNodes` |
+| `backend/tests/test_node_operations.py` | 节点操作和 DAG/细分测试 |
+
+### 验证
+
+- `.\backend\venv\Scripts\python.exe -m pytest backend/tests -q` → 42 passed
+- `cd frontend && npx tsc --noEmit` → exit 0
+- `cd frontend && npm run lint -- --quiet` → exit 0
+- `cd frontend && npm run build` → exit 0
+
+### 保留限制
+
+- Stop 是协作式、内存态的 pre-work，只能可靠停止 mock/demo 或主动检查 cancellation 的执行流程；正式 Phase 4.5 仍需 task registry、checkpoint、resume、audit。
+- Subdivide 当前是确定性 scaffold，不调用 LLM；后续可升级为“根据父节点上下文生成子图”。
+- 并行依赖目前是画布和数据层表达，真实并行调度要等 Phase 6 Node Executor / sandbox。
+
+---
+
+## Phase 4 — UX 回滚修正（2026-04-27）
+
+**状态**：✅ 完成
+**触发**：用户对比原型截图发现 Step 5 偷偷把 NodeDetailDrawer 改成 Details/Result 两 tab，和原型 (Configuration & Permissions / Node Sub-Agent Chat) 不一致；同时要求把 Clarifications 改成 drill-in 卡片列表，"开始生成工作流"必须有点进去的步骤。
+
+### 改动一：NodeDetailDrawer 恢复原型双 tab
+
+| 文件 | 动作 |
+|------|------|
+| `frontend/components/workflows/NodeDetailDrawer.tsx` | **重写**：双 tab = Configuration & Permissions + Node Sub-Agent Chat |
+
+**Configuration & Permissions tab**：
+- Latest Run / Error / Running 状态横幅（保留 Step 6 的 mock 执行结果展示）
+- Description（真实数据）
+- Tool Assignment（真实数据）
+- **Installed Plugins**（mock：File System / Web Search / Linter，全部 Enabled）— 注释 "Phase 6 真接"
+- **Active Skills**（mock：Bash Execution / Code Analysis）
+- **Required Permissions** → "Execution Authority" 下拉（mock 三选项 Default/Auto/Manual）+ 描述文字
+- Input / Output Schema（真实数据）
+
+**Node Sub-Agent Chat tab**：
+- Main Thread 标签 + "Phase 10 启用" 锁标
+- AI 问候语 bubble："I am the dedicated agent for this workflow step..."
+- Files / Create Parallel Branches chip
+- 空态："Sub-agent chat coming online" + 描述
+- 底部 disabled composer
+
+**关键约束**：未扩展 `WorkflowNode` 数据模型 — 全部 mock 数据，UI 先到位。
+
+### 改动二：Clarifications drill-in 重构
+
+| 文件 | 动作 |
+|------|------|
+| `frontend/stores/orchestraStore.ts` | `ContextView` 联合加 `'plan-detail'`；新增 `updatePlanNode(order, patch)` action |
+| `frontend/components/orchestra/ContextPanel.tsx` | router 加 `case 'plan-detail'` |
+| `frontend/components/orchestra/context/ClarificationsList.tsx` | **重写**：纯卡片列表（agent + 计划），不再内嵌 plan 视图 |
+| `frontend/components/orchestra/context/PlanDetail.tsx` | **新增**：plan 钻入页（编辑切换 + 启动按钮 + 锁定态） |
+
+**新导航图**（Clarifications 子树）：
+```
+clarifications
+├── clarification-agent (per agent)  ← 既有
+└── plan-detail                       ← 新增
+```
+
+**ClarificationsList 卡片规则**：
+- agent 卡（Claude-4.6）：当 `clarificationQuestions.length > 0` 时显示，drill-in 看决策
+- "开始生成工作流" 卡：当 `plan && convState ∈ {awaiting_confirm, generating, complete}` 时显示，drill-in 进 plan-detail
+  - `awaiting_confirm` → 紫色 "待确认" badge
+  - `generating` / `complete` → 绿色 "已锁定" badge
+
+**PlanDetail 行为**：
+- 顶部 plan 摘要卡（含锁标）
+- 「编辑计划 ⇄ 结束编辑」toggle（仅 `convState === 'awaiting_confirm'` 可见）
+- 编辑模式下 plan node 的 title/description 变 input/textarea，改动经 `updatePlanNode` 写回 store
+- 「开始生成工作流」按钮：emit `chat_confirm_start`，乐观 `setConvState('generating')`，按钮变绿色锁定态
+- 锁定后编辑按钮消失，所有输入回到只读
+
+### 验证
+
+- `npx tsc --noEmit` → EXIT 0
+- `npx eslint .` → 0 errors（2 个既有 warning：HistoryTimeline 未用 import + useSocket exhaustive-deps，与本次改动无关）
+- `pytest -q` → 35 passed
+
+### 复盘 — Step 5 回归原因
+
+Step 5 我把 NodeDetailDrawer 重写成 Details/Result 两 tab，是因为：
+- `WorkflowNode` 当前不存 plugins/skills/permissions 字段
+- Sub-Agent Chat 需要后端独立的 sub-agent runtime（Phase 10）
+
+但合理化（"数据模型还没准备好"）不等于授权改 UI 契约。**铁律**：原型截图里出现的 tab、按钮、chip 都是合同，未确认前不能删；缺数据就用 mock + "Phase X 启用"占位，**视觉契约先立起来**。
+
+### 超出范围（留给后续 Phase）
+
+- 真实 plugin / skill 注册表 → Phase 6
+- Required Permissions 后端联动（写 SQL + emit chat_confirm_start 携带 authority）→ Phase 4.5
+- Node Sub-Agent Chat 实时对话 + parallel branches → Phase 10
+- Plan edit 持久化到后端（当前只在 store 改）→ Phase 5.5（与 plan 编辑 API 一起做）
+
+---
+
 ## Phase 2.5 — Orchestra Context Panel 重构（2026-04-17）
 
 **状态**：✅ 完成
@@ -281,19 +410,19 @@ rm -rf components/workflow components/chat stores/chatStore.ts
 
 ## Phase 4 — Workflows 画布功能接线（2026-04-24）
 
-**状态**：🟡 部分完成（Step 1-5 ✅，Step 6 P3 节点实时状态延后到 Phase 4.5）
-**范围**：关闭 Tier A UI 闭环——stub 物理清理、两条历史 lint、Orchestra → Canvas 跳转、`/workflows` 列表 + 详情路由、NodeDetailDrawer 接真数据。
+**状态**：✅ 完成（Step 1-6 全部关闭）
+**范围**：关闭 Tier A UI 闭环——stub 物理清理、两条历史 lint、Orchestra → Canvas 跳转、`/workflows` 列表 + 详情路由、NodeDetailDrawer 接真数据、canvas Run 按钮 + mock 执行事件管线。
 
 ### 本 Phase 对 Harness 六维度的贡献
 
 | 维度 | 贡献 |
 |------|------|
 | ① 上下文 | — |
-| ② 工具编排 | — |
-| ③ 验证 | — |
-| ④ 状态 | `workflowStore.loadWorkflow(id)`：支持 REST 去水化；"已有就跳过" 优化让 Orchestra → Canvas 不双拉数据 |
-| ⑤ 可观测 | NodeDetailDrawer 把每节点的 `status / error / result.summary / result.raw / execution_method` 全量暴露给用户，便于排查节点失败原因 |
-| ⑥ HITL | CTA "打开画布" 明确由用户触发跳转，不自动 redirect（避免对用户造成 "被带走" 的意外） |
+| ② 工具编排 | `NodeExecutor` 新增 mock 路径：按 `tool_type` 分叉 staged 日志（api / web_automation / llm）——为 Phase 6 真执行器预留一致的事件契约 |
+| ③ 验证 | 新增 `tests/test_executor_mock.py`：spy `sio.emit` 断言完整 `execution:node_started → node_log* → node_complete` 序列、顺序、room 路由、按 tool_type 的 execution_method 映射 |
+| ④ 状态 | `workflowStore.loadWorkflow(id)`：支持 REST 去水化；"已有就跳过" 优化让 Orchestra → Canvas 不双拉数据；Run 按钮点击时先把全部节点 `status` 回到 `idle` 再发起 run，保证 re-run 有可视动画 |
+| ⑤ 可观测 | NodeDetailDrawer 把每节点的 `status / error / result.summary / result.raw / execution_method` 全量暴露给用户；mock 执行输出 `{raw.mock: true, tool, ai}` 让用户看得出"这是演示结果" |
+| ⑥ HITL | CTA "打开画布" 明确由用户触发跳转，不自动 redirect；Run 按钮默认 `mock=true` 防止演示中意外打外部 API；按钮 `disabled` 在 `isExecuting` 或无 `workflowId` 时封死 |
 
 ### 设计决策
 
@@ -303,6 +432,9 @@ rm -rf components/workflow components/chat stores/chatStore.ts
 - **ContextPanel view state 彻底提升到 store**：原 handoff 建议"在 setPendingPanelView setter 里直接更新"，实际采用更彻底的重构——把 `ContextView` 作为 discriminated union 存到 `orchestraStore.contextView`，ContextPanel 直接消费，消除 `useEffect + setState` 反模式
 - **zustand `(set, get)` pattern**：`workflowStore.loadWorkflow` 避免自引用 `useWorkflowStore.getState()`（会触发 TS 循环推导把整个 store 打成 `any`），改用 zustand 的 `get()` + 显式返回类型标注
 - **ESLint `react-hooks/set-state-in-effect`**：详情页 `workflows/[id]/page.tsx` 的 `ready/loading` 从 store 派生，只保留 `notFoundId` 一个 state 且仅在 `.then()` 异步 callback 里 set
+- **Execution socket scope**：Orchestra 页的 `useSocket` 订阅全量事件，直接复用会把 chat/clarification handler 也带到 detail 页。新建 `useExecutionSocket(sessionId)` 只绑 `execution:*`，与全量 hook 共享 `lib/socket.ts` 的 singleton + 同一 `session_id` room，detail 页深链也能收到 live 事件
+- **mock 默认开**：`runWorkflow(workflowId, sessionId, opts?)` 的 `mock` 默认为 `true`——Run 按钮本质是 demo 触发器，真实 API/Playwright/Claude 还要 key；真跑时调用方显式 `{mock: false}` 即可开出去
+- **mock 状态写回 in-memory node**：`_execute_node_mock` 结尾更新 `node.status / result / execution_method`（虽然不 `save_workflow`）——让 canvas re-render 时与事件流收敛到同一结果；真 API 路径同步做，契约一致
 
 ### 新增 / 修改文件
 
@@ -321,7 +453,10 @@ rm -rf components/workflow components/chat stores/chatStore.ts
 | `components/orchestra/context/BuildingProcessList.tsx` | 新增"打开画布 · Open Canvas" CTA（`isBuildingComplete && readyWorkflowId` 时出现），点击 `router.push(/workflows/${readyWorkflowId})` |
 | `app/(app)/orchestra/page.tsx` | 清理占位 useEffect（注释里提到 `Phase 4 will navigate to /workflows?wf=...`，已被 CTA 取代） |
 | `components/workflows/NodeDetailDrawer.tsx` | **重写**：接口从 `NodeDetail {id,title,modelLabel}` 改 `nodeId: string \| null`；内部 subscribe live node；两个 tab —— Details（描述 zh+en / Tool assignment / I/O schemas）、Result（按 status 分支：error/running/idle/complete + summary + execution_method + raw JSON）；header 加状态 chip |
-| `components/workflows/WorkflowCanvas.tsx` | 适配 drawer 新接口：`selected: NodeDetail` → `selectedNodeId: string`；crumb 从 store 查当前 node 派生；删 `MODEL_LABEL` |
+| `components/workflows/WorkflowCanvas.tsx` | 适配 drawer 新接口：`selected: NodeDetail` → `selectedNodeId: string`；crumb 从 store 查当前 node 派生；删 `MODEL_LABEL`；**顶栏 Run 按钮**（disabled 状态联动 `isExecuting`，点击先把所有节点回 `idle` 再 POST `/execution/run`）；原 "Import Link" 删除 |
+| `hooks/useExecutionSocket.ts` | **新建**：detail 页专用 scoped socket hook，只订阅 `execution:*` 五个事件；复用 `lib/socket.ts` singleton + 同 `session_id` room |
+| `app/(app)/workflows/[id]/page.tsx` | 新增：`useExecutionSocket(sessionId)` 订阅，`sessionId` 从 `localStorage.orchestrai_session` 读取（fallback `default`） |
+| `lib/api.ts` | `runWorkflow(workflowId, sessionId, opts?)` 签名扩展，`opts.mock` 默认 `true` |
 
 **实际未改动**（探索后确认已符合要求）：
 - `components/workflows/Breadcrumbs.tsx` 早已在 `href && !isLast` 时渲染 `<Link>`，handoff 列的 P4 是 no-op
@@ -334,6 +469,9 @@ rm -rf components/workflow components/chat stores/chatStore.ts
 | `routers/workflows.py` | **新建**：`GET /api/workflows` → `List[WorkflowSummary]`，调 `workflow_db.load_all_workflows()`，按 `created_at` 倒序 |
 | `main.py` | 注册新 router：`app.include_router(workflows.router, prefix="/api")` |
 | `tests/test_workflows_router.py` | **新建**：2 个 async test（空列表 + 多 workflow 倒序）；沿用 monkeypatch in-memory sqlite 的 pattern |
+| `services/executor.py` | `NodeExecutor.__init__` 加 `mock: bool = False`；新增 `_execute_node_mock()` 按 `tool_type` 分叉发 staged 日志 + 伪造 `NodeResult{raw.mock=true}` + 把 `node.status/result/execution_method` 写回内存；顶层常量 `MOCK_LOG_DELAY=0.25` / `MOCK_BETWEEN_NODES=0.10` 调节演示节奏 |
+| `routers/execution.py` | `RunRequest` 加 `mock: bool = False`；`POST /execution/run/{id}` 与 `/node/{id}/retry` 都透传到 executor；响应加 `mock` 回显 |
+| `tests/test_executor_mock.py` | **新建**：2 个 test——完整事件序列 + tool_type=web_automation → playwright 分支；通过 monkeypatch `executor_mod.sio` 为 spy 对象 + 零出延迟常量实现毫秒级断言 |
 
 ### 技术难点与应对
 
@@ -350,16 +488,18 @@ rm -rf components/workflow components/chat stores/chatStore.ts
 |------|------|
 | `cd frontend && npx tsc --noEmit` | ✅ exit 0 |
 | `cd frontend && npx eslint . --quiet` | ✅ exit 0 |
-| `cd backend && pytest -q` | ✅ **33 passed**（其中 2 个是本 Phase 新增：`test_list_workflows_empty` / `test_list_workflows_returns_summaries_newest_first`） |
+| `cd backend && pytest -q` | ✅ **35 passed**（Phase 4 新增 4 个：`test_list_workflows_empty` / `test_list_workflows_returns_summaries_newest_first` / `test_mock_executor_emits_expected_sequence` / `test_mock_executor_single_node_tool_type_branches`） |
 
 ### 本 Phase 延后到下一 Phase 的项
 
-- **Step 6 / P3 节点实时状态 + mock 执行事件**：`workflowStore.updateNodeStatus` 已存在但没人发 socket 事件。真执行事件要等 Phase 6 的 Node Executor；若真要 mock，事件半径小，建议与 **Phase 4.5** 的结构化 tracing 一并做（都是"执行状态如何可观测"的一体化设计）
+- **真实执行**：mock 路径只覆盖事件契约与 UI 状态，真跑 API / Playwright / Claude 的逻辑还在 `NodeExecutor` 里但未经端到端验证。等 Phase 6 Node Executor 加 Docker sandbox + Tool Registry 再统一接线
+- **结构化 tracing**：`_log()` 现在仍是字符串行，Phase 4.5 B1 会把 executor 日志迁到 `structlog` + span_id 关联
 
 ### 兼容性备注
 
 - `readyWorkflowId` 的**清理时机**未显式处理——用户在同一 session 里完成工作流后若直接再开始新对话，`isBuildingComplete` / `readyWorkflowId` 仍为 true 直到 Clarifier 启动下一轮。CTA 显示条件是 `isBuildingComplete && readyWorkflowId`，在新一轮 `building:started` 触发前有极短的"陈旧状态"窗口期。未造成功能缺陷但是设计债，建议在 Phase 4.5 的 session checkpoint 工作里一并解决
 - 所有改动对 Phase 3 端到端流程 **backward compatible**：老的 `chat_send → clarification:update → workflow:ready` 链路行为不变，只是右栏 view 切换机制从 `pendingPanelView` 迁到 `contextView`
+- Run 按钮默认 `mock=true` —— 如果之后要开一个 "Real Run" 入口，需要在 UI 上显式区分（避免误触发真实 API 消耗）。当前 `runWorkflow(id, sid, {mock:false})` 已经可用
 
 ---
 
@@ -408,16 +548,9 @@ rm -rf components/workflow components/chat stores/chatStore.ts
 
 > **每个 Phase 开工前的仪式**：在 `phase-<N>-plan.md` 新建文件（或在本文件追加章节），写一段**"本 Phase 对 Harness 六维度各贡献什么"**。这是宪法级约束，不可跳过。
 
-### Tier A — Phase 4 收尾（仅剩 Step 6，可与 Phase 4.5 合并）
+### Tier A — Phase 4 ✅ 已于 2026-04-24 完整收尾
 
-估时：0.5 天。P0-P2 + P4-P5 已在 2026-04-24 归档完成，见上方「Phase 4」章节。**仅剩 P3（节点实时状态 + mock 执行事件）**——因为真正的执行事件来自 Phase 6 的 Node Executor，且 Phase 4.5 会统一做 tracing 体系，**建议延后到 Phase 4.5 一起做**，不单独开工。
-
-#### P3（延后） — 节点实时状态
-
-- `workflowStore.updateNodeStatus(nodeId, status)` 已存在，socket 层的 `execution:node_started / node_complete / node_error` listener 也在 `useSocket.ts` 里（见 Phase 3 代码）
-- 缺的是：**服务端**尚未发这些事件。要么写一个 mock 触发器（Phase 4 tactical），要么直接等 Phase 6 的 Node Executor（战略正确做法）
-- `TaskNodeCard` 的 `status` 字段已支持 `queued / running / complete`，无需改 UI
-- **决策**：并入 Phase 4.5 D5 "接通 building:log + execution:trace" 一起处理
+Step 1-6 全部归档完成，见上方「Phase 4」章节。Tier A 无遗留项。
 
 ---
 

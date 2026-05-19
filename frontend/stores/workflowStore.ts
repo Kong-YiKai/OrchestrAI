@@ -20,7 +20,9 @@ interface WorkflowStore {
   setWorkflow: (w: Workflow) => void;
   loadWorkflow: (id: string) => Promise<Workflow | null>;
   addNode: (node: WorkflowNode) => void;
+  addNodes: (nodes: WorkflowNode[]) => void;
   updateNodeStatus: (nodeId: string, status: NodeStatus) => void;
+  updateNode: (nodeId: string, patch: Partial<WorkflowNode>) => void;
   updateNodeResult: (nodeId: string, result: NodeResult, method: ExecutionMethod) => void;
   updateNodeError: (nodeId: string, error: string) => void;
   appendNodeLog: (nodeId: string, line: string) => void;
@@ -98,6 +100,36 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       };
     }),
 
+  addNodes: (nodes) =>
+    set((state) => {
+      if (nodes.length === 0) return {};
+      const newNodeIds = [...state.newNodeIds, ...nodes.map((node) => node.node_id)];
+      if (!state.workflow) {
+        return {
+          workflow: {
+            workflow_id: '',
+            title: '',
+            title_zh: '',
+            description: '',
+            nodes,
+            created_at: '',
+          },
+          newNodeIds,
+        };
+      }
+      const existing = new Set(state.workflow.nodes.map((node) => node.node_id));
+      return {
+        workflow: {
+          ...state.workflow,
+          nodes: [
+            ...state.workflow.nodes,
+            ...nodes.filter((node) => !existing.has(node.node_id)),
+          ],
+        },
+        newNodeIds,
+      };
+    }),
+
   updateNodeStatus: (nodeId, status) =>
     set((state) => {
       if (!state.workflow) return {};
@@ -106,6 +138,19 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
           ...state.workflow,
           nodes: state.workflow.nodes.map((n) =>
             n.node_id === nodeId ? { ...n, status } : n
+          ),
+        },
+      };
+    }),
+
+  updateNode: (nodeId, patch) =>
+    set((state) => {
+      if (!state.workflow) return {};
+      return {
+        workflow: {
+          ...state.workflow,
+          nodes: state.workflow.nodes.map((n) =>
+            n.node_id === nodeId ? { ...n, ...patch } : n
           ),
         },
       };
