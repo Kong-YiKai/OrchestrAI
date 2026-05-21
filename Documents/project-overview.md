@@ -4,7 +4,7 @@
 >
 > **建议阅读顺序**：§0 速览 → §1 Phase 路线图 → §2 技术栈 → §3 路由结构 → §4 核心架构决策 → §5 **Project Structure**（重点）→ §6 Harness Engineering 六维度铁律 → §7 开发与验证。
 >
-> **最新状态锚点（2026-05-19）**：Phase 4.5 前置补强已完成。画布支持整图 mock Run、单节点 Run/Stop、节点内容编辑、DAG 依赖字段（`node_type` / `parent_node_id` / `depends_on` / `parallel_group`）、按依赖绘制 React Flow 边、`Subdivide` 把阶段节点拆为带并行实现分支的子任务。生成 prompt 改为阶段级规划 + 并行依赖表达。**下一步是 Phase 4.5 正式 Harness Foundation**：结构化日志、执行追踪、checkpoint & resume、HITL approval gate、context compaction。
+> **最新状态锚点（2026-05-21）**：Phase 4.5 前置补强已完成，GitHub Actions CI 已接入。画布支持整图 mock Run、单节点 Run/Stop、节点内容编辑、DAG 依赖字段（`node_type` / `parent_node_id` / `depends_on` / `parallel_group`）、按依赖绘制 React Flow 边、`Subdivide` 把阶段节点拆为带并行实现分支的子任务。生成 prompt 改为阶段级规划 + 并行依赖表达。**下一步仍是 Phase 4.5 正式 Harness Foundation**：结构化日志、执行追踪、checkpoint & resume、HITL approval gate、context compaction。2026-05-21 起，路线图新增 **Tier F 平台成熟化**：生产级数据模型、CI/CD 发布治理、LLMOps/MLOps、云原生部署、微服务边界提取。
 
 ---
 
@@ -27,7 +27,7 @@
 
 ## 1. Phase 路线图
 
-### 1.1 设计哲学：5 层 Tier
+### 1.1 设计哲学：6 层 Tier
 
 | Tier | 名称 | 定位 |
 |------|------|------|
@@ -36,6 +36,7 @@
 | C | 感知与工具 | 让 agent 有"眼睛"（万能 web 感知）和"手"（统一工具 registry + 执行引擎） |
 | D | Computer Use Agent | 让 agent 有"身体"——操控真实 Windows 桌面 |
 | E | 体验打磨 | Sub-chat、多 AI 扇出、双语、Marketplace 真实化 |
+| F | 平台成熟化 | 从早期平台升级为可运维、可审计、可扩展的成熟软件：生产数据模型、CI/CD、LLMOps/MLOps、云原生、微服务 |
 
 ### 1.2 Phase 状态总览
 
@@ -54,8 +55,12 @@
 | **6** | **C** | **Tool Registry + Node Executor** | 🔲 | 多模型 tool-calling 适配层 + Docker sandbox + 生成/评估分离的验证循环 + Linter/测试作为确定性约束 |
 | **7** | **D** | **CUA MVP（桌面感知 + 基础动作）** | 🔲 | `mss` 截图 + UIA 树 + OCR + `pywinauto`/`pyautogui` + Planner-Executor loop + 首版 capability scoping & audit |
 | **8** | **D** | **CUA 扩展（应用生命周期 + 跨应用流程）** | 🔲 | 软件安装/卸载、进程管理、Replay & Kill Switch、完整 HITL approval gate |
+| **9** | **F** | **生产级数据模型 + Release Governance** | 🔲 | Alembic migrations、节点/边/执行记录拆表、workflow versioning、branch protection、required checks、环境分层、release notes |
 | **10** | **E** | Sub-chat 分叉 + File Repository | 🔲 | 节点内 Sub-chat、Building Log 点击展开 |
 | **11** | **E** | 多 AI 扇出 + 双语 + 市场真实化 | 🔲 | GPT/Gemini 扇出、中英双语、Marketplace/Arena 真实数据 |
+| **12** | **F** | **LLMOps / MLOps 平台化** | 🔲 | prompt registry、model invocation ledger、eval datasets、quality/cost dashboard、experiment tracking；若未来引入微调/训练，再接正式 MLOps |
+| **13** | **F** | **Cloud Native Runtime** | 🔲 | managed Postgres、Redis/queue、object storage、secrets manager、OpenTelemetry、Kubernetes/Nomad、环境级 CD |
+| **14** | **F** | **Service Boundary Extraction** | 🔲 | 从 modular monolith 提取 orchestrator/workflow/execution/tool/perception/llm-gateway/audit 等服务边界，按瓶颈逐步拆微服务 |
 
 > **关于游戏场景**：Phase 7/8 的 CUA 覆盖"启动游戏 / 操作菜单 / 执行脚本化动作"这种级别的任务（如"每天自动清原神日常"）。完整的**游戏 AI（low-latency vision-based game-playing）不列独立 Phase**，那是用户自己在工作流里拼装的高级用法，我们只提供通用 CUA 基础能力，不为游戏做特化。
 
@@ -71,7 +76,10 @@ Phase 4（UI 闭环）───┐
                     │                                      ▼
                     │                              Phase 7（CUA MVP）───► Phase 8（CUA 扩展）
                     │                                                       │
-                    └───────────────────────────────────────────────────────┴──► Phase 10 / 11（体验打磨）
+                    └───────────────────────────────────────────────────────┴──► Phase 9（生产数据模型）
+                                                                            │
+                                                                            ├──► Phase 10 / 11（体验打磨）
+                                                                            └──► Phase 12 / 13 / 14（平台成熟化）
 ```
 
 ---
@@ -98,6 +106,7 @@ Phase 4（UI 闭环）───┐
 | 浏览器自动化（预留） | Playwright（Python，Phase 6 启用） |
 | 容器化 | Docker Compose（db + backend + frontend） |
 | CI | GitHub Actions（tsc + eslint + next build + pytest） |
+| 分支治理 | GitHub Rulesets（`develop`/`main` 禁止直推，main 仅允许 develop PR） |
 
 ### 2.2 扩展栈（Phase 4.5 起逐步引入）
 
@@ -126,6 +135,14 @@ Phase 4（UI 闭环）───┐
 | 输入模拟 | `pywinauto`（semantic，UIA actions）+ `pyautogui`（pixel fallback） | 7 |
 | 进程 / 系统 | `subprocess` + PowerShell + Win32 API via `pywin32` | 8 |
 | Replay & Kill Switch | 自研 action log + `psutil` 进程管理 | 8 |
+| Schema migration | Alembic | 9 |
+| Release governance | GitHub Actions + protected environments + tagged releases | 9 |
+| Queue / worker runtime | Redis + RQ/Celery/Arq（最终选型待压测） | 13 |
+| Object storage | S3-compatible storage / Cloudflare R2 / MinIO | 13 |
+| Secrets manager | GitHub Actions secrets（早期）→ 云厂商 Secrets Manager / Vault | 13 |
+| Cloud orchestration | Kubernetes 或 Nomad（先保留 Docker Compose 本地开发） | 13 |
+| LLMOps registry | 自研 DB 表 + dashboard；必要时接 Langfuse / Phoenix / OpenTelemetry semantic conventions | 12 |
+| MLOps（条件引入） | MLflow / Weights & Biases / DVC（仅当项目开始训练、微调、维护数据集时引入） | 12+ |
 
 ---
 
@@ -223,7 +240,50 @@ Server → Client（Phase 4.5 新增）
 | 工作流确认流程 | **永远先澄清再确认**，不自动生成 | 用户掌控感，避免错误工作流 |
 | DB 持久化（Phase 4.5 后） | Workflow + ChatMessage + **AgentSession** + **ExecutionTrace** + **ApprovalRecord** | 支持 checkpoint / resume / replay / audit |
 
-### 4.6 设计系统铁律（Phase 2.6 起）
+### 4.6 生产化架构路线：云原生 / 微服务 / LLMOps / MLOps
+
+**当前判断**：本项目现在是 **FastAPI 单体后端 + Next.js 前端 + PostgreSQL + Docker Compose** 的早期平台。它已经有容器化、CI、工作流编排、prompt 分层、多 agent 角色划分和节点级模型选择，但还不是成熟云原生系统，也不是微服务架构。
+
+**原则**：先做 **modular monolith（模块化单体）**，再按真实瓶颈拆服务。不要为了术语提前拆微服务，否则会在状态一致性、trace、checkpoint、审批、回放、部署复杂度上付出过早成本。
+
+| 方向 | 当前状态 | 正确演进 |
+|------|----------|----------|
+| 云原生 | Docker Compose 可本地一键启动；GitHub Actions 已接入 | Phase 13 再引入 managed Postgres、Redis/queue、object storage、secrets manager、OpenTelemetry、Kubernetes/Nomad |
+| 微服务 | 后端仍是 FastAPI 单体，服务边界主要体现在 `services/` 目录 | Phase 14 在执行器、感知层、LLM 网关、审计等出现独立扩缩容需求后再拆 |
+| LLMOps | Prompt 文件、agent 分工、节点模型选择已有雏形 | Phase 4.5/6/12 逐步补齐 model invocation ledger、prompt registry、eval datasets、成本/质量 dashboard、失败归因、回放 |
+| MLOps | 当前不训练模型，因此没有模型注册、训练流水线、数据集版本 | 仅当引入 fine-tuning、自训练 evaluator、用户行为数据集或模型评测集时进入正式 MLOps；否则以 LLMOps 为主 |
+| CI/CD | GitHub Actions CI 已有；分支 ruleset 由 GitHub 配置 | Phase 9 引入 release governance、环境保护、migration gate、tagged release、staging/prod 分层 |
+
+### 4.7 数据库现状与生产级演进
+
+当前 DB 设计服务于原型闭环：`workflows.nodes` 以 JSON 形式整体存储，读取一个 workflow 时可直接拿到完整节点图，开发速度快。但这不是最终生产模型。随着节点细分、并行依赖、执行回放、审计、成本统计、版本回滚增多，需要从 JSON 聚合存储演进到关系化 + 事件化模型。
+
+**当前表**：
+
+| 表 | 用途 |
+|----|------|
+| `workflows` | workflow 主记录，含 `workflow_id / session_id / title / title_zh / description / nodes(JSON) / created_at` |
+| `chat_messages` | 对话消息，含 `message_id / session_id / sender_id / content / message_type / workflow_ref / created_at` |
+
+**目标生产表（Phase 9 起逐步拆出，不一次性大爆炸迁移）**：
+
+| 表 | 用途 |
+|----|------|
+| `workflow_nodes` | 节点独立存储，支持单节点查询、编辑、权限、执行状态 |
+| `workflow_edges` | DAG 依赖边，替代仅靠 `depends_on` JSON 字段 |
+| `workflow_versions` | 节点编辑和生成结果版本化，支持 rollback/diff |
+| `chat_sessions` | 会话元数据和生命周期 |
+| `agent_sessions` | agent 状态机、checkpoint、resume cursor、trajectory |
+| `execution_runs` | 一次 workflow/node 执行的 run 级记录 |
+| `execution_traces` | LLM/tool/span 级追踪，支持 observability 和 replay |
+| `node_run_results` | 节点产物、错误、质量评分、执行方法 |
+| `approval_records` | HITL 审批审计 |
+| `tool_registry` / `tool_invocations` | 工具声明、风险等级、调用参数、结果和副作用记录 |
+| `artifacts` | 工作流产出的文件、截图、报告、下载结果 |
+| `model_invocations` | 模型名、provider、tokens、成本、latency、stop_reason、错误、prompt_version |
+| `prompt_versions` | prompt 模板版本、hash、适用 agent、发布记录 |
+
+### 4.8 设计系统铁律（Phase 2.6 起）
 
 - **绝不回到 v1 的单色 hairline**，统一用 `border-hairline` / `border-hairline-strong`
 - **不再用 Tailwind 原生 `shadow-sm/md/lg`**，全部用 `shadow-card/card-md/elevated/floating/overlay`
@@ -265,7 +325,7 @@ OrchestrAI/
 | 文件 | 受众 | 职责 |
 |------|------|------|
 | `Documents/project-overview.md`（本文件） | 项目同事 | 总览 + Phase 路线图 + 技术栈 + 架构决策 + **文件索引** + Harness 六维度 + 开发指南 |
-| `Documents/phase-history-and-handoff.md` | 下一个 AI agent | Phase 归档 + 下一个 Agent 任务清单（按 Tier A→E 分层）+ 交接 checklist |
+| `Documents/phase-history-and-handoff.md` | 下一个 AI agent | Phase 归档 + 下一个 Agent 任务清单（按 Tier A→F 分层）+ 交接 checklist |
 
 #### 5.1.2 `scripts/`
 

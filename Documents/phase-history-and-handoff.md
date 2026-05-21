@@ -4,13 +4,13 @@
 >
 > **前置阅读**：先读 [`project-overview.md`](./project-overview.md) 的 §0 速览 + §5 Project Structure + §6 Harness 六维度铁律。本文件**不重复**总览信息，只补"发生了什么"和"接下来做什么"。
 >
-> **最新状态锚点（2026-05-19）**：Phase 4.5 前置补强（DAG + 节点控制）已闭环；下一个 Phase 是正式的 Phase 4.5 **Agent Harness Foundation**（结构化日志 + 执行追踪 + checkpoint & resume + HITL approval + context compaction）。详见本文件 §"下一个 Agent 的任务 → Tier B"。
+> **最新状态锚点（2026-05-21）**：Phase 4.5 前置补强（DAG + 节点控制）已闭环；GitHub Actions CI 已接入；路线图新增 **Tier F 平台成熟化**，覆盖生产级数据模型、CI/CD 发布治理、LLMOps/MLOps、云原生和微服务边界提取。下一个 Phase 仍是正式的 Phase 4.5 **Agent Harness Foundation**（结构化日志 + 执行追踪 + checkpoint & resume + HITL approval + context compaction）。详见本文件 §"下一个 Agent 的任务 → Tier B"。
 >
 > **本文件结构**：
 >
 > 1. 已完成 Phase 归档（按时间倒序，便于追溯最新改动）
 > 2. Phase 路线图升级说明（2026-04-23 Vision 升级的因果链）
-> 3. 下一个 Agent 的任务（按 Tier A → E 分层）
+> 3. 下一个 Agent 的任务（按 Tier A → F 分层）
 > 4. 交接 checklist
 
 ---
@@ -508,7 +508,7 @@ overview
 
 ### 决策：Phase 路线图按 Tier 重组
 
-旧路线图（Phase 4/5/6/7 线性）装不下新 vision。新路线图分 **Tier A-E**，见 `project-overview.md` §1.1。关键调整：
+旧路线图（Phase 4/5/6/7 线性）装不下新 vision。新路线图先重组为 **Tier A-E**，2026-05-21 起追加 **Tier F 平台成熟化**，见 `project-overview.md` §1.1。关键调整：
 
 - **新增 Phase 4.5 Agent Harness Foundation（Tier B）**：横切所有后续 Phase 的基础设施，包括结构化日志、执行追踪、checkpoint & resume、HITL approval 框架、context compaction
 - **重写 Phase 5 为 Universal Web Perception（Tier C）**：Search + Fetch + 多模态预处理统一管线，覆盖视频 / 音频 / 3D / Office 文档
@@ -518,6 +518,25 @@ overview
 - **原 Phase 5 Sub-chat 后置为 Phase 10（Tier E）**
 - **原 Phase 7 多 AI 扇出 + 打磨后置为 Phase 11（Tier E）**
 - **游戏 AI 不单列 Phase**：Phase 7/8 的通用 CUA 已能支持"打开游戏 + 脚本化动作"，低延迟 game-playing AI 是用户高级用法，不特化
+
+### 2026-05-21 补充决策：把成熟软件工程能力显式纳入路线图
+
+用户确认项目未来不能只停留在 AI workflow demo，需要在路线图中显式考虑云原生、微服务、LLMOps、MLOps、CI/CD、发布治理、数据库演进等成熟软件能力。决策如下：
+
+- **不立即拆微服务**：当前仍保持 FastAPI modular monolith。只有当执行器、感知层、LLM 网关、审计、队列 worker 出现独立扩缩容或安全隔离需求时，才进入服务拆分。
+- **LLMOps 前置，MLOps 条件引入**：项目当前主要调用外部大模型，不训练模型，所以近期重点是 LLMOps（prompt registry、model invocation ledger、trace、成本、质量评估、回放）。MLOps 只有在未来引入 fine-tuning、自训练 evaluator、数据集版本和模型注册时才正式展开。
+- **新增 Tier F 平台成熟化**：在现有 Tier A-E 后增加平台工程层，覆盖 Phase 9/12/13/14。
+- **CI/CD 从现在开始落地**：GitHub Actions 已加入，后续要用 GitHub Rulesets 保护 `develop` 和 `main`：禁止直推，PR 必须通过检查，`main` 仅允许 `develop` 合并。
+- **数据库从 JSON 原型走向生产模型**：当前 `workflows.nodes` JSON 适合原型；Phase 9 起引入 Alembic，把 workflow nodes、edges、versions、execution runs、traces、approvals、model invocations、prompt versions 拆表。
+
+新增平台成熟化 Phase：
+
+| Phase | 名称 | 目标 |
+|-------|------|------|
+| 9 | 生产级数据模型 + Release Governance | Alembic migrations、workflow/node/edge/run 拆表、branch protection、required checks、release notes、环境分层 |
+| 12 | LLMOps / MLOps 平台化 | Prompt registry、model invocation ledger、eval datasets、质量/成本 dashboard；如未来训练模型再接 MLflow/W&B/DVC |
+| 13 | Cloud Native Runtime | managed Postgres、Redis/queue、object storage、secrets manager、OpenTelemetry、Kubernetes/Nomad、环境级 CD |
+| 14 | Service Boundary Extraction | 从 modular monolith 提取 orchestrator/workflow/execution/tool/perception/llm-gateway/audit 服务边界 |
 
 ### 决策：关键技术选型
 
@@ -529,7 +548,7 @@ overview
 
 ---
 
-## 3. 下一个 Agent 的任务（按 Tier A → E 分层）
+## 3. 下一个 Agent 的任务（按 Tier A → F 分层）
 
 **按优先级从高到低。先读 `project-overview.md`（尤其是 §6 Harness 六维度），再读本章节，然后按 Phase 顺序推进。**
 
@@ -752,11 +771,146 @@ Step 1-6 全部归档完成，见本文件 §1 「Phase 4」章节。Tier A 无�
 
 ---
 
+### Tier F — Phase 9（生产级数据模型 + Release Governance）
+
+估时：5-8 天。目标是把当前原型级持久化和手动发布流程升级为可迁移、可回滚、可审计的工程基线。Phase 9 可以在 Phase 6 前后启动，但不要阻塞正式 Phase 4.5 Harness。
+
+#### G1 — Alembic migrations
+
+- 引入 Alembic，停止依赖 `Base.metadata.create_all` 作为长期 schema 管理方式
+- 保留本地开发的一键初始化体验，但生产和 CI schema 必须由 migration 驱动
+- CI 增加 migration smoke check：从空库执行 migration 到最新版本
+
+#### G2 — Workflow schema normalization
+
+- 从 `workflows.nodes` JSON 逐步拆出：
+  - `workflow_nodes`
+  - `workflow_edges`
+  - `workflow_versions`
+  - `node_run_results`
+- 先做双写或迁移脚本，避免破坏现有 `/workflows/[id]` 读取路径
+- 前端 API 响应保持 `Workflow` 聚合形状，后端内部存储先演进
+
+#### G3 — Release governance
+
+- GitHub Rulesets：
+  - `develop`：禁止直推，必须 PR，required checks = `frontend` / `backend`
+  - `main`：禁止直推，必须 PR，required checks = `frontend` / `backend` / `main-source-guard`
+- GitHub Actions 增加 release workflow：
+  - tag 触发
+  - build frontend/backend images
+  - 生成 release notes
+  - 部署到 staging 环境
+- 引入环境概念：local / CI / staging / production
+
+---
+
+### Tier F — Phase 12（LLMOps / MLOps 平台化）
+
+估时：8-12 天。目标是让所有 LLM 行为可追踪、可评估、可回放、可比较。MLOps 只在项目开始训练/微调模型时完整展开。
+
+#### H1 — Model invocation ledger
+
+- 新增 `model_invocations` 表：
+  - provider / model / agent / session_id / workflow_id / node_id
+  - prompt_version / input_hash / output_hash
+  - tokens / estimated_cost / latency_ms / stop_reason / error
+- Clarifier / WorkflowDesigner / NodeExecutor 所有模型调用必须落账
+
+#### H2 — Prompt registry
+
+- 新增 `prompt_versions` 表，记录 prompt 文件 hash、版本、适用 agent、发布时间
+- 每次模型调用绑定 prompt_version，避免“当时到底用了哪个 prompt”不可追溯
+
+#### H3 — Evaluation datasets and quality dashboard
+
+- 建立小型 golden set：
+  - clarification cases
+  - workflow JSON generation cases
+  - impossible-product guidance cases
+  - DAG/parallel dependency cases
+- Dashboard 展示：
+  - 成功率
+  - JSON parse fallback 比例
+  - 平均 token / 成本 / latency
+  - 按 agent/model 的失败原因分布
+
+#### H4 — MLOps 条件触发
+
+只有出现以下需求时才引入 MLflow / W&B / DVC：
+
+- 训练或 fine-tune 自有模型
+- 维护标注数据集
+- 训练 evaluator / reranker / routing model
+- 需要模型 registry 和离线实验追踪
+
+---
+
+### Tier F — Phase 13（Cloud Native Runtime）
+
+估时：10-15 天。目标是把 Docker Compose 原型部署升级为可扩展的云原生运行时，同时保留 Compose 作为本地开发入口。
+
+#### I1 — Runtime decomposition without microservice split
+
+- 先拆 runtime，不急着拆业务服务：
+  - web backend
+  - async worker
+  - scheduler
+  - sandbox executor
+- 引入 Redis / queue，把长任务从 request/socket handler 中剥离
+
+#### I2 — Managed dependencies
+
+- PostgreSQL：本地 Compose，staging/prod 用 managed Postgres
+- Object storage：S3-compatible bucket 存 artifacts、截图、文件产物
+- Secrets：GitHub Actions secrets 早期可用，正式环境迁移到云厂商 Secrets Manager 或 Vault
+
+#### I3 — Observability stack
+
+- OpenTelemetry traces
+- structured logs
+- metrics
+- Jaeger/Grafana/Prometheus 或云厂商托管观测平台
+- 每个 workflow run 可以追到 LLM call、tool call、sandbox task、approval decision
+
+#### I4 — Deployment target
+
+- 早期：Docker Compose + GitHub Actions deploy 到单机/staging
+- 中期：Nomad 或 Kubernetes
+- CUA 桌面自动化不进普通 Linux worker；必须跑在受控 Windows VM / Windows worker pool
+
+---
+
+### Tier F — Phase 14（Service Boundary Extraction）
+
+估时：按瓶颈分批推进，不做一次性大重构。目标是从 modular monolith 提取真正需要独立部署、独立扩缩容、独立权限边界的服务。
+
+优先候选边界：
+
+| 服务 | 何时拆 | 责任 |
+|------|--------|------|
+| `llm-gateway` | 多 provider、多限流、多成本策略开始复杂时 | Claude/OpenAI/Gemini/DeepSeek 统一调用、重试、限流、成本、日志 |
+| `execution-service` | 节点执行和队列成为主要瓶颈时 | workflow/node run 状态机、checkpoint、retry、resume |
+| `tool-service` | 工具权限、schema、sandbox 策略需要独立治理时 | Tool registry、risk level、capability scope、tool invocation audit |
+| `perception-service` | 网页/视频/文件解析耗时重、依赖多时 | Search/fetch/multimodal preprocess |
+| `approval-audit-service` | 审批和合规要求上升时 | HITL approval、audit trail、policy enforcement |
+| `workflow-service` | workflow CRUD、版本、协作编辑变复杂时 | workflow/node/edge/version 数据管理 |
+
+拆分条件：
+
+- 该边界已经有清晰数据所有权
+- API 契约稳定
+- 有独立扩缩容或安全隔离收益
+- trace、checkpoint、approval、DB migration 已经具备基础
+- 拆分后不会降低本地开发效率
+
+---
+
 ## 4. 交接 checklist（给继任 Agent 的开工清单）
 
 1. **读 `project-overview.md`**——尤其是 §0 速览、§5 Project Structure、**§6 Harness 六维度铁律（必读）**。
 2. **读本文件的 §1 已完成 Phase 归档**——按时间倒序看一遍，重点是最新 Phase 的「设计决策」「兼容性备注」「保留限制」三段，避免重复踩坑。
-3. **读本文件的 §3 「下一个 Agent 的任务」**——按 Tier A→E 顺序挑你的 Phase。当前优先级最高的是 Tier B 的 **正式 Phase 4.5 Agent Harness Foundation**。
+3. **读本文件的 §3 「下一个 Agent 的任务」**——按 Tier A→F 顺序挑你的 Phase。当前优先级最高的是 Tier B 的 **正式 Phase 4.5 Agent Harness Foundation**。
 4. **确认当前 phase 状态**——本文件顶部「最新状态锚点」+ `project-overview.md` §1.2 的 Phase 状态表（二者应一致；若不一致以本文件为准并同步回 overview）。
 5. **执行任务前跑一次验证基线**（避免把预存错误算到本次改动头上）：
    ```bash
