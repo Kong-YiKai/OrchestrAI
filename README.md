@@ -1,8 +1,8 @@
 # OrchestrAI
 
-**OrchestrAI** is an AI-powered workflow orchestration platform built for **real desktop tasks** — not just chatting with an AI. Describe any goal in natural language, and OrchestrAI breaks it down into a structured visual workflow, assigns the best AI model to each step, executes it across browser, filesystem, and desktop, and shows every move in real time.
+**An AI workflow orchestration platform built for real desktop tasks — not just chatting with an AI.**
 
-Think of it as a conductor for an orchestra of AI agents, each playing its part — and each capable of picking up a real instrument on the user's machine.
+Describe any goal in natural language, and OrchestrAI breaks it down into a structured visual workflow, picks the right AI model for each step, runs it across the browser / filesystem / desktop, and shows every move in real time. Think of it as a conductor for an orchestra of AI agents — each capable of picking up a real instrument on your computer.
 
 ---
 
@@ -14,47 +14,41 @@ OrchestrAI is built around four ideas:
 
 - **Conversation before action** — the AI clarifies your intent before generating anything. You approve the plan, then it builds.
 - **Universal perception** — agents can read any web page, video, audio, PDF, 3D file, or Office document. Multimodal is a first-class citizen, not an afterthought.
-- **Real desktop reach** — agents don't stop at the browser. They can launch applications, manage files, install programs, and automate desktop workflows (e.g., "clear my Genshin daily quests every morning", or "use the Tripo website to turn this image into a 3D model and open it in Blender").
-- **Composable by design** — each workflow node can run a different AI model. Claude for reasoning, GPT for drafting, Gemini for multimodal perception — mix and match per task.
+- **Real desktop reach** — agents don't stop at the browser. They launch applications, manage files, install programs, and automate desktop workflows (e.g., "clear my Genshin daily quests every morning", or "use the Tripo website to turn this image into a 3D model and open it in Blender").
+- **Composable by design** — each workflow node can run a different AI model. Mix and match per task, swap models on the fly.
 
-All of this runs inside a disciplined **Agent Harness** — the engineering backbone that keeps autonomous systems observable, recoverable, and safe.
-
----
-
-## Agent Harness Engineering
-
-Every capability in OrchestrAI is designed against six mandatory dimensions, applied both to how we build OrchestrAI and to how users build workflows on top of it:
-
-| Dimension | What it means |
-| --- | --- |
-| **Context Engineering** | Layered instruction files form a knowledge base; sub-agents act as firewalls isolating high-noise work; auto-compaction fights context entropy. |
-| **Tool Orchestration** | Tools are curated per agent — not stacked indiscriminately. Internal services with optional MCP wrappers; all execution sandboxed away from the host. |
-| **Verification** | Deterministic checks (linters, type checkers, tests) plus multi-agent review loops; generator and evaluator are separate agents to avoid self-endorsement. |
-| **State Management** | Progress checklists and DB/Git checkpoints per workflow; trajectories persisted so failed runs resume from the last safe point. |
-| **Observability** | Full execution traces with structured logs; per-node quality grading; failure attribution back to the underlying root cause (prompt / model / tool / external service). |
-| **Human-in-the-Loop** | Hard boundary — destructive operations (DB deletion, billing, customer emails, software install/uninstall) require human approval. Kill switch always available. |
-
-See `Documents/project-overview.md` §4.5 for the full spec. Every Phase opens by declaring how it contributes to the six dimensions.
+Everything runs inside a disciplined safety harness that keeps autonomous systems observable, recoverable, and pausable for human approval.
 
 ---
 
-## How It Works
+## Features at a Glance
+
+- Natural-language → visual workflow generation, with multi-turn clarification before anything is built
+- Real-time streaming AI responses and per-node progress
+- Visual workflow canvas with per-node model selection, run / stop, edit, and one-click node subdivision
+- DAG-aware node graph: parallel branches, explicit dependencies, phase / task hierarchy
+- Workflow persistence — no work lost between sessions
+- One-command Docker startup (database + backend + frontend)
+- Warm-tinted design system with glass surfaces, layered elevation, and reduced-motion support
+
+Some capabilities (universal web perception, computer-use agent, multi-AI fan-out, marketplace) are still under construction. See the phase roadmap in [`Documents/project-overview.md`](Documents/project-overview.md).
+
+---
+
+## How It Works (in 60 seconds)
 
 ```
 You describe a goal
         ↓
-Orchestrator identifies it as a build request
+The system identifies whether it's a build request or casual chat
         ↓
-Clarifier asks targeted questions to fill in the gaps
+A clarifying agent asks targeted questions to fill in the gaps
         ↓
-You review and approve the plan
+You review and approve the proposed plan
         ↓
-Workflow Designer generates a multi-step workflow
+A designer agent generates a multi-step visual workflow
         ↓
-Each node runs with its assigned AI model and tool set
-        ├── Web perception (search + fetch + multimodal)
-        ├── Sandboxed tool execution (code, API calls)
-        └── Computer Use Agent (desktop automation) [Phase 7+]
+Each node runs with its assigned model and tools
         ↓
 Full log of every action, visible in real time
         ↓
@@ -63,335 +57,128 @@ High-risk actions pause for your approval
 
 ---
 
-## Features
-
-| Feature | Status |
-| --- | --- |
-| Natural language → workflow generation | ✅ Phase 3 |
-| Multi-turn clarification before building | ✅ Phase 3 |
-| Real-time streaming AI responses | ✅ Phase 3 |
-| Visual workflow canvas (React Flow) | ✅ UI ready |
-| Per-node AI model selection | ✅ UI ready |
-| Design system v2 (warm palette, 5-level surfaces, glass, grain) | ✅ Phase 2.6 |
-| Workflow canvas end-to-end data flow (list page + detail page + live node status) | ✅ Phase 4 |
-| Phase 4.5 pre-foundation canvas controls (node run/stop/edit + DAG subdivision) | ✅ Done |
-| Agent Harness foundation (structured logs, tracing, checkpoint & resume, HITL approval gate) | 🔲 Phase 4.5 |
-| Universal Web Perception (search + fetch + multimodal preprocess for video / audio / 3D / Office) | 🔲 Phase 5 |
-| Tool Registry + Node Executor (multi-model tool calling, Docker sandbox, separate evaluator) | 🔲 Phase 6 |
-| Computer Use Agent MVP (desktop perception + basic actions on Windows) | 🔲 Phase 7 |
-| Computer Use Agent extended (app lifecycle, cross-app flows, replay & kill switch) | 🔲 Phase 8 |
-| Nested sub-chat per node + File Repository | 🔲 Phase 10 |
-| Multi-AI fan-out (Claude + GPT + Gemini) + bilingual + marketplace/arena | 🔲 Phase 11 |
-| Workflow persistence (PostgreSQL) | ✅ Done |
-| Docker one-command deployment | ✅ Done |
-
----
-
 ## Quick Start
 
-**Prerequisites:** Docker Desktop installed and running.
+**Prerequisites:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running.
 
 ```bash
 # 1. Clone and configure
 git clone <repo-url>
 cd OrchestrAI
 cp backend/.env.example backend/.env
-# Fill in ANTHROPIC_API_KEY in backend/.env
+# Fill in ANTHROPIC_API_KEY in backend/.env (see Configuration below)
 
 # 2. Start everything
-docker compose up --build
+docker compose up -d --build
 
 # 3. Open http://localhost:3000
 ```
 
-That's it. PostgreSQL, the Python backend, and the Next.js frontend all start together.
+That's it. The database, the backend, and the frontend all start together. The first build takes ~2–3 minutes; subsequent starts are seconds.
 
 ### Stopping
 
 ```bash
-docker compose down        # Stop containers, keep database data
-docker compose down -v     # Stop and wipe database
+docker compose down        # Stop containers, keep your workflow data
+docker compose down -v     # Stop and wipe the database (destructive)
+```
+
+### Watching Logs
+
+```bash
+docker compose logs -f               # all services
+docker compose logs -f backend       # just the backend
 ```
 
 ### Local Development (without Docker)
 
+If you want hot-reload during development without rebuilding containers:
+
 ```bash
 # Start only the database
-docker compose up db
+docker compose up -d db
 
 # Terminal 1 — Backend
 cd backend
-python -m venv venv && source venv/bin/activate  # or venv\Scripts\activate on Windows
+python -m venv venv && .\venv\Scripts\activate    # PowerShell on Windows
+# or: source venv/bin/activate                    # macOS / Linux
 pip install -r requirements.txt
 uvicorn main:socket_app --reload --port 8000
 
 # Terminal 2 — Frontend
 cd frontend
-npm install && npm run dev
+npm install
+npm run dev
 ```
+
+The frontend will be at [http://localhost:3000](http://localhost:3000), the backend at [http://localhost:8000](http://localhost:8000).
 
 ---
 
 ## Configuration
 
-Edit `backend/.env`:
+Edit `backend/.env` (copy from `backend/.env.example`):
 
 ```env
-# Required — core workflow generation and chat
+# Required — workflow generation, clarification, casual chat
 ANTHROPIC_API_KEY=sk-ant-...
 
-# Required from Phase 5 — multimodal fallback (video / audio / long context)
+# Required for upcoming multimodal features (video / audio / long context)
 GOOGLE_API_KEY=...
 
-# Optional — GPT fan-out and evaluator alternative
+# Optional — alternative models and provider fan-out
 OPENAI_API_KEY=sk-...
 
-# Optional — Web search providers (Phase 5+)
+# Optional — web search providers (future phases)
 TAVILY_API_KEY=...
 BRAVE_SEARCH_API_KEY=...
 EXA_API_KEY=...
 ```
 
-Without `ANTHROPIC_API_KEY`, workflow generation will not work.
+Without `ANTHROPIC_API_KEY`, workflow generation will not work. Other keys can be added later as their corresponding features ship.
+
+Frontend defaults are already wired in `docker-compose.yml`; only override `frontend/.env.local` if you change the backend host or port.
 
 ---
 
-## Architecture
+## What You'll See
 
-```
-┌─────────────────────────────────────────────────┐
-│                    Browser                       │
-│   Dashboard · Orchestra (3-col) · Workflows     │
-│   Next.js 15 · Zustand · Socket.io client       │
-└─────────────────┬───────────────────────────────┘
-                  │ WebSocket (Socket.io) + HTTP (REST)
-┌─────────────────▼───────────────────────────────┐
-│             FastAPI + python-socketio            │
-│                                                  │
-│  Core Agents                                     │
-│    OrchestratorAgent   — intent routing          │
-│    ClarifierAgent      — multi-turn Q&A + plan   │
-│    WorkflowDesigner    — workflow JSON gen       │
-│                                                  │
-│  Harness Foundation (Phase 4.5)                  │
-│    Observability · Checkpoint · Approval Gate    │
-│                                                  │
-│  Perception Layer (Phase 5)                      │
-│    Web Search · Fetch (httpx/Playwright)         │
-│    Multimodal Preprocess (video/audio/3D/Office) │
-│                                                  │
-│  Tool Layer + Executor (Phase 6)                 │
-│    Tool Registry · Docker Sandbox · Evaluator    │
-│                                                  │
-│  Computer Use Agent (Phase 7-8)                  │
-│    Perception (mss/UIA/OCR)                      │
-│    Action (pywinauto/pyautogui)                  │
-│    Planner-Executor Loop                         │
-│    Safety (capability scope + audit + HITL)      │
-└─────────────────┬───────────────────────────────┘
-                  │ SQLAlchemy async
-┌─────────────────▼───────────────────────────────┐
-│                PostgreSQL 16                     │
-│  workflows · chat_messages                       │
-│  agent_sessions · execution_traces (Phase 4.5)   │
-│  approval_records · cua_action_log (Phase 7+)    │
-└─────────────────────────────────────────────────┘
-```
+- **`/dashboard`** — landing overview
+- **`/orchestra`** — three-pane AI orchestration (this is where you talk to the system and approve plans)
+- **`/workflows`** — list of all workflows you've generated
+- **`/workflows/[id]`** — visual canvas for a single workflow (run nodes, swap models, subdivide phases, edit anything)
 
-**Agent Model Assignment**
-
-| Agent | Model | Role |
-| --- | --- | --- |
-| Orchestrator | Claude Haiku 4.5 | Fast intent routing |
-| Clarifier | Claude Sonnet 4.6 | Multi-turn clarification, plan generation |
-| Workflow Designer | Claude Sonnet 4.6 | Workflow structure generation |
-| Node Executor | Per-node configurable | Task execution inside Docker sandbox (Phase 6) |
-| Perception Agent | Gemini 2.x (multimodal) / Claude | Web & multimodal content understanding (Phase 5) |
-| Desktop Agent | Claude Sonnet / Gemini Flash | Planner-Executor loop for Computer Use (Phase 7+) |
-| Evaluator | Claude Opus / GPT (independent) | Verification, separate from generator (Phase 6) |
+Try saying *"帮我创建一个建模工作流"* or *"help me build a weather dashboard"* in the Orchestra page to see the full clarify → plan → confirm → generate loop.
 
 ---
 
-## Tech Stack
+## Documentation
 
-### Core (shipped)
+This repository contains three docs aimed at three different audiences. Pick whichever fits you:
 
-| Layer | Technology |
-| --- | --- |
-| Frontend | Next.js 15 (Turbopack, App Router) |
-| UI | Tailwind v4 + shadcn/ui |
-| State | Zustand |
-| Animation | Framer Motion |
-| Workflow Canvas | @xyflow/react (React Flow) |
-| Realtime | Socket.io |
-| Backend | Python FastAPI + python-socketio (ASGI) |
-| Database | PostgreSQL 16 + SQLAlchemy async + asyncpg |
-| Reasoning AI | Anthropic Claude (Haiku 4.5 / Sonnet 4.6 / Opus) |
-| Deployment | Docker Compose |
+| Document | Audience | Language |
+|----------|----------|----------|
+| **This `README.md`** | Everyone — what it is, how to start it, how to configure it | English |
+| [`Documents/project-overview.md`](Documents/project-overview.md) | Project teammates — architecture, full file-by-file structure, every phase plan and status, design principles, Harness six dimensions | 中文 |
+| [`Documents/phase-history-and-handoff.md`](Documents/phase-history-and-handoff.md) | The next AI agent picking up the project — archived phase decisions, current backlog, onboarding checklist | 中文 |
 
-### Extended (introduced per Phase)
-
-| Layer | Technology | Phase |
-| --- | --- | --- |
-| Structured logging | structlog or loguru | 4.5 |
-| Tracing (optional) | OpenTelemetry + Jaeger | 4.5 |
-| Checkpoint store | PostgreSQL `agent_sessions` table | 4.5 |
-| Multimodal AI (fallback) | **Google Gemini 2.x** (native video / audio / long context) | 5 |
-| Multimodal AI (Chinese scenarios) | ByteDance Doubao (optional) | 5 |
-| Additional models | OpenAI GPT, DeepSeek | 5 |
-| Web Search | **Tavily** (primary) + **Brave Search** (low-cost fallback) + **Exa** (semantic) | 5 |
-| Web Fetch | httpx (static) + **Playwright** (dynamic / SPA / dashboards) | 5 |
-| Web Parse | Trafilatura + Jina Reader fallback | 5 |
-| Video pipeline | **yt-dlp** + ffmpeg + **OpenAI Whisper** | 5 |
-| Audio pipeline | Whisper (local/API); Gemini 2.x fallback | 5 |
-| 3D file pipeline | trimesh + pyrender (multi-view render → VLM) | 5 |
-| Office docs | mammoth (docx) + python-pptx (pptx) + openpyxl (xlsx) | 5 |
-| Tool calling adapter | Custom `ToolRegistry` + per-model schema transforms | 6 |
-| Execution sandbox | Docker (per-node container) | 6 |
-| Desktop screen capture | **mss** (cross-platform) | 7 |
-| Desktop UI tree | **Microsoft UI Automation** via uiautomation / pywinauto | 7 |
-| OCR | PaddleOCR or Tesseract | 7 |
-| Input simulation | pywinauto (semantic, UIA) + pyautogui (pixel fallback) | 7 |
-| Process / system | subprocess + PowerShell + pywin32 (Win32 API) | 8 |
-| Replay & kill switch | Custom action log + psutil | 8 |
+If you're a new teammate joining the codebase, start with [`Documents/project-overview.md`](Documents/project-overview.md) — particularly the **§5 Project Structure** section, which describes every file in the repo.
 
 ---
 
-## Project Structure
+## Contributing
 
-```
-OrchestrAI/
-├── docker-compose.yml
-├── Documents/
-│   ├── project-overview.md                  # Start-of-shift read: snapshot + phase roadmap + Harness laws + index
-│   ├── phase-history-and-handoff.md         # Completed phase archives + layered Tier A–E backlog
-│   └── proposal.md                          # Original product proposal
-│
-├── frontend/                                # Next.js 15 (Turbopack, App Router)
-│   ├── app/
-│   │   ├── globals.css                      # Design tokens (Tailwind v4 CSS vars, v2)
-│   │   ├── layout.tsx                       # Root layout (next/font Inter)
-│   │   ├── page.tsx                         # Root → redirect to /dashboard
-│   │   └── (app)/                           # App shell route group
-│   │       ├── layout.tsx                   # AppSidebar + TopBar shell
-│   │       ├── dashboard/page.tsx           # Landing page
-│   │       ├── orchestra/page.tsx           # 3-col AI orchestration UI (core)
-│   │       ├── workflows/
-│   │       │   ├── page.tsx                 # Grid list of workflows (Phase 4)
-│   │       │   └── [id]/page.tsx            # React Flow canvas detail page (Phase 4)
-│   │       ├── marketplace/page.tsx         # Placeholder (Phase 11)
-│   │       ├── arena/page.tsx               # Placeholder (Phase 11)
-│   │       ├── team/page.tsx                # Placeholder (Phase 11)
-│   │       └── settings/page.tsx            # Placeholder (Phase 11)
-│   │
-│   ├── components/
-│   │   ├── layout/                          # AppSidebar, TopBar, ComingSoon
-│   │   ├── dashboard/                       # HeroCard, ProjectCard, StatCard
-│   │   ├── orchestra/                       # /orchestra page components
-│   │   │   ├── ChatThread.tsx
-│   │   │   ├── ContextPanel.tsx
-│   │   │   ├── RecentProjectsPanel.tsx
-│   │   │   └── context/                     # 9 drill-in views (Overview / Clarifications / ClarificationDetail / PlanDetail / Building / BuildingAgent / Reports / History / DetailHeader)
-│   │   ├── workflows/                       # Canonical workflow canvas stack
-│   │   │   ├── WorkflowCanvas.tsx
-│   │   │   ├── TaskNodeCard.tsx
-│   │   │   ├── NodeDetailDrawer.tsx
-│   │   │   └── Breadcrumbs.tsx
-│   │   └── ui/                              # shadcn/ui wrappers
-│   │
-│   ├── hooks/
-│   │   ├── useSocket.ts                     # Full Socket.io bindings on the Orchestra page → orchestraStore + workflowStore
-│   │   └── useExecutionSocket.ts            # Scoped execution:* bindings on /workflows/[id] (Phase 4)
-│   ├── stores/
-│   │   ├── orchestraStore.ts                # Conv state, messages, clarifications, logs, history
-│   │   └── workflowStore.ts                 # Workflow nodes + selected node
-│   └── lib/                                 # socket.ts / api.ts / utils.ts
-│
-└── backend/                                 # Python FastAPI + python-socketio (ASGI)
-    ├── main.py
-    ├── socket_manager.py
-    ├── database.py
-    ├── config.py
-    ├── models/                              # Pydantic API models + SQLAlchemy ORM
-    ├── services/                            # Current agents + future Harness/Tool/CUA layers
-    │   ├── conversation_manager.py
-    │   ├── orchestrator_agent.py
-    │   ├── clarifier_agent.py
-    │   ├── workflow_designer.py
-    │   ├── workflow_db.py
-    │   ├── executor.py                      # NodeExecutor (api / playwright / simulated / mock paths) — Phase 4/4.5 pre-work
-    │   ├── execution_control.py             # In-process node stop registry (Phase 4.5 pre-work)
-    │   ├── workflow_refinement.py           # Deterministic node subdivision + DAG scaffold
-    │   ├── observability/                   # (Phase 4.5)
-    │   ├── checkpoint/                      # (Phase 4.5)
-    │   ├── approval/                        # (Phase 4.5)
-    │   ├── tools/                           # (Phase 5-6) web_search / web_fetch / multimodal_preprocess / registry
-    │   ├── executor/                        # (Phase 6) sandbox / evaluator — expanded Docker-per-node layer
-    │   └── cua/                             # (Phase 7-8) perception / action / planner / safety / lifecycle
-    ├── routers/                             # REST endpoints (workflow.py item / workflows.py collection / execution.py run+retry)
-    ├── prompts/                             # System prompt markdown files
-    ├── browser/                             # Playwright automation scaffold (migrated into services/tools in Phase 5)
-    └── tests/                               # pytest suites
-```
+This project follows a strict CI pipeline (`.github/workflows/ci.yml`):
 
----
+- `npx tsc --noEmit` — no TypeScript errors
+- `npm run lint -- --quiet` — no ESLint warnings
+- `npm run build` — production build must succeed
+- `pytest tests -q` — all backend tests must pass
 
-## API Reference
-
-| Method | Endpoint | Description |
-| --- | --- | --- |
-| GET | `/api/health` | Health check |
-| GET | `/api/workflow/{id}` | Get workflow by ID |
-| GET | `/api/workflows` | List workflows as lightweight summaries, newest first |
-| PATCH | `/api/workflow/{id}/node/{node_id}` | Update node plan fields: title, descriptions, model, tool, schemas, `node_type`, `depends_on`, `parallel_group` |
-| POST | `/api/workflow/{id}/node/{node_id}/subdivide` | Convert a phase node into child task nodes with dependency edges and parallel tracks |
-| POST | `/api/execution/run/{workflow_id}` | Execute workflow; `mock: true` runs a staged demo emitter (Phase 4), `mock: false` uses the real API/Playwright/Claude strategies |
-| POST | `/api/execution/node/{node_id}/run` | Run a single workflow node; `mock: true` is used by the canvas demo controls |
-| POST | `/api/execution/node/{node_id}/stop` | Request cooperative stop for a running node |
-| POST | `/api/execution/node/{node_id}/retry` | Retry a failed node; same `mock` switch |
-| POST | `/api/sessions/{id}/resume` | Resume from checkpoint (Phase 4.5) |
-
-**Socket.io Events (key)**
-
-| Direction | Event | Purpose |
-| --- | --- | --- |
-| Client → Server | `chat_send` | Send a message |
-| Client → Server | `chat_confirm_start` | Confirm plan, trigger generation |
-| Client → Server | `execution:node/run` via REST | Run one node from the canvas |
-| Client → Server | `execution:node/stop` via REST | Request node stop from the canvas |
-| Client → Server | `execution:approve` | Approve / deny a pending action (Phase 4.5) |
-| Client → Server | `execution:kill` | Kill switch — stop current session (Phase 4.5) |
-| Server → Client | `chat:stream_token` | Streaming AI response token |
-| Server → Client | `clarification:update` | New clarification questions |
-| Server → Client | `clarification:plan_ready` | Plan ready for user approval |
-| Server → Client | `building:log` | Agent activity log entry |
-| Server → Client | `workflow:ready` | Workflow generated and saved |
-| Server → Client | `execution:node_started` / `node_log` / `node_complete` / `node_error` / `node_stopping` / `node_stopped` / `workflow_complete` | Node-level lifecycle emitted by the executor |
-| Server → Client | `execution:approval_required` | Blocked on human approval (Phase 4.5) |
-| Server → Client | `execution:trace` | Tool / LLM call span (Phase 4.5) |
-
----
-
-## Development Status
-
-The project is being built in phases. Current status (2026-05-19):
-
-- **Infrastructure** ✅ — Docker Compose, PostgreSQL, FastAPI, Socket.io, Next.js app shell
-- **UI shell** ✅ — All pages and components built with placeholder data
-- **AI orchestration** ✅ — Phase 3 wired end-to-end: `chat_send → clarifier → plan_ready → chat_confirm_start → workflow_designer → building:log → workflow:ready`. `/workflows` canvas auto-populates; Building Process panel shows per-node agent cards.
-- **Design system v2** ✅ — Phase 2.6 (2026-04-21): 5-level surfaces, warm-tinted hairlines, 8-stop brand palette, unified radius/elevation/typescale, glass utilities, grain texture, soft-pulse motion, `prefers-reduced-motion` support. Legacy `components/workflow/`, `components/chat/`, and `stores/chatStore.ts` have been physically removed (Phase 4 cleanup).
-- **Workflow canvas data flow** ✅ Phase 4 complete (2026-04-27) — `GET /api/workflows` list endpoint, `/workflows` grid + `/workflows/[id]` detail route, Orchestra → Canvas "Open Canvas" CTA, NodeDetailDrawer restored to the prototype's two-tab contract (**Configuration & Permissions**: live description / tool / I/O schemas + mock Installed Plugins / Active Skills / Required Permissions UI; **Node Sub-Agent Chat**: Phase 10 placeholder with greeting bubble, Files / Create Parallel Branches chips, disabled composer), canvas `Run` button + mock execution pipeline (staged `execution:node_started → node_log → node_complete` events from backend, scoped `useExecutionSocket` on the detail page) so node cards animate through queued → running → complete without external API keys, and the Clarifications panel now ships as a drill-in card list — the agent card and a new "开始生成工作流" card both require a click-through; the latter opens a dedicated `PlanDetail` view with an edit-toggle for the plan steps and a start button that locks the plan once workflow generation begins.
-- **Phase 4.5 pre-foundation canvas controls** ✅ (2026-05-19) — NodeDetailDrawer is now a larger prototype-aligned configuration panel; each node can be run/stopped independently in mock mode; node title/description/tool/schema/graph fields can be edited; workflow nodes support `node_type`, `parent_node_id`, `depends_on`, and `parallel_group`; the canvas draws dependency edges instead of forcing a linear chain; `Subdivide` creates child task nodes with parallel implementation tracks.
-- **Agent Harness Foundation** 🔲 Phase 4.5 (next) — structured logging, execution tracing, checkpoint & resume, HITL approval gate, context compaction.
-- **Universal Web Perception** 🔲 Phase 5 — unified search + fetch + multimodal preprocess (video / audio / 3D / Office).
-- **Tool Registry + Node Executor** 🔲 Phase 6 — multi-model tool calling, Docker sandbox, separate evaluator agent.
-- **Computer Use Agent** 🔲 Phase 7-8 — desktop perception (screenshot + UIA + OCR), action layer (pywinauto + pyautogui), planner-executor loop, safety + HITL, application lifecycle management, replay & kill switch.
-- **Experience polish** 🔲 Phase 10-11 — sub-chat per node, file repository, multi-AI fan-out, bilingual, marketplace/arena real data.
-
-See `Documents/project-overview.md` and `Documents/phase-history-and-handoff.md` for the complete roadmap, architectural decisions, and Harness Engineering laws that govern every phase.
+PRs into `main` must come from `develop`. PRs into `develop` are open.
 
 ---
 
 ## License
 
-See `LICENSE` (if present) or contact the maintainers.
+See `LICENSE` if present, or contact the maintainers.

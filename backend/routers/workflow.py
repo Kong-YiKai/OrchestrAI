@@ -1,30 +1,15 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from models.workflow import NodeType, ToolType, Workflow, WorkflowNode
-from services.orchestrator import generate_workflow_and_respond
-from services.workflow_db import save_workflow, load_workflow
+from models.workflow import NodeType, ToolType
+from services.workflow_db import load_workflow
 from services.workflow_refinement import subdivide_node as subdivide_workflow_node
 
 router = APIRouter(prefix="/workflow", tags=["workflow"])
 
 
-class GenerateWorkflowRequest(BaseModel):
-    user_message: str
-    session_id: str = "default"
-
-
 class SubdivideNodeRequest(BaseModel):
     child_count: int = 4
-
-
-@router.post("/generate")
-async def generate_workflow(req: GenerateWorkflowRequest):
-    workflow = await generate_workflow_and_respond(req.user_message, req.session_id)
-    if workflow:
-        await save_workflow(workflow, req.session_id)
-        return {"workflow_id": workflow.workflow_id}
-    return {"workflow_id": None, "error": "Generation failed"}
 
 
 @router.get("/{workflow_id}")
