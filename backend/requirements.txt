@@ -11,13 +11,14 @@ asyncpg==0.30.0
 
 # AI providers
 anthropic==0.95.0
-openai==2.32.0
-google-generativeai==0.8.6
+# openai / google-generativeai removed (no live imports). Phase 5 (Web Perception + Gemini multimodal)
+# and Phase 11 (multi-AI fan-out) will reintroduce them as needed.
 
 # HTTP client
 httpx==0.28.1
 
-# Browser automation
+# Browser automation (lazy-imported by services/executor.py for real web_automation path;
+# the chromium binary is still gated behind `playwright install` in the Dockerfile until Phase 6)
 playwright==1.58.0
 
 # Env

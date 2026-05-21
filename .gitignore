@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 *.pyo
 backend/venv/
+.pytest_cache/
 
 # Node
 frontend/node_modules/
