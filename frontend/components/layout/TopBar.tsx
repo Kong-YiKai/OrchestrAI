@@ -1,8 +1,16 @@
 'use client';
 
-import { Bell, Search, Sparkles } from 'lucide-react';
+import { Bell, OctagonAlert, Search, Sparkles } from 'lucide-react';
+import { killSession } from '@/lib/api';
+import { useOrchestraStore } from '@/stores/orchestraStore';
 
 export function TopBar() {
+  const sessionId = useOrchestraStore((s) => s.sessionId);
+  const convState = useOrchestraStore((s) => s.convState);
+  const setConvState = useOrchestraStore((s) => s.setConvState);
+  const setContextView = useOrchestraStore((s) => s.setContextView);
+  const canKill = convState === 'clarifying' || convState === 'awaiting_confirm' || convState === 'generating';
+
   return (
     <header className="relative flex h-[64px] flex-shrink-0 items-center gap-4 border-b border-hairline bg-glass px-6">
       {/* Search */}
@@ -19,6 +27,26 @@ export function TopBar() {
       </label>
 
       <div className="ml-auto flex items-center gap-2.5">
+        {canKill ? (
+          <button
+            type="button"
+            onClick={async () => {
+              const result = await killSession(sessionId);
+              setConvState(result.next_state);
+              if (result.next_state === 'awaiting_confirm') {
+                setContextView({ name: 'plan-detail' });
+              } else if (result.next_state === 'clarifying') {
+                setContextView({ name: 'clarifications' });
+              }
+            }}
+            className="group flex h-10 items-center gap-2 rounded-full border border-danger-200 bg-danger-50 px-3 text-[12px] font-semibold text-danger-700 shadow-card transition-all hover:-translate-y-[1px] hover:shadow-card-md"
+            aria-label="Emergency stop current session"
+          >
+            <OctagonAlert className="h-4 w-4" strokeWidth={2} />
+            <span>Stop</span>
+          </button>
+        ) : null}
+
         {/* Notifications */}
         <button
           type="button"

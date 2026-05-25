@@ -9,6 +9,7 @@ import { ContextPanel } from '@/components/orchestra/ContextPanel';
 import { useOrchestraStore } from '@/stores/orchestraStore';
 import { useSocket } from '@/hooks/useSocket';
 import { getSocket } from '@/lib/socket';
+import { resumeSession } from '@/lib/api';
 
 const RECENT_PANEL_WIDTH = 280;
 const CONTEXT_PANEL_WIDTH = 360;
@@ -19,6 +20,7 @@ export default function OrchestraPage() {
   const [contextOpen, setContextOpen] = useState(true);
 
   const setSessionId = useOrchestraStore((s) => s.setSessionId);
+  const hydrateCheckpoint = useOrchestraStore((s) => s.hydrateCheckpoint);
 
   const sessionId = useMemo(() => {
     if (typeof window === 'undefined') return 'default';
@@ -35,7 +37,16 @@ export default function OrchestraPage() {
     const socket = getSocket();
     socket.emit('join_session', { session_id: sessionId });
     setSessionId(sessionId);
-  }, [sessionId, setSessionId]);
+    void resumeSession(sessionId)
+      .then((response) => {
+        if (response.status === 'resumed' && response.state) {
+          hydrateCheckpoint(response.state);
+        }
+      })
+      .catch(() => {
+        // Resume is best-effort; a missing backend checkpoint should not block chat.
+      });
+  }, [hydrateCheckpoint, sessionId, setSessionId]);
 
   return (
     <div className="relative flex h-full overflow-hidden bg-canvas-soft">

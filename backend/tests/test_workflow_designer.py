@@ -1,10 +1,13 @@
 import sys
 import os
+import json
+import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from services.workflow_designer import (
     _build_context,
     _build_fallback_workflow,
+    _emit_log,
     _parse_workflow,
 )
 from services.conversation_manager import ConversationState
@@ -241,3 +244,22 @@ def test_build_fallback_workflow_without_plan_preview_has_safe_default():
 
     assert len(wf.nodes) >= 6
     assert wf.nodes[0].title_zh == "需求分析与产品定义"
+
+
+@pytest.mark.asyncio
+async def test_emit_log_also_writes_structured_log(caplog):
+    calls = []
+
+    async def emit(event, payload, room=None):
+        calls.append((event, payload, room))
+
+    with caplog.at_level("INFO", logger="orchestrai"):
+        await _emit_log(emit, "session-1", "thinking", "正在分析需求...", "detail")
+
+    assert calls[0][0] == "building:log"
+    structured = json.loads(caplog.records[0].message)
+    assert structured["event_type"] == "building_log"
+    assert structured["session_id"] == "session-1"
+    assert structured["agent"] == "workflow_designer"
+    assert structured["payload"]["type"] == "thinking"
+    assert structured["payload"]["message"] == "正在分析需求..."

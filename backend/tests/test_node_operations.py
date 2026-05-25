@@ -273,3 +273,14 @@ async def test_stop_node_records_cancel_request_and_emits_event(monkeypatch):
         )
     ]
     execution_router.execution_control.clear_node_cancel("s-stop", "node_a")
+
+
+def test_execution_control_session_kill_cancels_all_nodes_in_session():
+    execution_router.execution_control.request_session_kill("s-kill")
+
+    assert execution_router.execution_control.is_session_killed("s-kill") is True
+    assert execution_router.execution_control.is_node_cancelled("s-kill", "any-node") is True
+    assert execution_router.execution_control.is_session_killed("other-session") is False
+
+    execution_router.execution_control.clear_session_kill("s-kill")
+    assert execution_router.execution_control.is_session_killed("s-kill") is False

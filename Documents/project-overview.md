@@ -4,7 +4,7 @@
 >
 > **建议阅读顺序**：§0 速览 → §1 Phase 路线图 → §2 技术栈 → §3 路由结构 → §4 核心架构决策 → §5 **Project Structure**（重点）→ §6 Harness Engineering 六维度铁律 → §7 开发与验证。
 >
-> **最新状态锚点（2026-05-21）**：Phase 4.5 前置补强已完成，GitHub Actions CI 已接入。画布支持整图 mock Run、单节点 Run/Stop、节点内容编辑、DAG 依赖字段（`node_type` / `parent_node_id` / `depends_on` / `parallel_group`）、按依赖绘制 React Flow 边、`Subdivide` 把阶段节点拆为带并行实现分支的子任务。生成 prompt 改为阶段级规划 + 并行依赖表达。**下一步仍是 Phase 4.5 正式 Harness Foundation**：结构化日志、执行追踪、checkpoint & resume、HITL approval gate、context compaction。2026-05-21 起，路线图新增 **Tier F 平台成熟化**：生产级数据模型、CI/CD 发布治理、LLMOps/MLOps、云原生部署、微服务边界提取。
+> **最新状态锚点（2026-05-25）**：Phase 4.5 前置补强和正式 **Agent Harness Foundation** 已完成。画布支持整图 mock Run、单节点 Run/Stop、节点内容编辑、DAG 依赖字段、依赖边和 `Subdivide`；Harness 已接入结构化日志、`execution_traces`、`agent_sessions` checkpoint/resume、`approval_records` HITL approval、session kill switch、基础 context compaction。GitHub Actions CI 已接入。下一步进入 Phase 5/6 前，应先确认真实工具调用边界、trace 查询入口和 approval gate 在 Tool Registry 中的接入策略。2026-05-21 起，路线图新增 **Tier F 平台成熟化**：生产级数据模型、CI/CD 发布治理、LLMOps/MLOps、云原生部署、微服务边界提取。
 
 ---
 
@@ -50,7 +50,7 @@
 | 2.6 | 前置 | 前端清理 + 视觉质感升级 | ✅ | 设计 token v2，12 核心组件升级（2026-04-21） |
 | **4** | **A** | **Workflows 画布功能接线** | ✅ | Stub 清理 / `/workflows` 列表 + `[id]` 详情 / Orchestra → Canvas CTA / NodeDetailDrawer 双 tab / canvas Run + mock 执行事件链 / Clarifications drill-in 重构 |
 | **4.5-pre** | **B 前置** | **Canvas 节点控制 + DAG 细分** | ✅ | 大面板 NodeDetailDrawer / 节点级 Run/Stop / 节点字段编辑 / `depends_on` DAG 边 / `parallel_group` 并行标记 / `Subdivide` 确定性生成阶段子任务 |
-| **4.5** | **B** | **Agent Harness Foundation** | 🔲 **next** | 结构化日志 + 执行追踪 + checkpoint & resume + HITL approval 框架 + context compaction |
+| **4.5** | **B** | **Agent Harness Foundation** | ✅ | 结构化日志 + `execution_traces` + `agent_sessions` checkpoint/resume + HITL approval + session kill switch + context compaction |
 | **5** | **C** | **Universal Web Perception** | 🔲 | Search 层（Tavily + Brave）+ Fetch 两档（HTTP / Playwright）+ 多模态预处理（视频/音频/3D/Office）+ 统一产出结构 |
 | **6** | **C** | **Tool Registry + Node Executor** | 🔲 | 多模型 tool-calling 适配层 + Docker sandbox + 生成/评估分离的验证循环 + Linter/测试作为确定性约束 |
 | **7** | **D** | **CUA MVP（桌面感知 + 基础动作）** | 🔲 | `mss` 截图 + UIA 树 + OCR + `pywinauto`/`pyautogui` + Planner-Executor loop + 首版 capability scoping & audit |
@@ -667,6 +667,7 @@ components/
 ### ② 工具编排 Tool Orchestration
 
 - **精心挑选而非盲目堆砌**：每个 agent 只看到它需要的工具（Executor agent 看不到 CUA 工具，Perception agent 看不到 DB 写操作）
+- **文件增长克制 File Growth Discipline**：开发新功能、脚本或工具前，必须先做 Existing Surface Check：现有文件 / 模块是否已经有合适职责边界可以承载这次改动？能自然扩展旧文件时，优先修改旧文件；只有当新逻辑具备长期独立职责、需要复用 / 隔离测试 / 独立替换，或继续放入旧文件会造成职责混杂时，才新增文件。新增文件不是禁止项，但必须能用一句话解释它的长期职责，以及为什么现有文件不适合承载。目标是减少长项目里的低价值入口，降低人类和 AI agent 的接手成本；同时也不能为了减少文件数把无关职责塞进一个巨型文件。
 - **统一协议**：内部用自研 `ToolCall` 接口；Phase 5 起，对**外部 agent**（Claude Desktop / Claude Code / 其他 MCP 客户端）可按需包 MCP wrapper
 - **沙箱隔离**：所有工具调用走 Docker / VM，**永不碰宿主机生产环境**
 - **分级工具**：`read-only`（搜索、读文件）/ `mutating`（写文件、网络请求）/ `dangerous`（删除、安装、卸载、扣费）三级，每级不同审批策略
@@ -757,7 +758,17 @@ cd backend
 
 CI（`.github/workflows/ci.yml`）会复刻这三条，PR 必须全绿。
 
-### 7.4 健康日志样本
+### 7.4 新增文件前检查
+
+每次新增文件前先做 Existing Surface Check：
+
+- 现有 hot file 是否已经负责这个职责？
+- 这次改动能否自然扩展旧文件，而不是制造一次性入口？
+- 如果必须新增文件，它是否有长期稳定职责，并且能减少理解成本？
+- 是否只是为了少量逻辑新建了过多文件？
+- 是否相反地把无关职责塞进了一个文件，破坏了边界？
+
+### 7.5 健康日志样本
 
 健康的 `docker compose logs -f backend` 应看到：
 
@@ -767,7 +778,7 @@ CI（`.github/workflows/ci.yml`）会复刻这三条，PR 必须全绿。
 [designer] workflow saved: wf_xxxxxxxx
 ```
 
-### 7.5 沙箱 / 环境约束
+### 7.6 沙箱 / 环境约束
 
 | 事项 | 约束 |
 |------|------|

@@ -6,8 +6,11 @@ from pydantic import BaseModel
 
 from models.chat import AI_PERSONAS, ChatMessage, MessageType
 from socket_manager import sio
+from services.conversation_manager import restore_state, state_to_dict
+from services.harness import load_session_checkpoint
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+sessions_router = APIRouter(prefix="/sessions", tags=["sessions"])
 
 
 class SendMessageRequest(BaseModel):
@@ -30,3 +33,16 @@ async def send_message(req: SendMessageRequest):
     )
     await sio.emit("chat:message", user_msg.model_dump(), room=req.session_id)
     return {"status": "ok", "message_id": message_id}
+
+
+@sessions_router.post("/{session_id}/resume")
+async def resume_session(session_id: str):
+    state = await load_session_checkpoint(session_id)
+    if state is None:
+        return {"status": "not_found", "session_id": session_id, "state": None}
+    restore_state(session_id, state)
+    return {
+        "status": "resumed",
+        "session_id": session_id,
+        "state": state_to_dict(state),
+    }
