@@ -4,7 +4,7 @@
 >
 > **前置阅读**：先读 [`project-overview.md`](./project-overview.md) 的 §0 速览 + §5 Project Structure + §6 Harness 六维度铁律。本文件**不重复**总览信息，只补"发生了什么"和"接下来做什么"。
 >
-> **最新状态锚点（2026-05-21）**：Phase 4.5 前置补强（DAG + 节点控制）已闭环；GitHub Actions CI 已接入；路线图新增 **Tier F 平台成熟化**，覆盖生产级数据模型、CI/CD 发布治理、LLMOps/MLOps、云原生和微服务边界提取。下一个 Phase 仍是正式的 Phase 4.5 **Agent Harness Foundation**（结构化日志 + 执行追踪 + checkpoint & resume + HITL approval + context compaction）。详见本文件 §"下一个 Agent 的任务 → Tier B"。
+> **最新状态锚点（2026-05-25）**：Phase 4.5 前置补强（DAG + 节点控制）和正式 **Agent Harness Foundation** 已闭环；GitHub Actions CI 已接入；路线图新增 **Tier F 平台成熟化**，覆盖生产级数据模型、CI/CD 发布治理、LLMOps/MLOps、云原生和微服务边界提取。下一步进入 Phase 5/6 前，应先确认真实工具调用边界、trace 查询入口和 approval gate 在 Tool Registry 中的接入策略。
 >
 > **本文件结构**：
 >
@@ -16,6 +16,36 @@
 ---
 
 ## 1. 已完成 Phase 归档（按时间倒序）
+
+### Phase 4.5 — Agent Harness Foundation（2026-05-25）
+
+**状态**：✅ 完成
+**定位**：横切后续 Phase 5/6/7 的运行时基座，让系统具备可观测、可恢复、可审批和可终止能力。
+
+#### 交付
+
+| 范围 | 结果 |
+|------|------|
+| 结构化日志 | 后端统一 JSON log event，包含 `ts/session_id/workflow_id/node_id/agent/event_type/payload` |
+| 执行追踪 | 新增 `execution_traces` 表，节点执行、workflow designer fallback、approval 事件落 trace |
+| Checkpoint & Resume | 新增 `agent_sessions` 表，状态变更时保存 `ConversationState`，提供 `POST /api/sessions/{id}/resume` |
+| HITL Approval | 新增 `approval_records` 表、approval request/decision API、Socket 事件和前端 Pending Approvals 卡片 |
+| Kill Switch | 新增 session-level kill registry、`POST /api/execution/kill`、Socket `execution:kill`、TopBar Stop 按钮 |
+| Context Compaction | `ConversationState` 支持基础 compacted_context，保留目标、计划、澄清和最近历史，记录 dropped 数量 |
+
+#### 验证
+
+- `.\backend\venv\Scripts\python.exe -m pytest backend\tests -q` → 63 passed
+- `cd frontend && npx tsc --noEmit` → exit 0
+- `cd frontend && npm run lint -- --quiet` → exit 0
+- `cd frontend && npm run build` → exit 0
+
+#### 保留限制
+
+- `execution_traces` 目前已落库，但还没有前端 trace 查询页。
+- Approval gate 已有框架和 UI，但真实工具调用前的自动阻塞要在 Phase 6 Tool Registry / Node Executor 接入。
+- Kill switch 是协作式取消，适合当前 mock/demo 和主动检查 cancellation 的执行流程；未来 Docker sandbox / worker runtime 需要进程级中断。
+- Context compaction 是确定性裁剪和结构化摘要，后续可接 LLM summarizer。
 
 ### Phase 4.5 前置补强 — Canvas 节点控制 + DAG 细分（2026-05-19）
 
@@ -560,9 +590,9 @@ Step 1-6 全部归档完成，见本文件 §1 「Phase 4」章节。Tier A 无�
 
 ---
 
-### Tier B — Phase 4.5（Agent Harness Foundation）**— 当前下一优先级**
+### Tier B — Phase 4.5（Agent Harness Foundation）✅ 已于 2026-05-25 完成
 
-估时：5-7 天。**所有后续 Phase 的地基**。Phase 4 收尾已集成进此 Phase 的 D5。Phase 4.5 前置补强（DAG + 节点控制）已于 2026-05-19 关闭，正式 4.5 接着开工。
+所有后续 Phase 的地基。完整归档见本文件顶部「Phase 4.5 — Agent Harness Foundation」。后续 Phase 5/6 开工时必须复用这些能力，而不是重新造一套日志、trace、approval 或 kill switch。
 
 #### B1 — 结构化日志 + 执行追踪
 
@@ -910,7 +940,7 @@ Step 1-6 全部归档完成，见本文件 §1 「Phase 4」章节。Tier A 无�
 
 1. **读 `project-overview.md`**——尤其是 §0 速览、§5 Project Structure、**§6 Harness 六维度铁律（必读）**。
 2. **读本文件的 §1 已完成 Phase 归档**——按时间倒序看一遍，重点是最新 Phase 的「设计决策」「兼容性备注」「保留限制」三段，避免重复踩坑。
-3. **读本文件的 §3 「下一个 Agent 的任务」**——按 Tier A→F 顺序挑你的 Phase。当前优先级最高的是 Tier B 的 **正式 Phase 4.5 Agent Harness Foundation**。
+3. **读本文件的 §3 「下一个 Agent 的任务」**——按 Tier A→F 顺序挑你的 Phase。当前优先级最高的是 Tier C 的 **Phase 5 Universal Web Perception**，或先为 Phase 6 Tool Registry 明确 trace / approval 接入策略。
 4. **确认当前 phase 状态**——本文件顶部「最新状态锚点」+ `project-overview.md` §1.2 的 Phase 状态表（二者应一致；若不一致以本文件为准并同步回 overview）。
 5. **执行任务前跑一次验证基线**（避免把预存错误算到本次改动头上）：
    ```bash

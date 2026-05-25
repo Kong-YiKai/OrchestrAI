@@ -13,7 +13,13 @@ class Base(DeclarativeBase):
 
 async def init_db():
     """Create all tables (safe for demo; use Alembic for production migrations)."""
-    from models.db import WorkflowRecord, ChatMessageRecord  # noqa: F401
+    from models.db import (  # noqa: F401
+        AgentSessionRecord,
+        ApprovalRecord,
+        ChatMessageRecord,
+        ExecutionTraceRecord,
+        WorkflowRecord,
+    )
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

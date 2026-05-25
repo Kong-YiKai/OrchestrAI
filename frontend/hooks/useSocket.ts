@@ -1,13 +1,13 @@
 'use client';
 import { useEffect, useRef } from 'react';
 import { getSocket } from '@/lib/socket';
-import { fetchWorkflow } from '@/lib/api';
+import { fetchWorkflow, type ApprovalRecord } from '@/lib/api';
 import { useWorkflowStore } from '@/stores/workflowStore';
 import { useOrchestraStore } from '@/stores/orchestraStore';
 import type { ChatMessage } from '@/types/chat';
 import type { WorkflowNode, NodeResult } from '@/types/workflow';
 import { toExecutionMethod } from '@/types/workflow';
-import type { ClarificationQuestion, BuildingLog, HistoryEntry, Plan } from '@/stores/orchestraStore';
+import type { BuildingLog, ClarificationQuestion, ConvState, HistoryEntry, Plan } from '@/stores/orchestraStore';
 
 /**
  * Socket.io binding hook for the Orchestra page.
@@ -96,6 +96,7 @@ export function useSocket(sessionId: string) {
     socket.on('clarification:plan_ready', ({ plan }: { plan: Plan }) => {
       orchestra.setPlan(plan);
       orchestra.setConvState('awaiting_confirm');
+      orchestra.setContextView({ name: 'plan-detail' });
     });
 
     // ── Building / workflow generation ──────────────────────────────────────
@@ -136,6 +137,26 @@ export function useSocket(sessionId: string) {
       orchestra.setHistoryEntries(entries);
     });
 
+    socket.on('execution:approval_required', (approval: ApprovalRecord) => {
+      orchestra.addApproval(approval);
+      orchestra.setContextView({ name: 'building' });
+    });
+
+    socket.on('execution:approval_resolved', (approval: ApprovalRecord) => {
+      orchestra.updateApproval(approval);
+    });
+
+    socket.on('execution:killed', ({ next_state }: { next_state?: ConvState }) => {
+      const state = next_state ?? 'cancelled';
+      orchestra.setConvState(state);
+      if (state === 'awaiting_confirm') {
+        orchestra.setContextView({ name: 'plan-detail' });
+      } else if (state === 'clarifying') {
+        orchestra.setContextView({ name: 'clarifications' });
+      }
+      setExecuting(false);
+    });
+
     // ── Execution (Phase 6) ─────────────────────────────────────────────────
     socket.on('execution:node_started', ({ node_id }: { node_id: string }) => {
       updateNodeStatus(node_id, 'running');
@@ -173,6 +194,9 @@ export function useSocket(sessionId: string) {
       socket.off('building:complete');
       socket.off('workflow:ready');
       socket.off('history:update');
+      socket.off('execution:approval_required');
+      socket.off('execution:approval_resolved');
+      socket.off('execution:killed');
       socket.off('execution:node_started');
       socket.off('execution:node_log');
       socket.off('execution:node_complete');
