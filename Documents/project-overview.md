@@ -369,9 +369,9 @@ backend/
 | 文件 | 职责 |
 |------|------|
 | `backend/.dockerignore` | 排除 `venv/` `__pycache__/` `*.pyc` `.env` `.git`，缩小 build context |
-| `backend/.env.example` | 范例环境变量：`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GOOGLE_API_KEY` / `CORS_ORIGINS` / `MAX_PLAYWRIGHT_BROWSERS` / `DATABASE_URL`。新人 `cp .env.example .env` 后填 key |
-| `backend/.env` | 真实运行配置（gitignored；docker-compose 通过 `env_file` 注入到 backend container） |
-| `backend/config.py` | `Settings(BaseSettings)`：用 pydantic-settings 从 `.env` 读 7 个字段；暴露 `settings.cors_origins_list` 属性把逗号串切成 list |
+| `backend/.env.example` | 后端 secret / 工具 key 统一模板：Core LLM（Anthropic/OpenAI/Google/DeepSeek/Grok）、Web Search（Brave/Tavily/Exa/SerpAPI）、平台集成（GitHub/Figma）、runtime（DB/Redis/CORS/Playwright）。新人 `cp .env.example .env` 后只填实际使用的 key |
+| `backend/.env` | **本地唯一 secret 管理文件**（gitignored；docker-compose 通过 `env_file` 注入到 backend container）。所有 provider API key 都放这里，不放前端 |
+| `backend/config.py` | `Settings(BaseSettings)`：用 pydantic-settings 从 `.env` 读取 LLM provider key、Web Search provider key、平台集成 token 和 runtime 配置；暴露 `settings.cors_origins_list` 属性把逗号串切成 list |
 | `backend/database.py` | SQLAlchemy async：`create_async_engine` + `async_sessionmaker` + `Base = DeclarativeBase` + `init_db()`（启动时 `create_all`）/ `shutdown_db()`（dispose）/ `get_session()` 依赖注入 |
 | `backend/Dockerfile` | 多阶段构建：`python:3.12-slim` builder（含 gcc / libpq-dev 编译 wheel）→ runtime（仅装 libpq5）。playwright chromium 安装行注释保留，等 Phase 6 解开。`CMD uvicorn main:socket_app --host 0.0.0.0 --port 8000` |
 | `backend/main.py` | FastAPI + Socket.io ASGI 入口：`lifespan` 调 `init_db` / `shutdown_db`；CORS；挂 4 个 router；定义 Socket.io 事件 `chat_send`（驱动 ConversationState 状态机）/ `chat_confirm_start`（触发 WorkflowDesigner）；最后用 `socketio.ASGIApp` 把 sio 和 FastAPI 包成单一 ASGI app |
