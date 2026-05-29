@@ -120,24 +120,25 @@ The frontend will be at [http://localhost:3000](http://localhost:3000), the back
 Edit `backend/.env` (copy from `backend/.env.example`):
 
 ```env
-# Required — workflow generation, clarification, casual chat
+# Core LLM providers
 ANTHROPIC_API_KEY=sk-ant-...
-
-# Required for upcoming multimodal features (video / audio / long context)
-GOOGLE_API_KEY=...
-
-# Optional — alternative models and provider fan-out
 OPENAI_API_KEY=sk-...
+GOOGLE_API_KEY=...
+DEEPSEEK_API_KEY=
+GROK_API_KEY=
 
-# Optional — web search providers (future phases)
-TAVILY_API_KEY=...
 BRAVE_SEARCH_API_KEY=...
-EXA_API_KEY=...
+TAVILY_API_KEY=
+EXA_API_KEY=
+SERPAPI_API_KEY=
+
+GITHUB_TOKEN=
+FIGMA_ACCESS_TOKEN=
 ```
 
-Without `ANTHROPIC_API_KEY`, workflow generation will not work. Other keys can be added later as their corresponding features ship.
+Use `backend/.env` as the single local place for backend-only secrets and future tool API keys. Without `ANTHROPIC_API_KEY`, workflow generation will not work. Other keys are optional until their corresponding provider ships.
 
-Frontend defaults are already wired in `docker-compose.yml`; only override `frontend/.env.local` if you change the backend host or port.
+Do not put provider API keys in `frontend/.env.local`. Frontend variables are browser-visible; only use that file for public URLs like `NEXT_PUBLIC_API_URL` or `NEXT_PUBLIC_SOCKET_URL`.
 
 ---
 
