@@ -11,10 +11,15 @@ class Settings(BaseSettings):
     grok_api_key: str = ""
 
     # Web search providers
+    web_search_provider: str = "tavily"
+    web_read_provider: str = "auto"
     brave_search_api_key: str = ""
     tavily_api_key: str = ""
     exa_api_key: str = ""
     serpapi_api_key: str = ""
+    firecrawl_api_key: str = ""
+    jina_api_key: str = ""
+    browserless_api_key: str = ""
 
     # Optional platform integrations
     github_token: str = ""

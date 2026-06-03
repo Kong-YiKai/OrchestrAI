@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
 from socket_manager import sio
-from routers import chat, workflow, workflows, execution
+from routers import chat, workflow, workflows, execution, perception
 from models.chat import AI_PERSONAS, ChatMessage, MessageType
 from services.conversation_manager import (
     get_state, append_history, add_history_log,
@@ -52,6 +52,7 @@ app.include_router(chat.sessions_router, prefix="/api")
 app.include_router(workflow.router, prefix="/api")
 app.include_router(workflows.router, prefix="/api")
 app.include_router(execution.router, prefix="/api")
+app.include_router(perception.router, prefix="/api")
 
 
 @app.get("/api/health")

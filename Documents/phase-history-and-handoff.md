@@ -4,7 +4,7 @@
 >
 > **前置阅读**：先读 [`project-overview.md`](./project-overview.md) 的 §0 速览 + §5 Project Structure + §6 Harness 六维度铁律。本文件**不重复**总览信息，只补"发生了什么"和"接下来做什么"。
 >
-> **最新状态锚点（2026-05-25）**：Phase 4.5 前置补强（DAG + 节点控制）和正式 **Agent Harness Foundation** 已闭环；GitHub Actions CI 已接入；路线图新增 **Tier F 平台成熟化**，覆盖生产级数据模型、CI/CD 发布治理、LLMOps/MLOps、云原生和微服务边界提取。下一步进入 Phase 5/6 前，应先确认真实工具调用边界、trace 查询入口和 approval gate 在 Tool Registry 中的接入策略。
+> **最新状态锚点（2026-06-03）**：Phase 5.5 **Universal Web Perception Foundation** 已闭环后端 search/read 基座：Tavily 默认、Brave 可选 fallback、HTTP fetch/read、统一 contracts、Harness trace、debug API。完整 Phase 5 仍未完成，多模态预处理、Playwright 动态读取、Jina/Firecrawl/Exa adapter、Gemini 多模态 adapter 和 Phase 6 ToolRegistry/NodeExecutor 接入仍是后续任务。
 >
 > **本文件结构**：
 >
@@ -16,6 +16,66 @@
 ---
 
 ## 1. 已完成 Phase 归档（按时间倒序）
+
+### Phase 5.5 — Universal Web Perception Foundation（2026-06-03）
+
+**状态**：✅ 代码完成，未在本机运行测试（用户环境限制；需用户在 IDE / 本地环境手动验证）
+**定位**：为完整 Phase 5 先建立稳定的 search/read 后端边界，避免 Tavily/Brave/Firecrawl/Exa/ToolRegistry 接入时大改 executor、workflow model、DB 或前端 store。
+
+#### 交付
+
+| 范围 | 结果 |
+|------|------|
+| Perception contract | 新增 `WebSearchRequest/Response/Result` 与 `WebReadRequest/Result`，provider 输出统一归一化 |
+| Provider layer | Tavily search/extract、Brave search、HTTP fetch + HTML extraction；`trafilatura` lazy 使用，stdlib parser 兜底 |
+| Provider registry | `build_perception_service()` 从 `settings` 注册 provider；只填 `TAVILY_API_KEY` 即可运行，Brave key 为空时跳过 fallback |
+| Fallback chain | Search: `tavily -> brave`；Read: `http -> tavily`；单 provider 失败记录 provider_failed，全部失败才最终 failed |
+| Harness trace | `web_search_started/completed/failed/provider_failed` 与 `web_read_started/completed/failed/provider_failed` 落 `execution_traces`；不记录 key、HTML、正文全文 |
+| Debug API | 新增 `POST /api/perception/search` 和 `POST /api/perception/read`，未配置 provider 返回 503，上游失败返回 502 |
+| 配置 | `backend/.env.example` 增加 `WEB_SEARCH_PROVIDER`、`WEB_READ_PROVIDER`、Firecrawl/Jina/Browserless key 占位；`requirements.txt` 增加 `trafilatura==2.0.0` |
+
+#### 设计决策
+
+- **内部 service 优先，不 MCP-first**：Tavily MCP 适合外部 MCP client；OrchestrAI 内部仍通过 `PerceptionService` 直接调用 provider，后续 MCP wrapper 也应包这一层。
+- **不改执行引擎**：本阶段不动 `NodeExecutor`、workflow node schema、DB schema、frontend store；Phase 6 通过 ToolRegistry 接入。
+- **Tavily-only 可运行**：用户当前未注册 Brave，`BRAVE_SEARCH_API_KEY` 可空；Tavily 用尽或失败时，如果没有 Brave fallback，会返回清晰 provider error。
+
+#### 新增 / 修改文件
+
+| 文件 | 说明 |
+|------|------|
+| `backend/services/perception/` | 新增 perception package：contracts、errors、service、tracing、providers、extraction |
+| `backend/routers/perception.py` | Debug API router |
+| `backend/main.py` | 注册 perception router |
+| `backend/config.py` | 增加 web perception provider 配置和预留 key |
+| `backend/requirements.txt` | 增加 `trafilatura==2.0.0` |
+| `backend/.env.example` | 增加 Tavily/Brave/provider/default/future provider 环境变量模板 |
+| `backend/tests/test_perception_core.py` | service contract/fallback/trace/builder 测试 |
+| `backend/tests/test_perception_providers.py` | provider normalization/error/extraction 测试 |
+| `backend/tests/test_perception_router.py` | debug endpoint handler 测试 |
+
+#### 验证
+
+- 未运行。用户明确要求不要在当前环境运行测试、mvn、Docker 或启动服务。
+- 建议用户手动验证：
+  ```bash
+  cd backend
+  .\venv\Scripts\python.exe -m pytest tests/test_perception_core.py tests/test_perception_providers.py tests/test_perception_router.py -q
+  ```
+  然后用 Postman / IDE 调：
+  ```text
+  POST /api/perception/search
+  {"query":"OpenAI Agents SDK web search","count":3}
+
+  POST /api/perception/read
+  {"url":"https://docs.tavily.com/documentation/mcp"}
+  ```
+
+#### 保留限制
+
+- 完整 Phase 5 尚未完成：Playwright dynamic read、Jina Reader、Firecrawl、Exa semantic search、多模态预处理、Gemini adapter、统一 `perceive(url_or_path)` 仍待做。
+- 当前 debug API 是后端调试入口，不代表 workflow node 已能自动调用 web perception；正式接入等 Phase 6 ToolRegistry / NodeExecutor。
+- 未做真实 Tavily live call 校验；provider response normalization 依据官方文档和 mock transport 测试，需用户手动用真实 key 验证一次。
 
 ### Phase 4.5 — Agent Harness Foundation（2026-05-25）
 
@@ -632,14 +692,16 @@ Step 1-6 全部归档完成，见本文件 §1 「Phase 4」章节。Tier A 无�
 
 估时：7-10 天。让 agent 有"眼睛"看懂任何网页 / 任何内容。
 
-#### C1 — Search Provider 抽象
+> **当前进度（2026-06-03）**：Phase 5.5 已完成 search/read foundation。后续不要再按旧计划新建 `backend/services/tools/web_search.py` / `web_fetch.py` 作为主入口；应继续扩展 `backend/services/perception/`，并让 Phase 6 ToolRegistry 包装 `PerceptionService`。
 
-- 新增 `backend/services/tools/web_search.py`：接 Tavily（主）+ Brave（备）+ Exa（语义），统一接口 `search(query, provider?, num_results?) -> SearchResult[]`
-- 按 query 特征路由：语义查询走 Exa，实时/新闻走 Tavily，预算敏感走 Brave
+#### C1 — Search Provider 抽象（Phase 5.5 已完成基础版）
 
-#### C2 — Fetch 两档
+- 已新增 `backend/services/perception/service.py`：Tavily（主）+ Brave（备，可选 key）统一为 `PerceptionService.search(WebSearchRequest) -> WebSearchResponse`
+- 后续 Exa 语义搜索应新增 `backend/services/perception/providers/exa.py` 并接入现有 registry/fallback，不要绕过 `PerceptionService`
 
-- 新增 `backend/services/tools/web_fetch.py`
+#### C2 — Fetch 两档（Phase 5.5 已完成静态基础版）
+
+- 已新增 `backend/services/perception/providers/http_fetch.py`
   - 第 1 档：`httpx` + Trafilatura 解析正文（静态页够用）
   - 第 2 档：Playwright headless，完成 JS 渲染 → 截图 + DOM + 正文
   - Fallback：Jina Reader（`r.jina.ai/<url>`）兜底
@@ -657,7 +719,7 @@ Step 1-6 全部归档完成，见本文件 §1 「Phase 4」章节。Tier A 无�
 
 #### C4 — 统一感知接口
 
-- 新增 `backend/services/tools/perceive.py`：一个 `perceive(url_or_path) -> UnifiedPerception` 入口，内部路由到 C2 / C3
+- 在 `backend/services/perception/` 上继续扩展一个 `perceive(url_or_path) -> UnifiedPerception` 入口，内部路由到 C2 / C3
 - `UnifiedPerception` schema：`{source_type, text, images[], audio_transcript?, structured_data?, metadata, errors[]}`
 - 任何节点调这一个接口就能拿到一个"网页 / 文件"的**全部可感知信息**
 
@@ -940,7 +1002,7 @@ Step 1-6 全部归档完成，见本文件 §1 「Phase 4」章节。Tier A 无�
 
 1. **读 `project-overview.md`**——尤其是 §0 速览、§5 Project Structure、**§6 Harness 六维度铁律（必读）**。
 2. **读本文件的 §1 已完成 Phase 归档**——按时间倒序看一遍，重点是最新 Phase 的「设计决策」「兼容性备注」「保留限制」三段，避免重复踩坑。
-3. **读本文件的 §3 「下一个 Agent 的任务」**——按 Tier A→F 顺序挑你的 Phase。当前优先级最高的是 Tier C 的 **Phase 5 Universal Web Perception**，或先为 Phase 6 Tool Registry 明确 trace / approval 接入策略。
+3. **读本文件的 §3 「下一个 Agent 的任务」**——按 Tier A→F 顺序挑你的 Phase。当前优先级最高的是继续完成 Tier C 的 **Phase 5 Universal Web Perception** 剩余能力（Playwright/Jina/Firecrawl/Exa/多模态/Gemini），或进入 Phase 6 ToolRegistry 包装已完成的 `PerceptionService`。
 4. **确认当前 phase 状态**——本文件顶部「最新状态锚点」+ `project-overview.md` §1.2 的 Phase 状态表（二者应一致；若不一致以本文件为准并同步回 overview）。
 5. **执行任务前跑一次验证基线**（避免把预存错误算到本次改动头上）：
    ```bash

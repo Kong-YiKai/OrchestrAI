@@ -4,7 +4,7 @@
 >
 > **建议阅读顺序**：§0 速览 → §1 Phase 路线图 → §2 技术栈 → §3 路由结构 → §4 核心架构决策 → §5 **Project Structure**（重点）→ §6 Harness Engineering 六维度铁律 → §7 开发与验证。
 >
-> **最新状态锚点（2026-05-25）**：Phase 4.5 前置补强和正式 **Agent Harness Foundation** 已完成。画布支持整图 mock Run、单节点 Run/Stop、节点内容编辑、DAG 依赖字段、依赖边和 `Subdivide`；Harness 已接入结构化日志、`execution_traces`、`agent_sessions` checkpoint/resume、`approval_records` HITL approval、session kill switch、基础 context compaction。GitHub Actions CI 已接入。下一步进入 Phase 5/6 前，应先确认真实工具调用边界、trace 查询入口和 approval gate 在 Tool Registry 中的接入策略。2026-05-21 起，路线图新增 **Tier F 平台成熟化**：生产级数据模型、CI/CD 发布治理、LLMOps/MLOps、云原生部署、微服务边界提取。
+> **最新状态锚点（2026-06-03）**：Phase 5.5 **Universal Web Perception Foundation** 已完成后端 search/read 基座：`backend/services/perception` 统一 contract + Tavily/Brave/HTTP provider + fallback chain + Harness trace + `/api/perception/search|read` debug API。完整 Phase 5 仍未完成，多模态预处理、Playwright 动态读取、Jina/Firecrawl/Exa adapter、Gemini 多模态 adapter 和 ToolRegistry/NodeExecutor 接入留给后续 Phase 5.x/6。Phase 4.5 Harness Foundation、GitHub Actions CI 和 Tier F 路线图仍有效。
 
 ---
 
@@ -51,6 +51,7 @@
 | **4** | **A** | **Workflows 画布功能接线** | ✅ | Stub 清理 / `/workflows` 列表 + `[id]` 详情 / Orchestra → Canvas CTA / NodeDetailDrawer 双 tab / canvas Run + mock 执行事件链 / Clarifications drill-in 重构 |
 | **4.5-pre** | **B 前置** | **Canvas 节点控制 + DAG 细分** | ✅ | 大面板 NodeDetailDrawer / 节点级 Run/Stop / 节点字段编辑 / `depends_on` DAG 边 / `parallel_group` 并行标记 / `Subdivide` 确定性生成阶段子任务 |
 | **4.5** | **B** | **Agent Harness Foundation** | ✅ | 结构化日志 + `execution_traces` + `agent_sessions` checkpoint/resume + HITL approval + session kill switch + context compaction |
+| **5.5** | **C** | **Universal Web Perception Foundation** | ✅ | `PerceptionService` search/read contract + Tavily 默认 provider + Brave 可选 fallback + HTTP fetch/read + Harness trace + debug API |
 | **5** | **C** | **Universal Web Perception** | 🔲 | Search 层（Tavily + Brave）+ Fetch 两档（HTTP / Playwright）+ 多模态预处理（视频/音频/3D/Office）+ 统一产出结构 |
 | **6** | **C** | **Tool Registry + Node Executor** | 🔲 | 多模型 tool-calling 适配层 + Docker sandbox + 生成/评估分离的验证循环 + Linter/测试作为确定性约束 |
 | **7** | **D** | **CUA MVP（桌面感知 + 基础动作）** | 🔲 | `mss` 截图 + UIA 树 + OCR + `pywinauto`/`pyautogui` + Planner-Executor loop + 首版 capability scoping & audit |
@@ -350,6 +351,7 @@ backend/
 ├── prompts/             # 三个核心 agent 的 system prompt（独立 .md 便于热更）
 ├── routers/             # FastAPI REST endpoint
 ├── services/            # 业务逻辑 / agent 实现 / DB helper
+│   └── perception/      # Phase 5.5 Web perception provider layer
 ├── tests/               # pytest 异步测试
 ├── venv/                # Python 虚拟环境（gitignored）
 ├── __pycache__/         # 字节码缓存（gitignored）
@@ -369,13 +371,13 @@ backend/
 | 文件 | 职责 |
 |------|------|
 | `backend/.dockerignore` | 排除 `venv/` `__pycache__/` `*.pyc` `.env` `.git`，缩小 build context |
-| `backend/.env.example` | 后端 secret / 工具 key 统一模板：Core LLM（Anthropic/OpenAI/Google/DeepSeek/Grok）、Web Search（Brave/Tavily/Exa/SerpAPI）、平台集成（GitHub/Figma）、runtime（DB/Redis/CORS/Playwright）。新人 `cp .env.example .env` 后只填实际使用的 key |
+| `backend/.env.example` | 后端 secret / 工具 key 统一模板：Core LLM（Anthropic/OpenAI/Google/DeepSeek/Grok）、Web perception（`WEB_SEARCH_PROVIDER` / `WEB_READ_PROVIDER` / Tavily / Brave / Exa / SerpAPI / Firecrawl / Jina / Browserless）、平台集成（GitHub/Figma）、runtime（DB/Redis/CORS/Playwright）。新人 `cp .env.example .env` 后只填实际使用的 key |
 | `backend/.env` | **本地唯一 secret 管理文件**（gitignored；docker-compose 通过 `env_file` 注入到 backend container）。所有 provider API key 都放这里，不放前端 |
-| `backend/config.py` | `Settings(BaseSettings)`：用 pydantic-settings 从 `.env` 读取 LLM provider key、Web Search provider key、平台集成 token 和 runtime 配置；暴露 `settings.cors_origins_list` 属性把逗号串切成 list |
+| `backend/config.py` | `Settings(BaseSettings)`：用 pydantic-settings 从 `.env` 读取 LLM provider key、Web perception provider key/默认 provider、平台集成 token 和 runtime 配置；暴露 `settings.cors_origins_list` 属性把逗号串切成 list |
 | `backend/database.py` | SQLAlchemy async：`create_async_engine` + `async_sessionmaker` + `Base = DeclarativeBase` + `init_db()`（启动时 `create_all`）/ `shutdown_db()`（dispose）/ `get_session()` 依赖注入 |
 | `backend/Dockerfile` | 多阶段构建：`python:3.12-slim` builder（含 gcc / libpq-dev 编译 wheel）→ runtime（仅装 libpq5）。playwright chromium 安装行注释保留，等 Phase 6 解开。`CMD uvicorn main:socket_app --host 0.0.0.0 --port 8000` |
-| `backend/main.py` | FastAPI + Socket.io ASGI 入口：`lifespan` 调 `init_db` / `shutdown_db`；CORS；挂 4 个 router；定义 Socket.io 事件 `chat_send`（驱动 ConversationState 状态机）/ `chat_confirm_start`（触发 WorkflowDesigner）；最后用 `socketio.ASGIApp` 把 sio 和 FastAPI 包成单一 ASGI app |
-| `backend/requirements.txt` | 钉版本：fastapi 0.135、uvicorn 0.44、python-socketio 5.16、pydantic 2.13、sqlalchemy[asyncio] 2.0.41、asyncpg 0.30、anthropic 0.95、httpx 0.28、playwright 1.58、python-dotenv 1.1 |
+| `backend/main.py` | FastAPI + Socket.io ASGI 入口：`lifespan` 调 `init_db` / `shutdown_db`；CORS；挂 chat/workflow/workflows/execution/perception router；定义 Socket.io 事件 `chat_send`（驱动 ConversationState 状态机）/ `chat_confirm_start`（触发 WorkflowDesigner）；最后用 `socketio.ASGIApp` 把 sio 和 FastAPI 包成单一 ASGI app |
+| `backend/requirements.txt` | 钉版本：fastapi 0.135、uvicorn 0.44、python-socketio 5.16、pydantic 2.13、sqlalchemy[asyncio] 2.0.41、asyncpg 0.30、anthropic 0.95、httpx 0.28、trafilatura 2.0、playwright 1.58、python-dotenv 1.1 |
 | `backend/socket_manager.py` | 单例 `sio = AsyncServer(async_mode="asgi")` + `sessions: dict[str, set]` 内存映射 + `connect / disconnect / join_session` 三个默认事件。其它模块用 `from socket_manager import sio` 复用 |
 
 #### 5.2.2 `backend/browser/`
@@ -410,6 +412,7 @@ backend/
 | `backend/routers/__init__.py` | 空，标记 package |
 | `backend/routers/chat.py` | `POST /api/chat/message`（HTTP fallback；主流程走 Socket.io 的 `chat_send`） |
 | `backend/routers/execution.py` | 执行控制：`POST /api/execution/run/{workflow_id}`（整图运行，`RunRequest.mock` 切真/假）；`POST /api/execution/node/{node_id}/run`（单节点）；`POST /api/execution/node/{node_id}/stop`（写 cancel registry + emit `execution:node_stopping`）；`POST /api/execution/node/{node_id}/retry`；运行结束自动 `update_workflow_nodes` 持久化结果 |
+| `backend/routers/perception.py` | Phase 5.5 Web perception debug API：`POST /api/perception/search` / `POST /api/perception/read`；只调用 `PerceptionService`，把 provider 未配置映射为 503、上游 provider 失败映射为 502 |
 | `backend/routers/workflow.py` | 单工作流 CRUD（注意单数）：`GET /api/workflow/{id}` 读全量；`PATCH /api/workflow/{id}/node/{node_id}` 改字段（`EDITABLE_NODE_FIELDS` 白名单 + `tool_type` / `node_type` enum 校验）；`POST /api/workflow/{id}/node/{node_id}/subdivide` 把阶段拆为子任务 |
 | `backend/routers/workflows.py` | 工作流集合（复数）：`GET /api/workflows` 返回 `list[WorkflowSummary]`（不含节点 payload，按 `created_at` 倒序），给列表页用 |
 
@@ -423,6 +426,7 @@ backend/
 | `backend/services/execution_control.py` | Phase 4.5 前置：`ExecutionControl` dataclass + 内存 set `_cancelled_nodes`，方法 `request_node_cancel` / `clear_node_cancel` / `is_node_cancelled`。**Phase 4.5 正式版会替换为持久化的 task registry** |
 | `backend/services/executor.py` | `NodeExecutor`：构造时接收 `session_id` 和 `mock: bool`；`execute_workflow` 顺序跑；`execute_node` 三档兜底（api → playwright → claude simulated）+ 每段加 `_log` 触发 `execution:node_log`；`_execute_node_mock` 按 `tool_type` 输出 staged 事件（api / web_automation / llm 三套日志模板）；`_api_execute` 内含 wttr.in 天气调用作为 demo；`_playwright_execute` 让 Haiku 生成脚本再 exec 到 BrowserPool 拿到的 page。模块顶层常量 `MOCK_LOG_DELAY = 0.25` / `MOCK_BETWEEN_NODES = 0.10` 控制 mock 节奏 |
 | `backend/services/orchestrator_agent.py` | `route_message(user_message, history)`：先 `_looks_like_development_request` 跑确定性关键字匹配（`DEV_HINTS` 含 28 个中英词、`CASUAL_ONLY_HINTS` 含 6 个）；没命中再调 Haiku 4.5 + `orchestrator_system.md` 兜底，失败 fallback 到 `casual_chat` |
+| `backend/services/perception/` | Phase 5.5 Web perception package：`contracts.py` 定义 search/read I/O；`service.py` 提供 `PerceptionService` + settings-driven provider registry/fallback；`providers/` 放 Tavily/Brave/HTTP adapter；`extraction/html.py` 用 trafilatura + stdlib fallback 清洗 HTML；`tracing.py` 复用 Harness `execution_traces` |
 | `backend/services/workflow_db.py` | Workflow DB helper：`save_workflow` / `load_workflow` / `load_all_workflows` / `update_workflow_nodes`；`_coerce_created_at` 把 LLM 给的 ISO 字符串转回 DateTime（asyncpg/SQLite 不收字符串）；`_record_to_workflow` 反向把 DB 行还原为 Pydantic |
 | `backend/services/workflow_designer.py` | `design_workflow(session_id, state, sio_emit)`：emit `building:started` → Sonnet 4.6 stream 生成 JSON（边流边发 `building:log`）→ `_extract_raw_json`（先 `<workflow_json>` 标签，再 balanced-brace scan）+ `_clean_raw_json`（去 markdown 围栏 + 去结尾逗号）→ JSON 不完整 fallback 到 `_build_fallback_workflow` 用 `_default_plan_nodes` 6 节点模板生成。`_build_context` 拼上下文给 LLM；`_tool_for_node` 按标题关键字猜 tool/tool_type |
 | `backend/services/workflow_refinement.py` | Phase 4.5 前置：`subdivide_node(workflow, node_id, child_count=4)` 确定性把 phase 拆为 plan → 两条并行实现（同 `parallel_group`）→ verify 共 4 节点；child_count > 4 时追加 polish 节点。**不调 LLM**，等 Phase 6 升级为模型生成子图 |
@@ -437,6 +441,9 @@ backend/
 | `backend/tests/test_executor_mock.py` | mock 路径：完整 `execution:node_started → node_log* → node_complete` 序列断言、按 `tool_type` 分支（web_automation → playwright execution_method）。用 spy 替换 `executor_mod.sio.emit` |
 | `backend/tests/test_node_operations.py` | 节点编辑 PATCH + 单节点 run 后的 DB 持久化 + execution_control stop registry + DAG 字段 roundtrip + Subdivide 行为 + 父子关系归属（最大测试文件，10KB） |
 | `backend/tests/test_orchestrator_agent.py` | route_message：关键字命中 → development_request；纯 `你好` → casual_chat；LLM 故障 fallback |
+| `backend/tests/test_perception_core.py` | Phase 5.5 `PerceptionService` contract、默认 provider 解析、fallback chain、trace payload、provider error 包装、settings-driven builder 测试 |
+| `backend/tests/test_perception_providers.py` | Tavily/Brave/HTTP provider 字段归一化、缺 key、上游 status error、HTML extraction 测试；使用 `httpx.MockTransport`，不依赖真实 key |
+| `backend/tests/test_perception_router.py` | `/api/perception/search|read` debug endpoint handler delegate、provider 未配置 503、上游失败 502 测试 |
 | `backend/tests/test_workflow_db.py` | save → load roundtrip + `_coerce_created_at` 类型修复 + `update_workflow_nodes` partial update |
 | `backend/tests/test_workflow_designer.py` | JSON 提取（包括嵌入 `<workflow_json>` 标签）+ trailing comma 清理 + max_tokens stop_reason 时 fallback 走 `_build_fallback_workflow` |
 | `backend/tests/test_workflows_router.py` | `GET /api/workflows` 空列表 + 多 workflow 按 `created_at` 倒序；monkeypatch 用内存 sqlite |

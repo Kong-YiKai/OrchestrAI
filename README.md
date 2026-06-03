@@ -129,14 +129,19 @@ GROK_API_KEY=
 
 BRAVE_SEARCH_API_KEY=...
 TAVILY_API_KEY=
+WEB_SEARCH_PROVIDER=tavily
+WEB_READ_PROVIDER=auto
 EXA_API_KEY=
 SERPAPI_API_KEY=
+FIRECRAWL_API_KEY=
+JINA_API_KEY=
+BROWSERLESS_API_KEY=
 
 GITHUB_TOKEN=
 FIGMA_ACCESS_TOKEN=
 ```
 
-Use `backend/.env` as the single local place for backend-only secrets and future tool API keys. Without `ANTHROPIC_API_KEY`, workflow generation will not work. Other keys are optional until their corresponding provider ships.
+Use `backend/.env` as the single local place for backend-only secrets and future tool API keys. Without `ANTHROPIC_API_KEY`, workflow generation will not work. For the Phase 5.5 web perception debug API, `TAVILY_API_KEY` is enough; Brave is an optional fallback.
 
 Do not put provider API keys in `frontend/.env.local`. Frontend variables are browser-visible; only use that file for public URLs like `NEXT_PUBLIC_API_URL` or `NEXT_PUBLIC_SOCKET_URL`.
 
