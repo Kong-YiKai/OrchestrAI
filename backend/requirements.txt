@@ -17,6 +17,9 @@ anthropic==0.95.0
 # HTTP client
 httpx==0.28.1
 
+# Web perception
+trafilatura==2.0.0
+
 # Browser automation (lazy-imported by services/executor.py for real web_automation path;
 # the chromium binary is still gated behind `playwright install` in the Dockerfile until Phase 6)
 playwright==1.58.0
