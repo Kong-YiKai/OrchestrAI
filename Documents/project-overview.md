@@ -2,13 +2,13 @@
 
 > 更新：2026-10-12（Asia/Singapore）。这是项目现状、架构决策、阶段计划、部署约定和下一步任务的唯一事实来源。
 > **每次新对话、新任务或接手开发，AI 必须先读本文件，再读根目录 `AGENTS.md` 和相关目录规则。每次完成修改必须同步更新本文件。**
-> 改革进度：R0、R1 选型已完成（用户确认）；R2 进行中，独立 workflow 服务、Linux 集成/恢复测试与 CI/CD 代码已落地。云端 CI 已接通 PR #31，并有完整成功记录；最新提交状态以该 PR 的 required checks 为准，受限部署身份和异地备份尚未接通；未部署生产，聊天/附件迁移仍在 R3。
+> 改革进度：R0、R1 选型已完成（用户确认）；R2 进行中，独立 workflow 服务、Linux 集成/恢复测试与 CI/CD 代码已落地。云端 CI 已接通 PR #31，并有完整成功记录；最新提交状态以该 PR 的 required checks 为准，受限部署身份、Secrets 与加密异地存储已接通；生产首发正在收尾。R3 采用全新数据，不迁移旧测试聊天/附件。
 
 ## 1. 已确认的产品方向
 
 - 产品名称与品牌：**OrchestrAI**。允许重做内部工程，以尽快获得成熟聊天、搜索、文件和多模态体验为优先。
 - 保留现有暖色主题、奶咖背景、琥珀橙强调色、三栏 Orchestra、上下文面板与 React Flow 画布的设计方向；不能套用另一项目的整套页面或只替换 Logo。
-- 框架和现有 Next.js 技术选型可以调整；视觉资产、交互意图和用户数据要有明确迁移方案。
+- 框架和现有 Next.js 技术选型可以调整；视觉资产与交互意图要有明确迁移方案；用户确认现有聊天/附件全为可弃测试数据，R3 不迁移、不备份这些旧数据。
 - 优先复用成熟开源实现；按业务边界尽早独立服务化。每个新能力在正式接入前就确定进程、API、数据所有权和部署边界，不再排到旧 Phase 14。
 - CI 全部通过后自动部署生产，不设置常规人工生产批准步骤。首次部署基础设施需完成一次性准备；当前尚未激活生产 CD。
 - 先适配现有共享服务器；重型解析、模型、浏览器抓取优先调用外部 API。用户接受付费 API。R1 真实测试总额度已明确为 **¥20**，使用已有本地凭证；本轮未购买订阅。2026-10-12 用户明确生产上限为 **每日 ¥5、每月 ¥100（人民币总额）**；同时说明 DeepSeek 余额约 ¥18、Tavily 免费额度约 1,000 Credits，属于用户提供的账户快照，非本轮账单核验。R2 本轮未调用付费 provider，无须新增 API Key 或充值；原子预算及真实计量接线完成前不开放生产付费能力。
@@ -48,7 +48,7 @@
 
 ### 2.3 已确认的工程缺口
 
-- `.github/workflows/ci.yml` 已原位升级为质量门禁、真实 workflow 集成/恢复、固定版本安全扫描、GHCR 发布与自动 CD；本地验证见 5.3。PR #31 已推送且有云端 CI 全部通过记录；Rulesets 已追加 ci-gate。GHCR/main 发布及服务器 CD 尚未执行，部署 Secrets 待配置。
+- `.github/workflows/ci.yml` 已原位升级为质量门禁、真实 workflow 集成/恢复、固定版本安全扫描、GHCR 发布与自动 CD；本地验证见 5.3。PR #31 已推送且有云端 CI 全部通过记录；Rulesets 已追加 ci-gate。GHCR/main 发布及服务器 CD 尚未执行，部署 Secrets 已配置，自动首发待 CI/main 合并完成。
 - 前端 Dockerfile 运行 `npm run dev`；Compose 使用 `latest`、默认数据库凭据并暴露 5432，属于开发配置。
 - 旧 backend 仍使用 `Base.metadata.create_all`；新 workflow 已有校验和迁移、数据库角色隔离和恢复演练，尚未迁移旧库。
 - 会话 API 和 Socket room 未见完整的用户归属鉴权，不能直接作为公开多用户服务上线。
@@ -127,7 +127,7 @@ LibreChat 主仓库 MIT；Open WebUI 当前许可证含品牌限制及例外；D
 | R0：盘点与规则 | 已完成（本轮规划范围） | 审计、单一 overview、根 AGENTS、替换计划 | Git、PowerShell、仓库与上游文档核查 | 文档一致、保留未提交工作；不代表技术清理已实施 |
 | R1：选型验证与基线冻结 | 已完成（选型，用户确认；遗留发布门槛继续追踪） | 小型可运行对照、UI 移植、依赖/资源/许可清单、最终技术决定 | 固定版本 LibreChat、LangGraph JS、RAG API、LiteLLM；Docker、Playwright | 通过下述试验门槛；确定单一路线和每项旧资产退出点 |
 | R2：微服务与交付基础 | 进行中 | 独立服务最小链路、迁移/契约、自动 CI/CD、身份/配置边界 | Compose、Actions、GHCR、MongoDB、PostgreSQL、Redis/BullMQ、LangGraph | CI 同一提交产出镜像；隔离环境部署/回滚/恢复通过；具备发布前提 |
-| R3：成熟聊天与附件候选版 | 未完成 | 原有风格的真实聊天、登录、历史、图片/PDF/TXT 上传、文档问答 | LibreChat chat/client、RAG API、pgvector、视觉/OCR API、持久存储 | UI 与端到端通过、历史迁移核对、权限测试通过；形成可部署候选版 |
+| R3：成熟聊天与附件候选版 | 未完成 | 原有风格的真实聊天、登录、历史、图片/PDF/TXT 上传、文档问答 | LibreChat chat/client、RAG API、pgvector、视觉/OCR API、持久存储 | UI 与端到端通过、全新数据与权限测试通过；形成可部署候选版 |
 | R4：Web Research 重做与首发 | 未完成（重做） | 搜索→读取→重排→引用、可见过程、限额与拒答 | LibreChat 搜索实现候选；Tavily/Serper 对照、Firecrawl/Tavily Extract、Jina reranker 可选 | 固定研究质量集通过，单一入口，旧 bridge 退出；R3/R4 与部署资源门槛都通过后对外首发 |
 | R5：真实工作流执行 | 未完成（重做） | 画布映射真实 graph、DAG、版本、审批、取消、重启恢复 | React Flow、LangGraph JS、Postgres checkpointer、BullMQ、MCP | 真实三节点任务成功；断线/崩溃/重复投递不重复副作用；mock 只留测试 |
 | R6：音视频理解与产物生成 | 未完成 | 分批交付转写、视频摘要、PPT/文档、图片生成 | 外部 ASR/VLM/生成 API；按需 FFmpeg、Docling、PptxGenJS/docx 库；独立 worker | 每种能力有真实可下载产物、预览、用量、失败/取消闭环；不拿一个入口代表全覆盖 |
@@ -197,7 +197,7 @@ LibreChat 主仓库 MIT；Open WebUI 当前许可证含品牌限制及例外；D
 
 ### 5.3 R2 实施记录（2026-10-12）
 
-**状态：进行中。** 分支 `codex/r2-service-delivery`，内部服务不开放公网端口，不挂载模型/搜索凭证。R3 聊天迁移与 R5 任意 DAG 仍未完成。
+**状态：进行中。** 分支 `codex/r2-service-delivery`，内部服务不开放公网端口，不挂载模型/搜索凭证。R3 聊天内核接入与 R5 任意 DAG 仍未完成。用户统一手动验收，本轮仅保留必要 CI 与部署烟测，不扩展复杂验收。
 
 | 资产 | 实际实现与边界 |
 | --- | --- |
@@ -208,23 +208,23 @@ LibreChat 主仓库 MIT；Open WebUI 当前许可证含品牌限制及例外；D
 | 基础镜像加固 | `deploy/infrastructure.Dockerfile` 基于新固定 digest 的 PostgreSQL 16 与 Redis 7.4.11；PostgreSQL 直接以 postgres 身份启动，移除不再需要且带旧 Go 运行时的 gosu；Redis 固定更新 libcrypto3/libssl3 至 3.3.7-r2。保留官方初始化逻辑，未写漏洞忽略清单。新旧本机测试数据卷的迁移与恢复已验证，CI 另测空卷初始化 |
 | 上游清单/补丁 | `deploy/upstreams.json` 固定 R1 LibreChat/RAG commit 与 ZIP 校验和，保留原许可证；规范化 R1 UI patch 换行。`prepare-upstreams.py` 提取到忽略的 `.build/`，拒绝覆盖未知已有内容。chat/RAG 正式镜像与完整许可证审计仍待迁移时完成 |
 | CI | 原位升级 `.github/workflows/ci.yml`：main 来源、overview 更新、生成物/密钥扫描、Knip（新 workflow）、类型/lint/build、真实数据库/队列集成与恢复、SPDX、Trivy、Actionlint/ShellCheck；同一可信 main SHA 的**已测试 workflow/PostgreSQL/Redis 三个镜像**经 artifact 传递到 GHCR。第三方 Action 固定 commit |
-| 发布控制器 | `deploy/release.py` 为 root 所有的固定控制器，只收限定 JSON manifest；配置摘要/镜像仓库/digest/版本/递增序列校验、发布锁、停写入→age 加密备份→rclone 异地回读校验→兼容迁移→readiness/真实 HTTP 产物烟测；失败恢复旧应用镜像（`--no-deps`，不回退数据库/Redis），升级前先备份当前数据库。自动回滚已做契约测试，**尚未在真实服务器故障演练** |
-| 部署身份 | `deploy/install-host.sh` 一次性管理员安装，拒绝覆盖已有目录/账户；专用 SSH 公钥 forced command 与精确 sudo 命令。CI 用户无 docker 组/通用 shell/sudo，配置保留 root 私有路径；尚未执行服务器安装 |
+| 发布控制器 | `deploy/release.py` 为 root 所有的固定控制器，只收限定 JSON manifest；配置摘要/镜像仓库/digest/版本/递增序列校验、发布锁、停写入→age 加密备份→rclone 异地回读校验→兼容迁移→readiness/真实 HTTP 产物烟测；失败恢复旧应用镜像（`--no-deps`，不回退数据库/Redis），升级前先备份当前数据库。支持 Ubuntu Python 3.10；GHCR 使用 CI job 临时令牌，服务器无长期开发者 token。每日备份由 systemd 调用同一控制器，服务专用 daily 对象保留 35 天，发布回滚备份另行保留。自动回滚已做契约测试，**尚未在真实服务器故障演练** |
+| 部署身份 | `deploy/install-host.sh` 一次性管理员安装，拒绝覆盖已有目录/账户；专用 SSH 公钥 forced command 与精确 sudo 命令。CI 用户无 docker 组/通用 shell/sudo，配置保留 root 私有路径；已安装并验证 SSH 强制命令拒绝非法请求 |
 | 清理 | `check-repository.py` 阻止生成物、真实环境文件、超大源码和私钥提交，只允许一份 Documents 文档；Knip 查新服务无用文件/依赖/导出。`docker-clean.sh` 移除全局 prune、模糊匹配、强制删除。旧全仓死代码审查在对应调用链迁移时完成 |
 
 **本机实际验证：** Linux 集成 9 项通过（身份、迁移、并发幂等、真实队列审批、崩溃恢复、取消、Redis 重建）；独立 API/worker 部署烟测和重启烟测通过。`pg_dump` 恢复到隔离数据库后，runs/artifacts/events/checkpoints 数量与内容摘要逐项一致。发布/回滚契约测试 4 项通过。npm audit 为 0，workflow、PostgreSQL、Redis 三个最终镜像的 Trivy 高危/严重均为 0，源码秘密扫描通过；镜像本机 `.Size` 约 76.6 MiB（非完整产品体积）。旧工作区后端 167 tests 通过（1 条 Pydantic 弃用告警），旧前端 tsc/lint/build 通过。SPDX 仅新 workflow 已生成；上游许可审计仍待补全。
 
 本轮无付费 API 调用。每日 ¥5/月 ¥100 已记录配置；**尚未接通跨模型与搜索的原子预留/计量，生产付费能力保持未接入**。Tavily credits 与人民币须分别限额再归集费用，环境变量不是硬限额实现。
 
-**云端交付状态：** 基础设施已单独提交并推送，Draft [PR #31](https://github.com/Kong-YiKai/OrchestrAI/pull/31) → develop；原有业务未提交内容完整保留。GitHub `production` 环境已创建，只允许 main，未配置人工 reviewers；develop/main 原有 Rulesets 均已追加必过 `ci-gate`，其余规则保留；仓库变量 `R2_DEPLOY_ENABLED=false`。用户明确先完成代码和 CI，暂不填写 R2 存储凭据。本地 Git 全局代理原端口不可达，本轮只通过单命令覆盖访问 GitHub，未改全局配置。
+**云端交付状态：** 基础设施已单独提交并推送，Draft [PR #31](https://github.com/Kong-YiKai/OrchestrAI/pull/31) → develop；原有业务未提交内容完整保留。GitHub `production` 环境已创建，只允许 main，未配置人工 reviewers；develop/main 原有 Rulesets 均已追加必过 `ci-gate`，其余规则保留；仓库变量 `R2_DEPLOY_ENABLED=false`。用户已补齐 R2 存储凭据，本轮继续云端激活；旧测试数据不用迁移/备份。本地 Git 全局代理原端口不可达，本轮只通过单命令覆盖访问 GitHub，未改全局配置。
 
-**一次性云端激活清单（未完成项继续追踪）：**
+**一次性云端激活清单（2026-10-12）：**
 
-1. 用户已有 **Cloudflare R2 / auto / 已建桶**；待配置具体桶名、账户 Endpoint 与桶级凭据。已准备忽略文件 `deploy/private/rclone.conf` 和 `deploy/private/deployment.json`，后者 `backup_remote` 填 `orchestrai-backup:桶名/orchestrai/workflow`。使用 OrchestrAI 专用路径与最小读写凭据；SecretKey 不发聊天、不入 Git。服务器 `/opt/orchestrai/secrets/rclone.conf` 配置 remote `orchestrai-backup`；支持 rclone S3 兼容端。
-2. 在用户安全位置生成 age 恢复密钥，服务器只存公钥 recipient；填写 `deployment.json` 备份对象路径。先验证上传→下载→解密→隔离恢复，再设 `restore_drill_verified=true`。当前仅实现发布前备份；每日备份/7 日 + 4 周保留及跨 chat/文件协调备份仍待接通，尚未达到 RPO/RTO 验收。
-3. 安装 Docker/Compose、age、rclone；评审后运行 `sudo sh deploy/install-host.sh <CI公钥路径>`。新生成独立 CI SSH key，不复用 ubuntu 管理私钥；服务器使用专用只读包凭据登录私有 GHCR。
-4. GitHub `production` 已完成 main 限制且无人工 reviewer。尚待 Secrets：`DEPLOY_HOST`、`DEPLOY_SSH_KEY`、经已有可信 SSH 记录核验的 `DEPLOY_KNOWN_HOSTS`；分支保护已追加 `ci-gate`，保留原有规则。现有本机 Git 凭据可访问仓库，GitHub 连接器访问该私有仓库返回 404；无需让用户把 token 发入聊天。
-5. 首次激活前 `R2_DEPLOY_ENABLED=false`；镜像拉取、异地恢复、隔离部署/回滚及资源验收通过后改 true。此开关不是每次发布人工审批。当前只发布内部 workflow，R3/R4 公网、DNS/证书、多租户另行验收。
+1. Cloudflare R2 / auto / 私有桶：用户已填写桶级凭据。本轮将裸桶名规范为 remote 路径并安装 root 私有配置；实际加密上传、回读摘要、解密比对通过，测试对象已删除，`backup_storage_verified=true`。未读取、导出或备份旧聊天/附件。
+2. age 恢复私钥保存在本机忽略文件 `deploy/private/age-recovery.key`；服务器只保留 recipient，临时私钥已移除。用户需将该文件另存安全位置。每日备份在 03:00–03:15（Asia/Singapore）运行，仅新 workflow 数据；保留 35 天 daily 对象，发布快照不自动删除。完整隔离恢复与 RPO/RTO 由用户后续手动验收，`restore_drill_verified=false`，不会冒充已通过。
+3. 服务器已安装 age 1.0.0 与校验官方 SHA-256 的 rclone 1.75.2；独立 `/opt/orchestrai`、受限 `orchestrai-deploy`、root 发布控制器和备份 timer 已安装。其他项目和共享入口未改。
+4. GitHub production 的 `DEPLOY_HOST`、独立 `DEPLOY_SSH_KEY`、可信 `DEPLOY_KNOWN_HOSTS` 已配置；main 限制、无人工 reviewer、原 Rulesets 保留。GHCR 使用本次 Actions job 的 packages:read 临时 token，经受限 SSH stdin 传入、临时 Docker 配置使用后移除，不复制本机管理员私钥/PAT。
+5. `R2_DEPLOY_ENABLED` 尚为 false，待本次 CI 和正式分支合并激活一次自动首发。当前只发布内部 workflow；R3/R4 的公开产品、DNS/证书与完整聊天栈另行验收。
 
 过渡资产：旧 `frontend/`、`backend/`、根 Compose 服务原型；新服务调用方是集成/部署烟测，未双写聊天。旧 UI/聊天最迟 R3 退出，搜索 R4，runtime R5；每次切换同次删除调用方/配置/依赖。工作区原有业务改动单独保留，不混入本轮基础设施提交。
 
@@ -234,7 +234,7 @@ LibreChat 主仓库 MIT；Open WebUI 当前许可证含品牌限制及例外；D
 
 首发建议每个文件 ≤10 MiB、每条消息 ≤5 个、合计 ≤25 MiB；最终限额与 provider 限制取较小值。短文本直接上下文、长文档检索、扫描件 OCR、图片 VLM 分开路由。R1 账号实测 `deepseek-flash` 已支持图片输入，PNG 识别通过；不能据此认定所有 DeepSeek 型号、音视频或扫描件均支持。内容类型检查不能只看扩展名；恶意压缩、伪 MIME、超限、损坏文件必须有明确失败状态。
 
-旧会话迁移：先导出快照，保存原 ID→新 conversation/user ID 映射，逐条核对数量/正文/时间/附件和工作流关联；无用户归属的旧会话只能归入指定管理员账户，不可对所有用户开放。旧运行中的任务先停止或排空，不把不兼容 checkpoint 强行转换后自动继续。保留可恢复的旧库备份，回滚窗口结束再清理旧表。
+旧数据处置（用户明确决定）：现有聊天与附件都是测试数据，无须导出、迁移、映射或备份；R3 按全新数据库与附件空间切换。切换前核对目标仅为 OrchestrAI 测试资源并停止旧任务，不触碰其他项目数据。新服务上线后的常规备份与恢复能力继续保留。
 
 ### 5.5 R4 搜索质量门槛
 
@@ -258,7 +258,7 @@ LibreChat 主仓库 MIT；Open WebUI 当前许可证含品牌限制及例外；D
 - 各项目独立环境文件、卷、数据库、网络和发布锁。不能复用 Tarot 的业务数据、覆盖入口或停掉共享 Nginx。
 - 初期只部署首发必需服务；Meilisearch、独立观测全家桶、本地 VLM/OCR/embedding、浏览器池均不默认常驻。缺席的能力在 UI 隐藏或明确不可用。
 - 暂定资源目标：OrchestrAI 常驻总 RSS ≤1.8 GiB，任务峰值 ≤2.1 GiB，整机压测期间始终保留至少 25% available 内存；实际以包含旧项目的混合负载测量为准。单个重任务并发 1、交互会话并发 2 起步，压力大时排队。
-- 资源验收至少 60 分钟、含上传/聊天/搜索混合任务，检查 OOM、CPU、磁盘增长及既有两站健康。不达标就减少首发常驻功能或外置重服务；不自动升级服务器或停止其他项目。
+- 原定 60 分钟混合负载验收改由用户统一手动执行，含上传/聊天/搜索混合任务，检查 OOM、CPU、磁盘增长及既有两站健康。不达标就减少首发常驻功能或外置重服务；不自动升级服务器或停止其他项目。
 - 镜像只在 CI 构建；服务器只拉取、迁移、启动和验证。4 GB 主机不同时运行完整 staging/蓝绿两套全栈；CI 临时环境承担预发布集成验证。首发允许短维护窗口，不承诺零停机或单机高可用。
 
 ### 6.2 发布流水线
@@ -279,22 +279,22 @@ LibreChat 主仓库 MIT；Open WebUI 当前许可证含品牌限制及例外；D
 ### 6.3 备份与运维
 
 - 拟定目标：初期 RPO ≤24 小时、RTO ≤2 小时；以恢复演练实际测量为准，不把目标写为已达成。
-- 每日数据库一致性备份与文件增量备份，发布前再做可恢复备份；加密复制到独立存储，建议 7 日每日 + 4 周每周保留。
+- 每日数据库一致性备份与文件增量备份，发布前再做可恢复备份；加密复制到独立存储，当前 workflow 每日对象保留 35 天，发布回滚快照另保留；聊天/附件备份在 R3 接入，不备份改革前的测试数据。
 - MongoDB、PostgreSQL、文件本体及跨库关联映射必须能恢复到一致状态；小规模首发可暂停写入/排空任务后取协调快照，不能把互相不匹配的三个时间点称为完整备份。
 - 密钥/配置另行保管；定期在隔离环境恢复并核对关联、附件、权限和工作流。禁止在生产直接覆盖恢复作演练。
 - 日志轮转、存储配额、磁盘告警、证书自动续期纳入部署；入口修改先校验配置再重载，保留现有两个站点。
-- 首次自动发布前必须完成 DNS/证书、独立部署身份、镜像拉取、受保护 Secrets、预算、备份恢复、资源试验与公开访问鉴权。
+- 内部 workflow 自动发布需独立部署身份、镜像拉取、受保护 Secrets 与加密异地存储可用；公开产品首发另需 DNS/证书、预算与公开鉴权。完整恢复/容量/产品验收由用户统一手动执行，未验收不宣称达成 RPO/RTO。
 
 ## 7. 替换、清理和防止只增不减
 
 | 当前资产 | 计划处置 | 删除门槛 |
 | --- | --- | --- |
 | `frontend/app/globals.css`、布局/画布组件 | 提取并迁移已有视觉资产，保留 React Flow 交互 | 新客户端视觉/E2E 通过后删除旧运行入口与重复 token |
-| `backend/main.py` 聊天编排、`routers/chat.py`、`chat_db.py`、旧 Socket 状态 | 由成熟聊天内核接管 | 会话迁移核对、鉴权/刷新/流式/取消验收后移除旧入口 |
-| `conversation_manager.py`、`harness.py`、`execution_control.py` | LangGraph 状态与审批运行时接管；保留业务约束和测试用例 | 恢复/取消/重复执行实测通过，旧 checkpoint 归档迁移完成 |
+| `backend/main.py` 聊天编排、`routers/chat.py`、`chat_db.py`、旧 Socket 状态 | 由成熟聊天内核接管 | 全新数据切换、鉴权/刷新/流式/取消验收后移除旧入口 |
+| `conversation_manager.py`、`harness.py`、`execution_control.py` | LangGraph 状态与审批运行时接管；保留业务约束和测试用例 | 恢复/取消/重复执行实测通过，旧测试任务停止、旧 checkpoint 不迁移 |
 | `web_search_bridge.py`、`perception/service.py` 及 provider | 由唯一 research/ingestion 服务替换；保留有效 SSRF/质量回归样本 | 每个调用方切换、质量集通过、冗余配置和依赖同次清理 |
 | `executor.py` 的模拟兜底 | 删除生产模拟成功；mock 限测试夹具 | R5 真实工具结果与产物校验通过 |
-| `database.py:create_all`、原 JSON 数据 | 改为受版本控制的数据演进及迁移 | 完成备份、导入/回滚演练；旧数据不随代码删除 |
+| `database.py:create_all`、原 JSON 数据 | 改为受版本控制的数据演进及迁移 | 新数据迁移/回滚验证；旧测试数据不迁移或备份，清理仍核对资源范围 |
 | 开发 Dockerfile / Compose、`scripts/docker-clean.sh` | 原位完善开发/生产职责；清理脚本限定 OrchestrAI 资源 | 禁止共享主机全局 prune 或按模糊名称强制删镜像 |
 | 两份项目状态文档 | 本轮合并为本文件 | 旧原件已在仓库外保存；README 只指向一个事实来源 |
 
@@ -317,7 +317,7 @@ R0 文档验证已完成：文档本地链接、UTF-8、格式和 `git diff --ch
 
 R1 本轮实际验证见 5.2：隔离产品构建、浏览器真实交互、真实模型/搜索/附件、两种持久 checkpointer 的崩溃恢复均有记录；不是正式仓库 CI 或生产验收。原工程全量前后端测试未复跑。153 文件基线比较仅本 overview 变化，其余业务源码与用户未提交修改均保留；此轮未删除业务代码。正式仓库只同步本文件，未迁入依赖、试验上游源码、数据库、环境文件或生成物。
 
-**下一步为 R2 收尾**：先读本文件与规则，核查本轮工作树；远端 CI/Rulesets 已接通；按用户安排暂缓凭据填写，后续完成 5.3 的云端激活清单、异地加密恢复及真实部署/回滚。随后推进 R3，移入正式聊天/上传内核并同步删除旧调用链。完整聊天栈 Linux 容量、许可证/SPDX、Lighthouse、预算原子预留、真实 embedding 仍未完成；不得把内部 workflow 就绪写成整个产品上线。
+**下一步为 R2 收尾**：先读本文件与规则，核查本轮工作树；远端 CI/Rulesets 已接通；凭据已填写，受限身份和加密存储已接通；完成本次 CI/main 自动首发，完整恢复/容量等由用户统一手动验收。随后推进 R3，移入正式聊天/上传内核并同步删除旧调用链。完整聊天栈 Linux 容量、许可证/SPDX、Lighthouse、预算原子预留、真实 embedding 仍未完成；不得把内部 workflow 就绪写成整个产品上线。
 
 ## 9. 选型依据（2026-10-11 核查）
 

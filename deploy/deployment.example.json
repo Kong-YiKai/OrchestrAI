@@ -2,5 +2,6 @@
   "image_repository": "ghcr.io/kong-yikai/orchestrai/workflow",
   "age_recipient": "REPLACE_WITH_PUBLIC_AGE_RECIPIENT",
   "backup_remote": "orchestrai-backup:BUCKET/orchestrai/workflow",
+  "backup_storage_verified": false,
   "restore_drill_verified": false
 }

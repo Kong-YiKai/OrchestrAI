@@ -11,9 +11,17 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
+import traceback
 
 ROOT = Path('/opt/orchestrai')
+
+def digest_stream(source):
+    digest = hashlib.sha256()
+    for chunk in iter(lambda: source.read(1024 * 1024), b''):
+        digest.update(chunk)
+    return digest.hexdigest()
 
 def config_digest(directory):
     digest = hashlib.sha256()
@@ -50,8 +58,8 @@ class Deployment:
             '-f',str(self.root / 'deploy/compose.yml'),'-p','orchestrai-production',*args],
             check=True, env=env, timeout=600, **kwargs)
 
-    def backup(self, manifest, policy):
-        backup = self.root / 'backups' / f"{manifest['sequence']}-{manifest['revision']}.dump.age"
+    def backup(self, manifest, policy, name=None):
+        backup = self.root / 'backups' / (name or f"{manifest['sequence']}-{manifest['revision']}.dump.age")
         backup.parent.mkdir(mode=0o700, exist_ok=True)
         # Pipe pg_dump to age; no plaintext backup is written on the host.
         dump = subprocess.Popen(['docker','compose','--env-file',str(self.root / 'secrets/production.env'),
@@ -72,7 +80,7 @@ class Deployment:
         # Read back and compare the encrypted bytes without needing the recovery key.
         reader = subprocess.Popen(['rclone','--config',str(self.root / 'secrets/rclone.conf'),'cat',target],stdout=subprocess.PIPE,env=self.env)
         try:
-            remote_hash = hashlib.file_digest(reader.stdout,'sha256').hexdigest()
+            remote_hash = digest_stream(reader.stdout)
             if reader.wait(timeout=300) != 0:
                 raise RuntimeError('backup readback failed')
         finally:
@@ -80,9 +88,29 @@ class Deployment:
             if reader.poll() is None:
                 reader.kill(); reader.wait()
         with backup.open('rb') as source:
-            if remote_hash != hashlib.file_digest(source,'sha256').hexdigest():
+            if remote_hash != digest_stream(source):
                 raise RuntimeError('backup readback mismatch')
         return {'object':target, 'sha256':remote_hash}
+
+    def daily_backup(self, manifest, policy):
+        name = time.strftime('daily-%Y%m%dT%H%M%SZ.dump.age', time.gmtime())
+        result = self.backup(manifest, policy, name)
+        (self.root / 'state/last-backup.json').write_text(json.dumps(dict(result, finished_at=int(time.time()))))
+        # Expire only our daily objects in this service's prefix after 35 days.
+        # Release and rollback snapshots are not affected.
+        remote = policy['backup_remote'].rstrip('/')
+        names = subprocess.check_output(['rclone','--config',str(self.root / 'secrets/rclone.conf'),
+            'lsf',remote,'--files-only','--max-depth','1'],text=True,timeout=300,env=self.env).splitlines()
+        for candidate in names:
+            if not re.fullmatch(r'daily-[0-9]{8}T[0-9]{6}Z\.dump\.age', candidate):
+                continue
+            from datetime import datetime, timezone
+            created = datetime.strptime(candidate, 'daily-%Y%m%dT%H%M%SZ.dump.age').replace(tzinfo=timezone.utc).timestamp()
+            if created < time.time() - 35 * 86400:
+                subprocess.run(['rclone','--config',str(self.root / 'secrets/rclone.conf'),
+                    'deletefile',remote+'/'+candidate],check=True,timeout=300,env=self.env)
+                (self.root / 'backups' / candidate).unlink(missing_ok=True)
+        print(json.dumps({'backup':'verified','retention_days':35}))
 
     def activate(self, manifest):
         self.compose(manifest,'up','-d','--no-deps','--wait','--wait-timeout','90','workflow-api','workflow-worker')
@@ -135,13 +163,22 @@ def main():
     if os.geteuid() != 0:
         raise RuntimeError('use the installed root-owned forced command')
     os.umask(0o077)
-    data = sys.stdin.buffer.read(4097)
-    if len(data) > 4096:
-        raise ValueError('manifest too large')
-    manifest = json.loads(data)
+    daily = sys.argv[1:] == ['--backup']
+    if sys.argv[1:] and not daily:
+        raise ValueError('invalid controller arguments')
+    if not daily:
+        data = sys.stdin.buffer.read(16385)
+        if len(data) > 16384:
+            raise ValueError('manifest too large')
+        request = json.loads(data)
+        if set(request) != {'manifest', 'registry_username', 'registry_token'}:
+            raise ValueError('invalid deployment request')
+        manifest = request['manifest']
+        if not re.fullmatch(r'[A-Za-z0-9_-]{1,100}', request['registry_username']):
+            raise ValueError('invalid registry identity')
     policy = json.loads((ROOT / 'secrets/deployment.json').read_text())
-    if not policy.get('restore_drill_verified'):
-        raise ValueError('verify encrypted offsite restore before enabling deployment')
+    if policy.get('backup_storage_verified') is not True:
+        raise ValueError('verify encrypted offsite storage before enabling deployment')
     for binary in ('docker','age','rclone'):
         if not shutil.which(binary):
             raise RuntimeError(f'missing {binary}')
@@ -153,13 +190,26 @@ def main():
         fcntl.flock(lock,fcntl.LOCK_EX)
         current_path = state / 'current.json'
         current = json.loads(current_path.read_text()) if current_path.exists() else None
+        if daily:
+            if current:
+                Deployment().daily_backup(current,policy)
+            return
         validate(manifest,policy,current,config_digest(ROOT / 'deploy'))
-        Deployment().release(manifest,policy,current)
+        # The repo-scoped Actions token expires after this job. Never install a
+        # developer's persistent token or leave registry credentials on the host.
+        with tempfile.TemporaryDirectory(prefix='registry-',dir=state) as auth:
+            deployment = Deployment()
+            deployment.env['DOCKER_CONFIG'] = auth
+            subprocess.run(['docker','login','ghcr.io','--username',request['registry_username'],'--password-stdin'],
+                input=request['registry_token'],text=True,capture_output=True,check=True,timeout=30,env=deployment.env)
+            deployment.release(manifest,policy,current)
 
 if __name__ == '__main__':
     try:
         main()
     except Exception as error:
         # No command arguments, environment, or backup credentials in CI logs.
+        if ROOT.exists() and os.geteuid() == 0:
+            (ROOT / 'state/controller-error.log').write_text(traceback.format_exc())
         print(f'Deployment failed ({type(error).__name__}); inspect restricted host logs.',file=sys.stderr)
         sys.exit(1)

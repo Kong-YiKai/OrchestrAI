@@ -1,0 +1,10 @@
+[Unit]
+Description=OrchestrAI workflow encrypted offsite backup
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=root
+UMask=0077
+ExecStart=/usr/bin/python3 -I /opt/orchestrai/deploy/release.py --backup

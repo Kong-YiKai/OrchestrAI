@@ -185,6 +185,9 @@ jobs:
     needs: publish
     runs-on: ubuntu-latest
     environment: production
+    permissions:
+      contents: read
+      packages: read
     concurrency:
       group: orchestrai-production
       cancel-in-progress: false
@@ -195,10 +198,11 @@ jobs:
           DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          REGISTRY_TOKEN: ${{ github.token }}
         run: |
           umask 077
           mkdir -p "$HOME/.ssh"
           printf '%s\n' "$DEPLOY_KEY" > "$HOME/.ssh/id_ed25519"
           printf '%s\n' "$KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           trap 'rm -f "$HOME/.ssh/id_ed25519"' EXIT
-          printf '%s' "$MANIFEST" | ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o IPQoS=none -o ConnectTimeout=20 "orchestrai-deploy@$DEPLOY_HOST" release
+          python -c 'import json,os; print(json.dumps(dict(manifest=json.loads(os.environ["MANIFEST"]),registry_username=os.environ["GITHUB_ACTOR"],registry_token=os.environ["REGISTRY_TOKEN"])))' | ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o IPQoS=none -o ConnectTimeout=20 "orchestrai-deploy@$DEPLOY_HOST" release
