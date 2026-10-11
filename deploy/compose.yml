@@ -1,0 +1,106 @@
+name: orchestrai
+x-app: &app
+  image: ${WORKFLOW_IMAGE:-orchestrai/workflow:local}
+  init: true
+  restart: unless-stopped
+  read_only: true
+  tmpfs: [/tmp:size=16m]
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  mem_limit: 256m
+  cpus: 0.5
+  environment: &workflow-env
+    DATABASE_URL: postgresql://workflow:${WORKFLOW_DB_PASSWORD:?required}@postgres:5432/workflow
+    REDIS_URL: redis://:${REDIS_PASSWORD:?required}@redis:6379/1
+    DELEGATION_SECRET: ${DELEGATION_SECRET:?required}
+  logging: &logs
+    driver: json-file
+    options: { max-size: 10m, max-file: '3' }
+  networks: [internal]
+
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:-orchestrai/postgres:local}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?required}
+      WORKFLOW_DB_PASSWORD: ${WORKFLOW_DB_PASSWORD:?required}
+    volumes:
+      - postgres:/var/lib/postgresql/data
+      - ./postgres-init.sh:/docker-entrypoint-initdb.d/10-workflow.sh:ro
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U postgres -d postgres']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    mem_limit: 256m
+    cpus: 0.5
+    logging: *logs
+    networks: [internal]
+  redis:
+    image: ${REDIS_IMAGE:-orchestrai/redis:local}
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?required}
+    command: [sh, -c, 'exec redis-server --requirepass "$$REDIS_PASSWORD" --appendonly yes --appendfsync everysec --maxmemory-policy noeviction']
+    volumes: [redis:/data]
+    healthcheck:
+      test: [CMD-SHELL, 'REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping | grep -q PONG']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    mem_limit: 96m
+    cpus: 0.25
+    logging: *logs
+    networks: [internal]
+  migrate:
+    <<: *app
+    restart: 'no'
+    profiles: [tools]
+    command: [node, src/migrate.mjs]
+    depends_on:
+      postgres: { condition: service_healthy }
+  workflow-api:
+    <<: *app
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:8090/health/ready',{signal:AbortSignal.timeout(4000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    # No public port: the authenticated chat delegation adapter is delivered in R3.
+  workflow-worker:
+    <<: *app
+    command: [node, src/worker.mjs]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+  smoke:
+    <<: *app
+    restart: 'no'
+    profiles: [tools]
+    command: [node, src/smoke.mjs]
+  tests:
+    <<: *app
+    image: orchestrai/workflow-test:local
+    restart: 'no'
+    profiles: [tools]
+    command: [node, --test, --test-concurrency=1, tests/workflow.test.mjs]
+    environment:
+      <<: *workflow-env
+      NODE_ENV: test
+      INTEGRATION: '1'
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+networks:
+  internal:
+    internal: true
+volumes:
+  postgres:
+  redis:

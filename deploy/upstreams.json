@@ -1,0 +1,17 @@
+{
+  "librechat": {
+    "repository": "LibreChat-AI/LibreChat",
+    "version": "v0.8.8",
+    "commit": "e8f3be08623663d4ad7f7241e693c94469b63bb0",
+    "sha256": "54b650e13b75cc41fb1a4efb70f6e5f27ba43d956d12ca66f86b6623bb9fcf71",
+    "license": "MIT (subpackages require separate audit)",
+    "patch": "deploy/patches/librechat-ui.patch"
+  },
+  "rag": {
+    "repository": "LibreChat-AI/rag-api",
+    "version": "v0.9.0",
+    "commit": "4985b37b8b5d4519d68eceedfef1e63624012f9d",
+    "sha256": "472934e8baad8a90b4a7292a99935b60cd2b24d03fd1c3f4038ffc598bd357ff",
+    "license": "MIT"
+  }
+}
