@@ -1,0 +1,1149 @@
+--- a/client/src/App.jsx
++++ b/client/src/App.jsx
+@@ -14,6 +14,7 @@
+ import { initializeFontSize } from '~/store/fontSize';
+ import { LiveAnnouncer } from '~/a11y';
+ import { router } from './routes';
++import { orchestraTheme } from './components/Orchestra/theme';
+ 
+ const App = () => {
+   const { setError } = useApiErrorBoundary();
+@@ -55,6 +56,7 @@
+             // Only pass initialTheme and themeRGB if environment theme exists
+             // This allows localStorage values to persist when no env theme is set
+             {...(envTheme && { initialTheme: 'system', themeRGB: envTheme })}
++            themeDefinition={orchestraTheme}
+           >
+             {/* The ThemeProvider will automatically:
+                 1. Apply dark/light mode classes
+--- a/client/src/routes/Root.tsx
++++ b/client/src/routes/Root.tsx
+@@ -3,7 +3,6 @@
+ import { Outlet } from 'react-router-dom';
+ import { useMediaQuery } from '@librechat/client';
+ import {
+-  UnifiedSidebar,
+   SIDEBAR_TRANSITION,
+   MOBILE_DRAWER_WIDTH_VAR,
+   MOBILE_DRAWER_STRIP_WIDTH,
+@@ -28,6 +27,7 @@
+   useCatalogWarmup,
+   useAgentsMap,
+   useFileMap,
++  useLocalize,
+ } from '~/hooks';
+ import KeyboardShortcutsDialog from '~/components/Nav/KeyboardShortcutsDialog';
+ import KeyboardDeleteDialog from '~/components/Nav/KeyboardDeleteDialog';
+@@ -42,6 +42,8 @@
+ import { useHealthCheck } from '~/data-provider';
+ import { Banner } from '~/components/Banners';
+ import store from '~/store';
++import OrchestraContext from '~/components/Orchestra/Context';
++import OrchestraSidebar from '~/components/Orchestra/Sidebar';
+ 
+ /** Isolates keyboard shortcut listeners so they only mount after auth. */
+ function KeyboardShortcutsProvider() {
+@@ -55,6 +57,7 @@
+ }
+ 
+ export default function Root() {
++  const localize = useLocalize();
+   const [showTerms, setShowTerms] = useState(false);
+   const [bannerHeight, setBannerHeight] = useState(0);
+   /** Shared with the drawer so the two agree on the breakpoint-transition frame. */
+@@ -167,7 +170,7 @@
+                     {/* The drawer stops being painted once it is closed and
+                         settled, so it needs the same travel window the scrim and
+                         the pane's `inert` read. */}
+-                    <UnifiedSidebar isSliding={isSliding} />
++                    <OrchestraSidebar isSliding={isSliding} />
+                     <div
+                       ref={paneRef}
+                       /** Focus target of last resort when the drawer closes on a
+@@ -186,8 +189,17 @@
+                        *  too late and drops too early. */
+                       inert={isSmallScreen && (sidebarExpanded || isSliding) ? '' : undefined}
+                     >
++                      <div className="flex shrink-0 items-center justify-between border-b border-border-light bg-surface-primary-alt px-6 py-4">
++                        <span className="text-sm font-semibold tracking-wide text-text-primary">
++                          {localize('com_orchestra_title')}
++                        </span>
++                        <span className="rounded-full bg-surface-active px-3 py-1 text-xs text-accent-primary">
++                          {localize('com_orchestra_trial')}
++                        </span>
++                      </div>
+                       <Outlet />
+                     </div>
++                    <OrchestraContext />
+                     {/* Without the strip the scrim exists only for the travel:
+                       through a close that began while the strip was still on
+                       (disabling it unmounts the scrim at once, but the drawer
+--- a/client/src/routes/index.tsx
++++ b/client/src/routes/index.tsx
+@@ -136,6 +136,10 @@
+               element: <ChatRoute />,
+             },
+             {
++              path: 'orchestra',
++              element: <Navigate to="/c/new" replace />,
++            },
++            {
+               path: 'search',
+               element: <Search />,
+             },
+--- a/client/src/components/UnifiedSidebar/UnifiedSidebar.tsx
++++ b/client/src/components/UnifiedSidebar/UnifiedSidebar.tsx
+@@ -36,7 +36,7 @@
+  * and the active panel — not the sidebar shell, resize logic, or icon strip.
+  * This works because Recoil subscriptions don't propagate to parent components.
+  */
+-function SidebarChatProvider({ children }: { children: ReactNode }) {
++export function SidebarChatProvider({ children }: { children: ReactNode }) {
+   const chatHelpers = useChatHelpers(0);
+   const sidebarFormMethods = useForm<ChatFormValues>({ defaultValues: { text: '' } });
+   return (
+--- a/client/src/locales/en/translation.json
++++ b/client/src/locales/en/translation.json
+@@ -3057,5 +3057,16 @@
+   "com_insights_invalid_date_range": "Choose an end date after the start date, within {{days}} days.",
+   "com_insights_sparkline_accessibility": "{{label}} over time",
+   "com_nav_mobile_drawer_strip": "Show chat beside the sidebar on mobile",
+-  "com_nav_mobile_drawer_strip_info": "The sidebar stops short of the edge so a strip of the conversation stays visible. Tapping it closes the sidebar."
++  "com_nav_mobile_drawer_strip_info": "The sidebar stops short of the edge so a strip of the conversation stays visible. Tapping it closes the sidebar.",
++  "com_orchestra_context": "工作上下文",
++  "com_orchestra_hint": "OrchestrAI · 对话与工作流，保持同一份上下文。",
++  "com_orchestra_session": "当前会话",
++  "com_orchestra_files": "我的文件",
++  "com_orchestra_empty": "还没有上传文件",
++  "com_orchestra_canvas": "打开 / 收起工作流画布",
++  "com_orchestra_canvas_hint": "R1 画布为布局验证示例；尚未接入执行服务。",
++  "com_orchestra_badge": "R1",
++  "com_orchestra_brand": "OrchestrAI",
++  "com_orchestra_title": "Orchestra",
++  "com_orchestra_trial": "OrchestrAI · R1"
+ }
+--- a/client/package.json
++++ b/client/package.json
+@@ -61,6 +61,7 @@
+     "@react-spring/web": "^9.7.5",
+     "@tanstack/react-query": "^4.28.0",
+     "@tanstack/react-table": "^8.11.7",
++    "@xyflow/react": "12.10.2",
+     "class-variance-authority": "^0.7.1",
+     "clsx": "^2.1.1",
+     "copy-to-clipboard": "^3.3.3",
+--- a/package.json
++++ b/package.json
+@@ -271,5 +271,8 @@
+       "admin/",
+       "packages/"
+     ]
++  },
++  "dependencies": {
++    "@langchain/langgraph-checkpoint-postgres": "1.0.4"
+   }
+ }
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -13,6 +13,9 @@
+         "client",
+         "packages/*"
+       ],
++      "dependencies": {
++        "@langchain/langgraph-checkpoint-postgres": "1.0.4"
++      },
+       "devDependencies": {
+         "@antithesishq/bombadil": "0.6.1",
+         "@axe-core/playwright": "^4.10.1",
+@@ -890,6 +893,7 @@
+         "@react-spring/web": "^9.7.5",
+         "@tanstack/react-query": "^4.28.0",
+         "@tanstack/react-table": "^8.11.7",
++        "@xyflow/react": "12.10.2",
+         "class-variance-authority": "^0.7.1",
+         "clsx": "^2.1.1",
+         "copy-to-clipboard": "^3.3.3",
+@@ -8686,9 +8690,6 @@
+       "cpu": [
+         "arm"
+       ],
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "LGPL-3.0-or-later",
+       "optional": true,
+       "os": [
+@@ -8705,9 +8706,6 @@
+       "cpu": [
+         "arm64"
+       ],
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "LGPL-3.0-or-later",
+       "optional": true,
+       "os": [
+@@ -8724,9 +8722,6 @@
+       "cpu": [
+         "ppc64"
+       ],
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "LGPL-3.0-or-later",
+       "optional": true,
+       "os": [
+@@ -8743,9 +8738,6 @@
+       "cpu": [
+         "riscv64"
+       ],
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "LGPL-3.0-or-later",
+       "optional": true,
+       "os": [
+@@ -8762,9 +8754,6 @@
+       "cpu": [
+         "s390x"
+       ],
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "LGPL-3.0-or-later",
+       "optional": true,
+       "os": [
+@@ -8781,9 +8770,6 @@
+       "cpu": [
+         "x64"
+       ],
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "LGPL-3.0-or-later",
+       "optional": true,
+       "os": [
+@@ -8800,9 +8786,6 @@
+       "cpu": [
+         "arm64"
+       ],
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "LGPL-3.0-or-later",
+       "optional": true,
+       "os": [
+@@ -8819,9 +8802,6 @@
+       "cpu": [
+         "x64"
+       ],
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "LGPL-3.0-or-later",
+       "optional": true,
+       "os": [
+@@ -8838,9 +8818,6 @@
+       "cpu": [
+         "arm"
+       ],
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "Apache-2.0",
+       "optional": true,
+       "os": [
+@@ -8863,9 +8840,6 @@
+       "cpu": [
+         "arm64"
+       ],
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "Apache-2.0",
+       "optional": true,
+       "os": [
+@@ -8888,9 +8862,6 @@
+       "cpu": [
+         "ppc64"
+       ],
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "Apache-2.0",
+       "optional": true,
+       "os": [
+@@ -8913,9 +8884,6 @@
+       "cpu": [
+         "riscv64"
+       ],
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "Apache-2.0",
+       "optional": true,
+       "os": [
+@@ -8938,9 +8906,6 @@
+       "cpu": [
+         "s390x"
+       ],
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "Apache-2.0",
+       "optional": true,
+       "os": [
+@@ -8963,9 +8928,6 @@
+       "cpu": [
+         "x64"
+       ],
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "Apache-2.0",
+       "optional": true,
+       "os": [
+@@ -8988,9 +8950,6 @@
+       "cpu": [
+         "arm64"
+       ],
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "Apache-2.0",
+       "optional": true,
+       "os": [
+@@ -9012,9 +8971,6 @@
+       "integrity": "sha512-f+eZJZIQNEEd26RPSW+76chwOf1XtA2Y/O+5ocVyLliHkeih3e+jhLVBdNTd2rS3IbNXK8+ug93Vf5ZXtF5Lxg==",
+       "cpu": [
+         "x64"
+-      ],
+-      "libc": [
+-        "musl"
+       ],
+       "license": "Apache-2.0",
+       "optional": true,
+@@ -10331,6 +10287,22 @@
+         "socks": {
+           "optional": true
+         }
++      }
++    },
++    "node_modules/@langchain/langgraph-checkpoint-postgres": {
++      "version": "1.0.4",
++      "resolved": "https://registry.npmjs.org/@langchain/langgraph-checkpoint-postgres/-/langgraph-checkpoint-postgres-1.0.4.tgz",
++      "integrity": "sha512-wuCPq7VVqwi0+nQC5GOmheoXGJHAybgXbkA9Nn0J8nYW61WFJ3uqb4wyMbLFhAlya99EaxNNsi3FzdzV2COSzw==",
++      "license": "MIT",
++      "dependencies": {
++        "pg": "^8.12.0"
++      },
++      "engines": {
++        "node": ">=18"
++      },
++      "peerDependencies": {
++        "@langchain/core": "^1.1.44",
++        "@langchain/langgraph-checkpoint": "^1.0.0"
+       }
+     },
+     "node_modules/@langchain/langgraph-sdk": {
+@@ -15617,9 +15589,6 @@
+         "arm64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -15637,9 +15606,6 @@
+         "arm64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -15657,9 +15623,6 @@
+         "ppc64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -15677,9 +15640,6 @@
+         "s390x"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -15697,9 +15657,6 @@
+         "x64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -15717,9 +15674,6 @@
+         "x64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -19497,6 +19451,38 @@
+       "integrity": "sha512-b5o1I6aLNeYlU/3CPlj/Z91ybk1gUsKT+5NAJI+2W4UjvS5KLG28K9v5UvNoFVjHV8PajVZ00RH3vnjyQO7ZAw==",
+       "license": "MIT"
+     },
++    "node_modules/@xyflow/react": {
++      "version": "12.10.2",
++      "resolved": "https://registry.npmjs.org/@xyflow/react/-/react-12.10.2.tgz",
++      "integrity": "sha512-CgIi6HwlcHXwlkTpr0fxLv/0sRVNZ8IdwKLzzeCscaYBwpvfcH1QFOCeaTCuEn1FQEs/B8CjnTSjhs8udgmBgQ==",
++      "license": "MIT",
++      "dependencies": {
++        "@xyflow/system": "0.0.76",
++        "classcat": "^5.0.3",
++        "zustand": "^4.4.0"
++      },
++      "peerDependencies": {
++        "react": ">=17",
++        "react-dom": ">=17"
++      }
++    },
++    "node_modules/@xyflow/system": {
++      "version": "0.0.76",
++      "resolved": "https://registry.npmjs.org/@xyflow/system/-/system-0.0.76.tgz",
++      "integrity": "sha512-hvwvnRS1B3REwVDlWexsq7YQaPZeG3/mKo1jv38UmnpWmxihp14bW6VtEOuHEwJX2FvzFw8k77LyKSk/wiZVNA==",
++      "license": "MIT",
++      "dependencies": {
++        "@types/d3-drag": "^3.0.7",
++        "@types/d3-interpolate": "^3.0.4",
++        "@types/d3-selection": "^3.0.10",
++        "@types/d3-transition": "^3.0.8",
++        "@types/d3-zoom": "^3.0.8",
++        "d3-drag": "^3.0.0",
++        "d3-interpolate": "^3.0.1",
++        "d3-selection": "^3.0.0",
++        "d3-zoom": "^3.0.0"
++      }
++    },
+     "node_modules/abbrev": {
+       "version": "1.1.1",
+       "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.1.1.tgz",
+@@ -21452,6 +21438,12 @@
+       "funding": {
+         "url": "https://polar.sh/cva"
+       }
++    },
++    "node_modules/classcat": {
++      "version": "5.0.5",
++      "resolved": "https://registry.npmjs.org/classcat/-/classcat-5.0.5.tgz",
++      "integrity": "sha512-JhZUT7JFcQy/EzW605k/ktHtncoo9vnyW/2GspNYwFlN1C/WmjuV/xtS04e9SOkL2sTdw0VAZ2UGCcQ9lR6p6w==",
++      "license": "MIT"
+     },
+     "node_modules/classnames": {
+       "version": "2.5.1",
+@@ -29872,9 +29864,6 @@
+         "arm64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MPL-2.0",
+       "optional": true,
+       "os": [
+@@ -29896,9 +29885,6 @@
+         "arm64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "MPL-2.0",
+       "optional": true,
+       "os": [
+@@ -29920,9 +29906,6 @@
+         "x64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MPL-2.0",
+       "optional": true,
+       "os": [
+@@ -29944,9 +29927,6 @@
+         "x64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "MPL-2.0",
+       "optional": true,
+       "os": [
+@@ -33968,6 +33948,95 @@
+       "resolved": "https://registry.npmjs.org/pend/-/pend-1.2.0.tgz",
+       "integrity": "sha512-F3asv42UuXchdzt+xXqfW1OGlVBe+mxa2mqI0pg5yAHZPvFmY3Y6drSf/GQ1A86WgWEN9Kzh/WrgKa6iGcHXLg==",
+       "license": "MIT"
++    },
++    "node_modules/pg": {
++      "version": "8.23.1",
++      "resolved": "https://registry.npmjs.org/pg/-/pg-8.23.1.tgz",
++      "integrity": "sha512-aL96AHANtWjPLDOLqnhx+ngp9+UK7ETEU8VJrDCGvsSSi/mGLcWYsS6Herg7lmaBJe4uwrfqsa7gTEFaSizDoQ==",
++      "license": "MIT",
++      "dependencies": {
++        "pg-connection-string": "^2.14.1",
++        "pg-pool": "^3.14.0",
++        "pg-protocol": "^1.16.1",
++        "pg-types": "2.2.0",
++        "pgpass": "1.0.5"
++      },
++      "engines": {
++        "node": ">= 16.0.0"
++      },
++      "optionalDependencies": {
++        "pg-cloudflare": "^1.4.1"
++      },
++      "peerDependencies": {
++        "pg-native": ">=3.0.1"
++      },
++      "peerDependenciesMeta": {
++        "pg-native": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/pg-cloudflare": {
++      "version": "1.4.1",
++      "resolved": "https://registry.npmjs.org/pg-cloudflare/-/pg-cloudflare-1.4.1.tgz",
++      "integrity": "sha512-6PQbsFWZcp9EmJEwy5cGQ2La+AMWpP46lgbb8X+U/XsHIUweYDNCpeuKck5RxL2MdVFi7krbbEi5nX4Zh7JhrQ==",
++      "license": "MIT",
++      "optional": true
++    },
++    "node_modules/pg-connection-string": {
++      "version": "2.14.1",
++      "resolved": "https://registry.npmjs.org/pg-connection-string/-/pg-connection-string-2.14.1.tgz",
++      "integrity": "sha512-qR3kGNPBLpCNtz0evbKA0Y/MRFXwSSdT+pTJvYp/bXTcReZbvX1kzF0IyTc1QnxqF7AZbOeBhNL8R5mYQZV/MA==",
++      "license": "MIT"
++    },
++    "node_modules/pg-int8": {
++      "version": "1.0.1",
++      "resolved": "https://registry.npmjs.org/pg-int8/-/pg-int8-1.0.1.tgz",
++      "integrity": "sha512-WCtabS6t3c8SkpDBUlb1kjOs7l66xsGdKpIPZsg4wR+B3+u9UAum2odSsF9tnvxg80h4ZxLWMy4pRjOsFIqQpw==",
++      "license": "ISC",
++      "engines": {
++        "node": ">=4.0.0"
++      }
++    },
++    "node_modules/pg-pool": {
++      "version": "3.14.0",
++      "resolved": "https://registry.npmjs.org/pg-pool/-/pg-pool-3.14.0.tgz",
++      "integrity": "sha512-gKtPkFdQPU3DksooVLi9LsjZxrsBUZIpa+7aVx+LV5pNh0KzP4Zleud2po+ConrxbuXGBJ6Hfer6hdgpIBpBaw==",
++      "license": "MIT",
++      "peerDependencies": {
++        "pg": ">=8.0"
++      }
++    },
++    "node_modules/pg-protocol": {
++      "version": "1.16.1",
++      "resolved": "https://registry.npmjs.org/pg-protocol/-/pg-protocol-1.16.1.tgz",
++      "integrity": "sha512-p9VOFMiHB/ZbJATetbg+99PxssTVSQRnyuPSQ67mN1+1KBOjZaZ83ZQzltnxPhJwSsC3nwVjJ10DVJlerbFzLg==",
++      "license": "MIT"
++    },
++    "node_modules/pg-types": {
++      "version": "2.2.0",
++      "resolved": "https://registry.npmjs.org/pg-types/-/pg-types-2.2.0.tgz",
++      "integrity": "sha512-qTAAlrEsl8s4OiEQY69wDvcMIdQN6wdz5ojQiOy6YRMuynxenON0O5oCpJI6lshc6scgAY8qvJ2On/p+CXY0GA==",
++      "license": "MIT",
++      "dependencies": {
++        "pg-int8": "1.0.1",
++        "postgres-array": "~2.0.0",
++        "postgres-bytea": "~1.0.0",
++        "postgres-date": "~1.0.4",
++        "postgres-interval": "^1.1.0"
++      },
++      "engines": {
++        "node": ">=4"
++      }
++    },
++    "node_modules/pgpass": {
++      "version": "1.0.5",
++      "resolved": "https://registry.npmjs.org/pgpass/-/pgpass-1.0.5.tgz",
++      "integrity": "sha512-FdW9r/jQZhSeohs1Z3sI1yxFQNFvMcnmfuj4WBMUTxOrAyLMaTcE1aAMBiTlbMNaXvBCQuVi0R7hd8udDSP7ug==",
++      "license": "MIT",
++      "dependencies": {
++        "split2": "^4.1.0"
++      }
+     },
+     "node_modules/picocolors": {
+       "version": "1.1.1",
+@@ -35166,6 +35235,45 @@
+       "resolved": "https://registry.npmjs.org/postcss-value-parser/-/postcss-value-parser-4.2.0.tgz",
+       "integrity": "sha512-1NNCs6uurfkVbeXG4S8JFT9t19m45ICnif8zWLd5oPSZ50QnwMfK+H3jv408d4jw/7Bttv5axS5IiHoLaVNHeQ=="
+     },
++    "node_modules/postgres-array": {
++      "version": "2.0.0",
++      "resolved": "https://registry.npmjs.org/postgres-array/-/postgres-array-2.0.0.tgz",
++      "integrity": "sha512-VpZrUqU5A69eQyW2c5CA1jtLecCsN2U/bD6VilrFDWq5+5UIEVO7nazS3TEcHf1zuPYO/sqGvUvW62g86RXZuA==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=4"
++      }
++    },
++    "node_modules/postgres-bytea": {
++      "version": "1.0.1",
++      "resolved": "https://registry.npmjs.org/postgres-bytea/-/postgres-bytea-1.0.1.tgz",
++      "integrity": "sha512-5+5HqXnsZPE65IJZSMkZtURARZelel2oXUEO8rH83VS/hxH5vv1uHquPg5wZs8yMAfdv971IU+kcPUczi7NVBQ==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=0.10.0"
++      }
++    },
++    "node_modules/postgres-date": {
++      "version": "1.0.7",
++      "resolved": "https://registry.npmjs.org/postgres-date/-/postgres-date-1.0.7.tgz",
++      "integrity": "sha512-suDmjLVQg78nMK2UZ454hAG+OAW+HQPZ6n++TNDUX+L0+uUlLywnoxJKDou51Zm+zTCjrCl0Nq6J9C5hP9vK/Q==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=0.10.0"
++      }
++    },
++    "node_modules/postgres-interval": {
++      "version": "1.2.0",
++      "resolved": "https://registry.npmjs.org/postgres-interval/-/postgres-interval-1.2.0.tgz",
++      "integrity": "sha512-9ZhXKM/rw350N1ovuWHbGxnGh/SNJ4cnxHiM0rxE4VN41wsg8P8zWn9hv/buK00RP4WvlOyr/RBDiptyxVbkZQ==",
++      "license": "MIT",
++      "dependencies": {
++        "xtend": "^4.0.0"
++      },
++      "engines": {
++        "node": ">=0.10.0"
++      }
++    },
+     "node_modules/precond": {
+       "version": "0.2.3",
+       "resolved": "https://registry.npmjs.org/precond/-/precond-0.2.3.tgz",
+@@ -38473,6 +38581,15 @@
+         "node": ">=8.0"
+       }
+     },
++    "node_modules/split2": {
++      "version": "4.2.0",
++      "resolved": "https://registry.npmjs.org/split2/-/split2-4.2.0.tgz",
++      "integrity": "sha512-UcjcJOWknrNkF6PLX83qcHM6KHgVKNkV62Y8a5uYDVv9ydGQVwAHMKqHdJje1VTWpljG0WYpCDhrCdAOYH4TWg==",
++      "license": "ISC",
++      "engines": {
++        "node": ">= 10.x"
++      }
++    },
+     "node_modules/sprintf-js": {
+       "version": "1.0.3",
+       "resolved": "https://registry.npmjs.org/sprintf-js/-/sprintf-js-1.0.3.tgz",
+@@ -42021,7 +42138,6 @@
+       "version": "4.0.2",
+       "resolved": "https://registry.npmjs.org/xtend/-/xtend-4.0.2.tgz",
+       "integrity": "sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==",
+-      "dev": true,
+       "license": "MIT",
+       "engines": {
+         "node": ">=0.4"
+@@ -42176,6 +42292,34 @@
+       "integrity": "sha512-Eky7p2Z1Ig3NnbfodSPoARCjKBSTFMnE/ACsP1L/XJEfY4SdOFce19BsUCWVwL6K5ABZFy5J3bjcMWffX+YM3Q==",
+       "license": "MIT",
+       "peer": true
++    },
++    "node_modules/zustand": {
++      "version": "4.5.7",
++      "resolved": "https://registry.npmjs.org/zustand/-/zustand-4.5.7.tgz",
++      "integrity": "sha512-CHOUy7mu3lbD6o6LJLfllpjkzhHXSBlX8B9+qPddUsIfeF5S/UZ5q0kmCsnRqT1UHFQZchNFDDzMbQsuesHWlw==",
++      "license": "MIT",
++      "dependencies": {
++        "use-sync-external-store": "^1.2.2"
++      },
++      "engines": {
++        "node": ">=12.7.0"
++      },
++      "peerDependencies": {
++        "@types/react": ">=16.8",
++        "immer": ">=9.0.6",
++        "react": ">=16.8"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        },
++        "immer": {
++          "optional": true
++        },
++        "react": {
++          "optional": true
++        }
++      }
+     },
+     "node_modules/zwitch": {
+       "version": "2.0.4",
+@@ -42500,9 +42644,6 @@
+         "arm64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -42520,9 +42661,6 @@
+         "arm64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -42540,9 +42678,6 @@
+         "ppc64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -42560,9 +42695,6 @@
+         "s390x"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -42580,9 +42712,6 @@
+         "x64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -42600,9 +42729,6 @@
+         "x64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -43274,9 +43400,6 @@
+         "arm64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -43294,9 +43417,6 @@
+         "arm64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -43314,9 +43434,6 @@
+         "ppc64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -43334,9 +43451,6 @@
+         "s390x"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -43354,9 +43468,6 @@
+         "x64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -43374,9 +43485,6 @@
+         "x64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -44252,9 +44360,6 @@
+         "arm64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -44272,9 +44377,6 @@
+         "arm64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -44292,9 +44394,6 @@
+         "ppc64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -44312,9 +44411,6 @@
+         "s390x"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -44332,9 +44428,6 @@
+         "x64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -44352,9 +44445,6 @@
+         "x64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -44862,9 +44952,6 @@
+         "arm64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -44882,9 +44969,6 @@
+         "arm64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -44902,9 +44986,6 @@
+         "ppc64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -44922,9 +45003,6 @@
+         "s390x"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -44942,9 +45020,6 @@
+         "x64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "glibc"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+@@ -44962,9 +45037,6 @@
+         "x64"
+       ],
+       "dev": true,
+-      "libc": [
+-        "musl"
+-      ],
+       "license": "MIT",
+       "optional": true,
+       "os": [
+--- /dev/null
++++ b/client/src/components/Orchestra/Context.tsx
+@@ -0,0 +1,78 @@
++import { useState } from 'react';
++import { useParams } from 'react-router-dom';
++import { Button } from '@librechat/client';
++import { ReactFlow, Background, Controls, MarkerType } from '@xyflow/react';
++import { useFileMapContext } from '~/Providers';
++import { useLocalize } from '~/hooks';
++import '@xyflow/react/dist/style.css';
++
++const nodes = [
++  { id: 'query', position: { x: 30, y: 20 }, data: { label: 'Research' } },
++  { id: 'review', position: { x: 30, y: 140 }, data: { label: 'Approval' } },
++  { id: 'result', position: { x: 30, y: 260 }, data: { label: 'Artifact' } },
++];
++const edges = [
++  { id: 'qr', source: 'query', target: 'review', markerEnd: { type: MarkerType.ArrowClosed } },
++  { id: 'ra', source: 'review', target: 'result', markerEnd: { type: MarkerType.ArrowClosed } },
++];
++
++/** Uses upstream identity-scoped files and route state; owns no parallel chat store. */
++export default function Context() {
++  const localize = useLocalize();
++  const { conversationId } = useParams();
++  const files = useFileMapContext();
++  const [canvas, setCanvas] = useState(false);
++  return (
++    <aside
++      className="hidden h-full w-80 shrink-0 flex-col border-l border-border-light bg-surface-secondary p-5 xl:flex"
++      aria-label={localize('com_orchestra_context')}
++    >
++      <div className="mb-5 flex items-center justify-between">
++        <h2 className="font-semibold text-text-primary">{localize('com_orchestra_context')}</h2>
++        <span className="rounded-full bg-surface-active px-2 py-1 text-xs text-accent-primary">
++          {localize('com_orchestra_badge')}
++        </span>
++      </div>
++      <p className="mb-5 text-sm text-text-secondary">{localize('com_orchestra_hint')}</p>
++      <details className="rounded-xl border border-border-light bg-surface-primary p-4" open>
++        <summary className="cursor-pointer font-medium">
++          {localize('com_orchestra_session')}
++        </summary>
++        <p className="mt-3 break-all text-xs text-text-tertiary">{conversationId}</p>
++      </details>
++      <details className="mt-3 rounded-xl border border-border-light bg-surface-primary p-4" open>
++        <summary className="cursor-pointer font-medium">{localize('com_orchestra_files')}</summary>
++        <ul className="mt-3 space-y-2 text-sm text-text-secondary">
++          {Object.values(files ?? {}).map((file) => (
++            <li key={file.file_id} className="break-all">
++              {file.filename}
++            </li>
++          ))}
++        </ul>
++        {Object.keys(files ?? {}).length === 0 && (
++          <p className="mt-3 text-sm text-text-tertiary">{localize('com_orchestra_empty')}</p>
++        )}
++      </details>
++      <Button
++        className="mt-4"
++        variant="outline"
++        onClick={() => setCanvas(!canvas)}
++        aria-expanded={canvas}
++      >
++        {localize('com_orchestra_canvas')}
++      </Button>
++      {canvas && (
++        <div
++          className="mt-3 min-h-80 flex-1 rounded-xl border border-border-light bg-surface-primary"
++          aria-label={localize('com_orchestra_canvas')}
++        >
++          <ReactFlow nodes={nodes} edges={edges} fitView nodesDraggable nodesConnectable={false}>
++            <Background />
++            <Controls showInteractive={false} />
++          </ReactFlow>
++        </div>
++      )}
++      <p className="mt-4 text-xs text-text-tertiary">{localize('com_orchestra_canvas_hint')}</p>
++    </aside>
++  );
++}
+--- /dev/null
++++ b/client/src/components/Orchestra/Sidebar.tsx
+@@ -0,0 +1,65 @@
++import { useMediaQuery } from '@librechat/client';
++import { UnifiedSidebar } from '~/components/UnifiedSidebar';
++import { SidebarChatProvider } from '~/components/UnifiedSidebar/UnifiedSidebar';
++import ConversationsSection from '~/components/UnifiedSidebar/ConversationsSection';
++import useNewChat from '~/hooks/Chat/useNewChat';
++import { useAuthContext, useLocalize } from '~/hooks';
++
++function Desktop() {
++  const localize = useLocalize();
++  const { user, logout } = useAuthContext();
++  const { handleNewChatClick } = useNewChat();
++  return (
++    <nav
++      className="flex h-full w-64 shrink-0 flex-col border-r border-border-light bg-surface-secondary"
++      aria-label="OrchestrAI"
++    >
++      <a
++        href="/orchestra"
++        className="flex items-center gap-3 px-5 py-7 text-xl font-semibold tracking-tight"
++      >
++        <span
++          className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface-submit text-white"
++          aria-hidden="true"
++        >
++          O
++        </span>
++        {localize('com_orchestra_brand')}
++      </a>
++      <a
++        href="/c/new"
++        onClick={handleNewChatClick}
++        className="mx-4 rounded-xl border border-border-medium bg-surface-primary px-4 py-3 text-sm font-medium hover:bg-surface-hover"
++        aria-label={localize('com_ui_new_chat')}
++      >
++        + {localize('com_ui_new_chat')}
++      </a>
++      <div className="mx-4 mb-5 mt-4 rounded-xl bg-surface-active px-4 py-3 text-sm font-semibold text-accent-primary">
++        {localize('com_orchestra_title')}
++      </div>
++      <div className="min-h-0 flex-1">
++        <ConversationsSection />
++      </div>
++      <div className="m-4 rounded-xl border border-border-light bg-surface-primary p-4">
++        <p className="text-sm font-medium">{user?.name}</p>
++        <button
++          className="mt-2 text-xs text-text-tertiary hover:text-text-primary"
++          onClick={() => logout('/login')}
++        >
++          {localize('com_nav_log_out')}
++        </button>
++      </div>
++    </nav>
++  );
++}
++
++export default function Sidebar({ isSliding }: { isSliding: boolean }) {
++  const mobile = useMediaQuery('(max-width: 768px)');
++  // Keep upstream tested focus/swipe behavior on mobile during the R1 comparison.
++  if (mobile) return <UnifiedSidebar isSliding={isSliding} />;
++  return (
++    <SidebarChatProvider>
++      <Desktop />
++    </SidebarChatProvider>
++  );
++}
+--- /dev/null
++++ b/client/src/components/Orchestra/theme.ts
+@@ -0,0 +1,56 @@
++import type { ThemeDefinition } from '@librechat/client';
++
++/** OrchestrAI tokens mapped to the upstream semantic theme API, not selector overrides. */
++export const orchestraTheme: ThemeDefinition = {
++  version: 1,
++  name: 'orchestrai',
++  modes: {
++    light: {
++      appearance: {
++        controlRadius: '0.75rem',
++        surfaceRadius: '1rem',
++        largeSurfaceRadius: '1.5rem',
++        fontFamily: 'Inter, "Microsoft YaHei", "Noto Sans SC", sans-serif',
++      },
++      colors: {
++        'rgb-text-primary': '28 25 23',
++        'rgb-text-secondary': '63 58 53',
++        'rgb-text-tertiary': '109 102 96',
++        'rgb-text-muted': '109 102 96',
++        'rgb-surface-primary': '255 255 255',
++        'rgb-surface-primary-alt': '250 247 241',
++        'rgb-surface-secondary': '246 240 231',
++        'rgb-surface-tertiary': '240 233 221',
++        'rgb-surface-chat': '250 247 241',
++        'rgb-surface-hover': '244 237 224',
++        'rgb-surface-hover-alt': '240 233 221',
++        'rgb-surface-active': '255 243 224',
++        'rgb-surface-composer-hover': '250 247 241',
++        'rgb-header-primary': '250 247 241',
++        'rgb-border-light': '234 227 214',
++        'rgb-border-medium': '217 207 189',
++        'rgb-border-heavy': '217 207 189',
++        'rgb-accent-primary': '255 105 0',
++        'rgb-accent-primary-hover': '222 87 0',
++        'rgb-surface-submit': '255 105 0',
++        'rgb-surface-submit-hover': '222 87 0',
++        'rgb-brand-purple': '255 105 0',
++        'rgb-link': '180 73 0',
++      },
++    },
++    dark: {
++      colors: {
++        'rgb-text-primary': '250 247 241',
++        'rgb-text-secondary': '217 207 189',
++        'rgb-surface-primary': '40 35 31',
++        'rgb-surface-secondary': '28 25 23',
++        'rgb-surface-chat': '34 30 27',
++        'rgb-surface-tertiary': '55 47 41',
++        'rgb-header-primary': '34 30 27',
++        'rgb-accent-primary': '255 140 64',
++        'rgb-surface-submit': '222 87 0',
++        'rgb-brand-purple': '255 140 64',
++      },
++    },
++  },
++};

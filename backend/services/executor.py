@@ -6,6 +6,8 @@ from models.workflow import Workflow, WorkflowNode, NodeStatus, NodeResult, Exec
 from socket_manager import sio
 from config import settings
 from services.execution_control import execution_control
+from services.harness import record_execution_trace
+from services.observability.logger import log_event
 
 
 # Mock-mode timings. Kept small so tests stay fast; UI still feels like something
@@ -25,6 +27,13 @@ class NodeExecutor:
         self.mock = mock
 
     async def _log(self, node_id: str, line: str):
+        log_event(
+            event_type="execution_node_log",
+            session_id=self.session_id,
+            node_id=node_id,
+            agent="node_executor",
+            payload={"line": line},
+        )
         await sio.emit(
             "execution:node_log",
             {"node_id": node_id, "log_line": line},
@@ -33,9 +42,31 @@ class NodeExecutor:
 
     async def execute_workflow(self, workflow: Workflow):
         for node in sorted(workflow.nodes, key=lambda n: n.order):
+            if execution_control.is_session_killed(self.session_id):
+                await sio.emit(
+                    "execution:killed",
+                    {"session_id": self.session_id, "reason": "user_requested"},
+                    room=self.session_id,
+                )
+                return
             await self.execute_node(node, workflow.workflow_id)
 
     async def execute_node(self, node: WorkflowNode, workflow_id: str):
+        if execution_control.is_session_killed(self.session_id):
+            await sio.emit(
+                "execution:killed",
+                {"session_id": self.session_id, "reason": "user_requested"},
+                room=self.session_id,
+            )
+            return
+        await record_execution_trace(
+            event_type="execution_node_started",
+            session_id=self.session_id,
+            workflow_id=workflow_id,
+            node_id=node.node_id,
+            agent="node_executor",
+            payload={"mock": self.mock, "tool_type": node.tool_type.value},
+        )
         await sio.emit(
             "execution:node_started",
             {"node_id": node.node_id, "workflow_id": workflow_id},
@@ -46,7 +77,7 @@ class NodeExecutor:
         # touching any external service. Used by the canvas Run button for
         # demos and by tests to assert the event contract.
         if self.mock:
-            await self._execute_node_mock(node)
+            await self._execute_node_mock(node, workflow_id)
             return
 
         result: NodeResult | None = None
@@ -80,6 +111,14 @@ class NodeExecutor:
                 method = ExecutionMethod.simulated
                 await self._log(node.node_id, "✅ Simulation complete.")
             except Exception as e:
+                await record_execution_trace(
+                    event_type="execution_node_failed",
+                    session_id=self.session_id,
+                    workflow_id=workflow_id,
+                    node_id=node.node_id,
+                    agent="node_executor",
+                    payload={"error_type": type(e).__name__, "error": str(e)},
+                )
                 await sio.emit(
                     "execution:node_error",
                     {"node_id": node.node_id, "error": str(e)},
@@ -96,8 +135,16 @@ class NodeExecutor:
             },
             room=self.session_id,
         )
+        await record_execution_trace(
+            event_type="execution_node_complete",
+            session_id=self.session_id,
+            workflow_id=workflow_id,
+            node_id=node.node_id,
+            agent="node_executor",
+            payload={"execution_method": method.value if method else "simulated"},
+        )
 
-    async def _execute_node_mock(self, node: WorkflowNode):
+    async def _execute_node_mock(self, node: WorkflowNode, workflow_id: str):
         """Emit a realistic queued → running → complete sequence without any
         real API calls. Stages are tailored to the node's tool_type so demos
         look plausible, but no secrets or network are required.
@@ -157,6 +204,14 @@ class NodeExecutor:
             },
             room=self.session_id,
         )
+        await record_execution_trace(
+            event_type="execution_node_complete",
+            session_id=self.session_id,
+            workflow_id=workflow_id,
+            node_id=node.node_id,
+            agent="node_executor",
+            payload={"execution_method": method.value, "mock": True},
+        )
         await asyncio.sleep(MOCK_BETWEEN_NODES)
 
     async def _stop_node(self, node: WorkflowNode):
@@ -167,6 +222,13 @@ class NodeExecutor:
             "execution:node_stopped",
             {"node_id": node.node_id, "reason": "user_requested"},
             room=self.session_id,
+        )
+        await record_execution_trace(
+            event_type="execution_node_stopped",
+            session_id=self.session_id,
+            node_id=node.node_id,
+            agent="node_executor",
+            payload={"reason": "user_requested"},
         )
 
     async def _api_execute(self, node: WorkflowNode) -> NodeResult:

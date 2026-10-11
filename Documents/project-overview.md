@@ -1,783 +1,334 @@
-# OrchestrAI — 项目总览（团队上手文档）
-
-> **读者**：要一起开发本项目的同事。读完这一份你应该能回答：项目要解决什么问题、当前可用的能力、整体架构、每个文件的职责、每个 Phase 已经做了什么和下一步要做什么。
->
-> **建议阅读顺序**：§0 速览 → §1 Phase 路线图 → §2 技术栈 → §3 路由结构 → §4 核心架构决策 → §5 **Project Structure**（重点）→ §6 Harness Engineering 六维度铁律 → §7 开发与验证。
->
-> **最新状态锚点（2026-05-21）**：Phase 4.5 前置补强已完成，GitHub Actions CI 已接入。画布支持整图 mock Run、单节点 Run/Stop、节点内容编辑、DAG 依赖字段（`node_type` / `parent_node_id` / `depends_on` / `parallel_group`）、按依赖绘制 React Flow 边、`Subdivide` 把阶段节点拆为带并行实现分支的子任务。生成 prompt 改为阶段级规划 + 并行依赖表达。**下一步仍是 Phase 4.5 正式 Harness Foundation**：结构化日志、执行追踪、checkpoint & resume、HITL approval gate、context compaction。2026-05-21 起，路线图新增 **Tier F 平台成熟化**：生产级数据模型、CI/CD 发布治理、LLMOps/MLOps、云原生部署、微服务边界提取。
-
----
-
-## 0. 速览（30 秒理解项目）
-
-**OrchestrAI** = 一个**面向真实桌面任务**的 AI 工作流编排平台。用户用自然语言描述目标 → Orchestrator(Haiku) 识别意图 → Clarifier(Sonnet) 多轮澄清 → 用户 confirm → WorkflowDesigner 生成可视化工作流（React Flow 画布）→ 每个节点可配 Claude / GPT / Gemini / DeepSeek 等不同模型 → 节点执行时可调用浏览器自动化、本地桌面操作、文件系统、进程控制等工具。
-
-**目标能力范围**：从"帮我做一份 PPT"这种纯 AI 任务，到"每天定时自动清原神日常"或"让 AI 打开浏览器用 Tripo 网站帮我把图片转成 3D 模型"这种**需要操控真实 Windows 桌面**的任务。
-
-**当前可用路径**：
-
-- `/dashboard`（落地页 / 项目概览）
-- `/orchestra`（三栏 AI 编排，核心功能）
-- `/workflows`（列表）/ `/workflows/[id]`（画布详情）
-- `/marketplace` / `/arena` / `/team` / `/settings`（占位，Phase 11）
-
-**视觉**：暖色设计系统（牛奶咖色 canvas + 琥珀橘 brand），"编排交响乐团"的视觉隐喻。
-
----
-
-## 1. Phase 路线图
-
-### 1.1 设计哲学：6 层 Tier
-
-| Tier | 名称 | 定位 |
-|------|------|------|
-| A | UI 闭环 | 让 Phase 3 产出的工作流能从对话端走到画布端，跑通最短路径 |
-| B | Agent Harness 基础设施 | 横切所有后续 Phase 的可观测 / 可恢复 / 可审批基座 |
-| C | 感知与工具 | 让 agent 有"眼睛"（万能 web 感知）和"手"（统一工具 registry + 执行引擎） |
-| D | Computer Use Agent | 让 agent 有"身体"——操控真实 Windows 桌面 |
-| E | 体验打磨 | Sub-chat、多 AI 扇出、双语、Marketplace 真实化 |
-| F | 平台成熟化 | 从早期平台升级为可运维、可审计、可扩展的成熟软件：生产数据模型、CI/CD、LLMOps/MLOps、云原生、微服务 |
-
-### 1.2 Phase 状态总览
-
-| Phase | Tier | 名称 | 状态 | 核心交付 |
-|-------|------|------|------|---------|
-| 1 | 前置 | 核心脚手架 + 分屏布局 | ✅ | Next.js + FastAPI + Socket.io + Zustand + React Flow |
-| 1.5 | 前置 | Docker Compose + DB 基础设施 | ✅ | PostgreSQL 16 + async SQLAlchemy + Docker 一键启动 |
-| 2 | 前置 | 设计系统 v1 + App Shell | ✅ | 暖色主题 + AppSidebar/TopBar + 3 路由骨架 |
-| 2.5 | 前置 | Orchestra Context Panel 重构 | ✅ | drill-in 导航 + View union（2026-04-17） |
-| 3 | 前置 | The Orchestra 功能接线 | ✅ | Chat → Clarify → Confirm → 生成工作流，3 Agent 架构，端到端打通 |
-| 2.6 | 前置 | 前端清理 + 视觉质感升级 | ✅ | 设计 token v2，12 核心组件升级（2026-04-21） |
-| **4** | **A** | **Workflows 画布功能接线** | ✅ | Stub 清理 / `/workflows` 列表 + `[id]` 详情 / Orchestra → Canvas CTA / NodeDetailDrawer 双 tab / canvas Run + mock 执行事件链 / Clarifications drill-in 重构 |
-| **4.5-pre** | **B 前置** | **Canvas 节点控制 + DAG 细分** | ✅ | 大面板 NodeDetailDrawer / 节点级 Run/Stop / 节点字段编辑 / `depends_on` DAG 边 / `parallel_group` 并行标记 / `Subdivide` 确定性生成阶段子任务 |
-| **4.5** | **B** | **Agent Harness Foundation** | 🔲 **next** | 结构化日志 + 执行追踪 + checkpoint & resume + HITL approval 框架 + context compaction |
-| **5** | **C** | **Universal Web Perception** | 🔲 | Search 层（Tavily + Brave）+ Fetch 两档（HTTP / Playwright）+ 多模态预处理（视频/音频/3D/Office）+ 统一产出结构 |
-| **6** | **C** | **Tool Registry + Node Executor** | 🔲 | 多模型 tool-calling 适配层 + Docker sandbox + 生成/评估分离的验证循环 + Linter/测试作为确定性约束 |
-| **7** | **D** | **CUA MVP（桌面感知 + 基础动作）** | 🔲 | `mss` 截图 + UIA 树 + OCR + `pywinauto`/`pyautogui` + Planner-Executor loop + 首版 capability scoping & audit |
-| **8** | **D** | **CUA 扩展（应用生命周期 + 跨应用流程）** | 🔲 | 软件安装/卸载、进程管理、Replay & Kill Switch、完整 HITL approval gate |
-| **9** | **F** | **生产级数据模型 + Release Governance** | 🔲 | Alembic migrations、节点/边/执行记录拆表、workflow versioning、branch protection、required checks、环境分层、release notes |
-| **10** | **E** | Sub-chat 分叉 + File Repository | 🔲 | 节点内 Sub-chat、Building Log 点击展开 |
-| **11** | **E** | 多 AI 扇出 + 双语 + 市场真实化 | 🔲 | GPT/Gemini 扇出、中英双语、Marketplace/Arena 真实数据 |
-| **12** | **F** | **LLMOps / MLOps 平台化** | 🔲 | prompt registry、model invocation ledger、eval datasets、quality/cost dashboard、experiment tracking；若未来引入微调/训练，再接正式 MLOps |
-| **13** | **F** | **Cloud Native Runtime** | 🔲 | managed Postgres、Redis/queue、object storage、secrets manager、OpenTelemetry、Kubernetes/Nomad、环境级 CD |
-| **14** | **F** | **Service Boundary Extraction** | 🔲 | 从 modular monolith 提取 orchestrator/workflow/execution/tool/perception/llm-gateway/audit 等服务边界，按瓶颈逐步拆微服务 |
-
-> **关于游戏场景**：Phase 7/8 的 CUA 覆盖"启动游戏 / 操作菜单 / 执行脚本化动作"这种级别的任务（如"每天自动清原神日常"）。完整的**游戏 AI（low-latency vision-based game-playing）不列独立 Phase**，那是用户自己在工作流里拼装的高级用法，我们只提供通用 CUA 基础能力，不为游戏做特化。
-
-### 1.3 Phase 间依赖关系
-
-```
-Phase 4（UI 闭环）───┐
-                    ├──► Phase 4.5（Harness 基座，横切）
-                    │         │
-                    │         ▼
-                    │     Phase 5（万能 Web 感知）───► Phase 6（Tool Registry + 执行引擎）
-                    │                                      │
-                    │                                      ▼
-                    │                              Phase 7（CUA MVP）───► Phase 8（CUA 扩展）
-                    │                                                       │
-                    └───────────────────────────────────────────────────────┴──► Phase 9（生产数据模型）
-                                                                            │
-                                                                            ├──► Phase 10 / 11（体验打磨）
-                                                                            └──► Phase 12 / 13 / 14（平台成熟化）
-```
-
----
-
-## 2. 技术栈
-
-### 2.1 核心栈（已落地）
-
-| 层级 | 技术 |
-|------|------|
-| 前端框架 | Next.js 16（App Router，Turbopack） |
-| UI 库 | Tailwind v4 + shadcn/ui + @base-ui/react |
-| 状态管理 | Zustand（`orchestraStore` / `workflowStore`） |
-| 动画 | Framer Motion |
-| 节点图 | @xyflow/react（React Flow 12.x） |
-| 拖拽 | @dnd-kit/core + @dnd-kit/sortable |
-| 实时通信 | socket.io-client（前端）+ python-socketio ASGI（后端） |
-| Markdown | react-markdown |
-| 图标 | lucide-react |
-| 字体 | Inter（next/font） |
-| 后端框架 | Python FastAPI + Uvicorn |
-| 数据库 | PostgreSQL 16 + SQLAlchemy 2.0 async + asyncpg |
-| AI（结构化 reasoning） | Anthropic Claude（Haiku 4.5 / Sonnet 4.6 / Opus） |
-| 浏览器自动化（预留） | Playwright（Python，Phase 6 启用） |
-| 容器化 | Docker Compose（db + backend + frontend） |
-| CI | GitHub Actions（tsc + eslint + next build + pytest） |
-| 分支治理 | GitHub Rulesets（`develop`/`main` 禁止直推，main 仅允许 develop PR） |
-
-### 2.2 扩展栈（Phase 4.5 起逐步引入）
-
-| 层级 | 技术 | 引入 Phase |
-|------|------|-----------|
-| 结构化日志 | `structlog`（主）或 `loguru` | 4.5 |
-| Tracing | OpenTelemetry + Jaeger（可选） | 4.5 |
-| Checkpoint 存储 | PostgreSQL `agent_sessions` 表（state + cursor + trajectory） | 4.5 |
-| HITL Approval | 自研 approval gate service + 前端 approval window | 4.5 |
-| AI（多模态兜底） | **Google Gemini 2.x**（视频 / 音频 / 图片 / PDF 全原生，首选兜底） | 5 |
-| AI（中文场景可选） | 字节豆包多模态 | 5 |
-| AI（备选） | OpenAI GPT, DeepSeek | 5 |
-| Web Search Provider | **Tavily**（主）+ **Brave Search API**（备，低成本 fallback）+ **Exa**（语义搜索） | 5 |
-| 网页抓取 | `httpx`（静态 HTML）+ **Playwright**（动态 / SPA / 股票图表 / 仪表盘） | 5 |
-| 网页解析 | **Trafilatura**（正文提取）+ **Jina Reader**（`r.jina.ai`，fallback） | 5 |
-| 视频处理 | **`yt-dlp`**（下载，覆盖 1800+ 站点）+ `ffmpeg`（抽关键帧）+ **OpenAI Whisper**（转录） | 5 |
-| 音频处理 | Whisper（本地 or API）；Gemini 2.x 直接吃作为 fallback | 5 |
-| 3D 文件处理 | `trimesh` + `pyrender`（多视角渲染 → 图片 → VLM 理解） | 5 |
-| Office 文档 | `mammoth`（docx）+ `python-pptx`（pptx）+ `openpyxl`（xlsx） | 5 |
-| Tool Calling 适配 | 自研 `ToolRegistry` + 各模型 tool schema 转换层 | 6 |
-| Sandbox | Docker（每节点一个容器） | 6 |
-| Evaluator | 独立 Sonnet/GPT 实例，与生成 agent 分离 | 6 |
-| 桌面截图 | `mss`（跨平台高性能快照） | 7 |
-| 桌面 UI 树 | **Microsoft UI Automation** via `uiautomation` / `pywinauto` | 7 |
-| OCR | **PaddleOCR**（准，中英文都好）或 Tesseract（轻） | 7 |
-| 输入模拟 | `pywinauto`（semantic，UIA actions）+ `pyautogui`（pixel fallback） | 7 |
-| 进程 / 系统 | `subprocess` + PowerShell + Win32 API via `pywin32` | 8 |
-| Replay & Kill Switch | 自研 action log + `psutil` 进程管理 | 8 |
-| Schema migration | Alembic | 9 |
-| Release governance | GitHub Actions + protected environments + tagged releases | 9 |
-| Queue / worker runtime | Redis + RQ/Celery/Arq（最终选型待压测） | 13 |
-| Object storage | S3-compatible storage / Cloudflare R2 / MinIO | 13 |
-| Secrets manager | GitHub Actions secrets（早期）→ 云厂商 Secrets Manager / Vault | 13 |
-| Cloud orchestration | Kubernetes 或 Nomad（先保留 Docker Compose 本地开发） | 13 |
-| LLMOps registry | 自研 DB 表 + dashboard；必要时接 Langfuse / Phoenix / OpenTelemetry semantic conventions | 12 |
-| MLOps（条件引入） | MLflow / Weights & Biases / DVC（仅当项目开始训练、微调、维护数据集时引入） | 12+ |
-
----
-
-## 3. 路由结构
-
-```
-/ → redirect → /dashboard
-
-/dashboard          落地页，项目概览
-/orchestra          The Orchestra：三栏 AI 编排（核心功能）
-/workflows          Workflows 列表（grid）
-/workflows/[id]     Workflows 画布详情页
-/marketplace        占位（Phase 11）
-/arena              占位（Phase 11）
-/team               占位（Phase 11）
-/settings           占位（Phase 11）
-```
-
-后端 API 前缀：所有 router 挂在 `/api` 下。Socket.io 直接挂在根路径（由 `socket_app = socketio.ASGIApp(sio, other_asgi_app=app)` 包裹 FastAPI app 提供）。
-
----
-
-## 4. 核心架构决策
-
-### 4.1 三 Agent 模型（现状）
-
-| Agent | 模型 | 触发时机 | 职责 |
-|-------|------|---------|------|
-| Orchestrator | Haiku 4.5 | 每次 `chat_send` 的第一个调用 | intent 二分：`casual_chat` / `development_request` |
-| Clarifier | Sonnet 4.6 | 识别为 `development_request` 后 | 多轮提问 → 聚合 → 生成 plan（`clarification:plan_ready`） |
-| Workflow Designer | Sonnet 4.6 | 用户 `chat_confirm_start` 后 | 生成工作流 JSON，流式下发 `building:log`，最后 `workflow:ready` |
-
-### 4.2 节点执行 Agent 家族（Phase 6+ 逐步引入）
-
-| 角色 | 说明 | 引入 Phase |
-|------|------|-----------|
-| Node Executor | 按节点配置的模型调用 + 工具调用，含 sandbox 隔离 | 6 |
-| Perception Agent | 专职 Web Search / 网页 fetch / 多模态预处理 | 5 |
-| Desktop Agent | 专职 Computer Use，隔离在独立进程 / VM | 7 |
-| Evaluator Agent | 独立评估节点输出质量，与生成 agent 分离 | 6 |
-
-### 4.3 ConversationState 状态机
-
-```
-idle → clarifying → awaiting_confirm → generating → complete
-           ↑                ↓
-           └─ re-ask ←──────┘
-```
-
-**Phase 4.5 起**会持久化到 DB（`agent_sessions` 表），支持 **checkpoint & resume**——任务失败 / 进程崩溃 / 用户半道退出都能从断点续跑。
-
-### 4.4 Socket.io 事件契约
-
-```
-Client → Server（已有）
-  chat_send              { session_id, content }
-  chat_confirm_start     { session_id }
-  join_session           { session_id }
-
-Client → Server（Phase 4.5 新增）
-  execution:approve      { approval_id, decision: "approve" | "deny" | "modify", note? }
-  execution:kill         { session_id }
-
-Server → Client（已有）
-  chat:stream_start / token / end
-  chat:message
-  clarification:update / plan_ready
-  building:started / log / complete
-  workflow:ready
-  workflow:node_appeared / generation_complete
-  history:update
-  execution:node_started      { node_id, workflow_id }
-  execution:node_log          { node_id, log_line }
-  execution:node_complete     { node_id, result: NodeResult, execution_method }
-  execution:node_error        { node_id, error }
-  execution:node_stopping     { node_id }
-  execution:node_stopped      { node_id, reason }
-  execution:workflow_complete { workflow_id }
-
-Server → Client（Phase 4.5 新增）
-  execution:approval_required  { approval_id, action, risk_level, context }
-  execution:trace              { span_id, agent, input_summary, output_summary, duration_ms }
-  execution:checkpoint         { session_id, step, resumable_at }
-```
-
-### 4.5 其它关键决策
-
-| 决策 | 选择 | 原因 |
-|------|------|------|
-| 工具层是否做成 MCP | **内部 service 为主**，必要时包 MCP wrapper | 项目内部 node executor 直接调 service 最简单；MCP 价值在"给外部 agent 用"，不是我们首要目标 |
-| 多模态兜底模型 | **Gemini 2.x** | 原生支持视频 / 音频 / 长上下文（数小时视频），覆盖面最大；豆包作中文特别重的场景可选 |
-| 3D 文件理解 | **多视角渲染 → 图片 → VLM** | 主流 LLM 都不吃 `.obj/.gltf/.fbx`；Tripo/Meshy/Rodin 是生成型不是理解型；PointLLM/3D-LLM 是学术工具不成熟 |
-| Sandbox 粒度 | 节点级 Docker（Phase 6），CUA 用独立 Windows VM / 独立进程（Phase 7） | 平衡隔离性与启动开销 |
-| Checkpoint 存储 | PostgreSQL `agent_sessions` 表 | 复用已有 DB，无需引入 Redis |
-| 工作流确认流程 | **永远先澄清再确认**，不自动生成 | 用户掌控感，避免错误工作流 |
-| DB 持久化（Phase 4.5 后） | Workflow + ChatMessage + **AgentSession** + **ExecutionTrace** + **ApprovalRecord** | 支持 checkpoint / resume / replay / audit |
-
-### 4.6 生产化架构路线：云原生 / 微服务 / LLMOps / MLOps
-
-**当前判断**：本项目现在是 **FastAPI 单体后端 + Next.js 前端 + PostgreSQL + Docker Compose** 的早期平台。它已经有容器化、CI、工作流编排、prompt 分层、多 agent 角色划分和节点级模型选择，但还不是成熟云原生系统，也不是微服务架构。
-
-**原则**：先做 **modular monolith（模块化单体）**，再按真实瓶颈拆服务。不要为了术语提前拆微服务，否则会在状态一致性、trace、checkpoint、审批、回放、部署复杂度上付出过早成本。
-
-| 方向 | 当前状态 | 正确演进 |
-|------|----------|----------|
-| 云原生 | Docker Compose 可本地一键启动；GitHub Actions 已接入 | Phase 13 再引入 managed Postgres、Redis/queue、object storage、secrets manager、OpenTelemetry、Kubernetes/Nomad |
-| 微服务 | 后端仍是 FastAPI 单体，服务边界主要体现在 `services/` 目录 | Phase 14 在执行器、感知层、LLM 网关、审计等出现独立扩缩容需求后再拆 |
-| LLMOps | Prompt 文件、agent 分工、节点模型选择已有雏形 | Phase 4.5/6/12 逐步补齐 model invocation ledger、prompt registry、eval datasets、成本/质量 dashboard、失败归因、回放 |
-| MLOps | 当前不训练模型，因此没有模型注册、训练流水线、数据集版本 | 仅当引入 fine-tuning、自训练 evaluator、用户行为数据集或模型评测集时进入正式 MLOps；否则以 LLMOps 为主 |
-| CI/CD | GitHub Actions CI 已有；分支 ruleset 由 GitHub 配置 | Phase 9 引入 release governance、环境保护、migration gate、tagged release、staging/prod 分层 |
-
-### 4.7 数据库现状与生产级演进
-
-当前 DB 设计服务于原型闭环：`workflows.nodes` 以 JSON 形式整体存储，读取一个 workflow 时可直接拿到完整节点图，开发速度快。但这不是最终生产模型。随着节点细分、并行依赖、执行回放、审计、成本统计、版本回滚增多，需要从 JSON 聚合存储演进到关系化 + 事件化模型。
-
-**当前表**：
-
-| 表 | 用途 |
-|----|------|
-| `workflows` | workflow 主记录，含 `workflow_id / session_id / title / title_zh / description / nodes(JSON) / created_at` |
-| `chat_messages` | 对话消息，含 `message_id / session_id / sender_id / content / message_type / workflow_ref / created_at` |
-
-**目标生产表（Phase 9 起逐步拆出，不一次性大爆炸迁移）**：
-
-| 表 | 用途 |
-|----|------|
-| `workflow_nodes` | 节点独立存储，支持单节点查询、编辑、权限、执行状态 |
-| `workflow_edges` | DAG 依赖边，替代仅靠 `depends_on` JSON 字段 |
-| `workflow_versions` | 节点编辑和生成结果版本化，支持 rollback/diff |
-| `chat_sessions` | 会话元数据和生命周期 |
-| `agent_sessions` | agent 状态机、checkpoint、resume cursor、trajectory |
-| `execution_runs` | 一次 workflow/node 执行的 run 级记录 |
-| `execution_traces` | LLM/tool/span 级追踪，支持 observability 和 replay |
-| `node_run_results` | 节点产物、错误、质量评分、执行方法 |
-| `approval_records` | HITL 审批审计 |
-| `tool_registry` / `tool_invocations` | 工具声明、风险等级、调用参数、结果和副作用记录 |
-| `artifacts` | 工作流产出的文件、截图、报告、下载结果 |
-| `model_invocations` | 模型名、provider、tokens、成本、latency、stop_reason、错误、prompt_version |
-| `prompt_versions` | prompt 模板版本、hash、适用 agent、发布记录 |
-
-### 4.8 设计系统铁律（Phase 2.6 起）
-
-- **绝不回到 v1 的单色 hairline**，统一用 `border-hairline` / `border-hairline-strong`
-- **不再用 Tailwind 原生 `shadow-sm/md/lg`**，全部用 `shadow-card/card-md/elevated/floating/overlay`
-- **圆角只用 4 档**：`rounded-[8px|12px|16px|20px]` 或 `rounded-sm/md/lg/xl`
-- **动画优先 `soft-pulse`，不用 `ping`**（后者视觉过锐）
-- **玻璃面板**：`bg-glass` 用大面积（sidebar 等），`bg-glass-surface` 用浮层（drawer 等）
-
----
-
-## 5. Project Structure（文件结构 · L3 粒度）
-
-> **覆盖原则**：仓库根、`backend/` 根、`frontend/` 根的**每一个文件**都列出来；`backend/{models,routers,services,prompts,tests,browser}/` 的每一个源文件、`frontend/{app,components,hooks,lib,stores,types,public}/` 的每一个源文件都列出来。`node_modules/` / `.next/` / `__pycache__/` / `venv/` / `.pytest_cache/` 这类生成物只列目录、不展开。
->
-> **怎么用**：每次接手新需求前先在这里定位涉及的文件；改动后顺手回到这里更新对应行的描述。
-
-### 5.1 仓库根
-
-```
-OrchestrAI/
-├── backend/                  # FastAPI + Socket.io + PostgreSQL（详见 §5.2）
-├── frontend/                 # Next.js 16 App Router 应用（详见 §5.3）
-├── Documents/                # 项目文档（本文件所在的目录，详见 §5.4）
-├── scripts/                  # 运维与脚本
-├── .github/                  # GitHub Actions CI
-├── .git/                     # Git 元数据
-├── .gitignore
-├── docker-compose.yml
-└── README.md
-```
-
-| 路径 | 职责 |
-|------|------|
-| `.gitignore` | 忽略 `__pycache__`、`backend/venv/`、`frontend/node_modules`、`frontend/.next`、`.env*`、IDE/OS 临时文件、`pgdata/`、`.superpowers/`、AI assistant 本地设置（`.claude/` / `.cursor/`）、AI 上下文备份（`CLAUDE.md`） |
-| `docker-compose.yml` | 三 service 编排：`db`（postgres:16-alpine + `pgdata` 卷 + 健康检查）、`backend`（构建 `backend/`，挂 8000，依赖 db healthy）、`frontend`（构建 `frontend/`，挂 3000，注入 `NEXT_PUBLIC_API_URL` / `NEXT_PUBLIC_SOCKET_URL`） |
-| `README.md` | 项目对外门面：项目介绍 + Quick Start + 配置说明 + 文档导航。**非技术内容**，给所有人看 |
-
-#### 5.1.1 `Documents/`
-
-| 文件 | 受众 | 职责 |
-|------|------|------|
-| `Documents/project-overview.md`（本文件） | 项目同事 | 总览 + Phase 路线图 + 技术栈 + 架构决策 + **文件索引** + Harness 六维度 + 开发指南 |
-| `Documents/phase-history-and-handoff.md` | 下一个 AI agent | Phase 归档 + 下一个 Agent 任务清单（按 Tier A→F 分层）+ 交接 checklist |
-
-#### 5.1.2 `scripts/`
-
-| 文件 | 职责 |
-|------|------|
-| `scripts/docker-clean.sh` | bash 工具：清理 dangling 镜像 + 删除旧命名（`orchestrai-*` / `docker-frontend` / `docker-backend`）的过期镜像，最后列出当前所有镜像。手动跑，CI 不调用 |
-
-#### 5.1.3 `.github/`
-
-| 文件 | 职责 |
-|------|------|
-| `.github/workflows/ci.yml` | GitHub Actions：三 job —— `main-source-guard`（禁止非 develop 分支直接 PR main）/ `frontend`（npm ci + tsc + eslint + next build）/ `backend`（pip install + pytest）。触发：PR to main/develop、push to develop、workflow_dispatch |
-
----
-
-### 5.2 `backend/`（Python FastAPI · Socket.io · PostgreSQL）
-
-```
-backend/
-├── browser/             # Playwright 浏览器池（Phase 6 才真正启用）
-├── models/              # Pydantic 数据模型 + SQLAlchemy ORM
-├── prompts/             # 三个核心 agent 的 system prompt（独立 .md 便于热更）
-├── routers/             # FastAPI REST endpoint
-├── services/            # 业务逻辑 / agent 实现 / DB helper
-├── tests/               # pytest 异步测试
-├── venv/                # Python 虚拟环境（gitignored）
-├── __pycache__/         # 字节码缓存（gitignored）
-├── .pytest_cache/       # pytest 缓存（gitignored）
-├── .dockerignore
-├── .env / .env.example
-├── config.py
-├── database.py
-├── Dockerfile
-├── main.py
-├── requirements.txt
-└── socket_manager.py
-```
-
-#### 5.2.1 backend 根文件
-
-| 文件 | 职责 |
-|------|------|
-| `backend/.dockerignore` | 排除 `venv/` `__pycache__/` `*.pyc` `.env` `.git`，缩小 build context |
-| `backend/.env.example` | 范例环境变量：`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GOOGLE_API_KEY` / `CORS_ORIGINS` / `MAX_PLAYWRIGHT_BROWSERS` / `DATABASE_URL`。新人 `cp .env.example .env` 后填 key |
-| `backend/.env` | 真实运行配置（gitignored；docker-compose 通过 `env_file` 注入到 backend container） |
-| `backend/config.py` | `Settings(BaseSettings)`：用 pydantic-settings 从 `.env` 读 7 个字段；暴露 `settings.cors_origins_list` 属性把逗号串切成 list |
-| `backend/database.py` | SQLAlchemy async：`create_async_engine` + `async_sessionmaker` + `Base = DeclarativeBase` + `init_db()`（启动时 `create_all`）/ `shutdown_db()`（dispose）/ `get_session()` 依赖注入 |
-| `backend/Dockerfile` | 多阶段构建：`python:3.12-slim` builder（含 gcc / libpq-dev 编译 wheel）→ runtime（仅装 libpq5）。playwright chromium 安装行注释保留，等 Phase 6 解开。`CMD uvicorn main:socket_app --host 0.0.0.0 --port 8000` |
-| `backend/main.py` | FastAPI + Socket.io ASGI 入口：`lifespan` 调 `init_db` / `shutdown_db`；CORS；挂 4 个 router；定义 Socket.io 事件 `chat_send`（驱动 ConversationState 状态机）/ `chat_confirm_start`（触发 WorkflowDesigner）；最后用 `socketio.ASGIApp` 把 sio 和 FastAPI 包成单一 ASGI app |
-| `backend/requirements.txt` | 钉版本：fastapi 0.135、uvicorn 0.44、python-socketio 5.16、pydantic 2.13、sqlalchemy[asyncio] 2.0.41、asyncpg 0.30、anthropic 0.95、httpx 0.28、playwright 1.58、python-dotenv 1.1 |
-| `backend/socket_manager.py` | 单例 `sio = AsyncServer(async_mode="asgi")` + `sessions: dict[str, set]` 内存映射 + `connect / disconnect / join_session` 三个默认事件。其它模块用 `from socket_manager import sio` 复用 |
-
-#### 5.2.2 `backend/browser/`
-
-| 文件 | 职责 |
-|------|------|
-| `backend/browser/__init__.py` | 空，标记 package |
-| `backend/browser/pool.py` | `BrowserPool` 单例：`Semaphore(3)` 限并发、`async_playwright().start()` 启动、`acquire() / release()` 借还 Chromium 实例。**Phase 6 才被 executor 真正调用**，Dockerfile 里 `playwright install` 仍注释着 |
-| `backend/browser/automations/__init__.py` | 空目录占位，未来放具体网站的自动化脚本（Tripo / Genshin 等） |
-
-#### 5.2.3 `backend/models/`
-
-| 文件 | 职责 |
-|------|------|
-| `backend/models/__init__.py` | 空，标记 package |
-| `backend/models/chat.py` | Pydantic 模型：`MessageType` enum、`AISender`、`ChatMessage`（含 `is_streaming`、`workflow_ref`）、`ClarificationOption`、`ClarificationQuestion`（pending/answered）、`PlanNode`、`PlanPayload`、`BuildingLog`（7 种 type）、`HistoryEntry`；末尾 `AI_PERSONAS` 字典固化 5 个角色（claude / gpt / gemini / grok / orchestrai） |
-| `backend/models/db.py` | SQLAlchemy ORM：`WorkflowRecord`（`workflow_id` PK + `session_id` 索引 + `title` / `title_zh` / `description` / `nodes` JSONB + `created_at`），`ChatMessageRecord`（`message_id` PK + `session_id` 索引 + `sender_id` + `content` + `message_type` + `workflow_ref` + `created_at`）。节点不开独立表，整组 JSONB 存在 workflow 行里 |
-| `backend/models/workflow.py` | 核心数据模型：5 个 enum（`NodeStatus` / `ExecutionMethod` / `ToolType` / `NodeType`）+ `NodeResult` / `WorkflowNode`（含 DAG 字段 `node_type` / `parent_node_id` / `depends_on` / `parallel_group`）/ `Workflow` |
-
-#### 5.2.4 `backend/prompts/`
-
-| 文件 | 职责 |
-|------|------|
-| `backend/prompts/orchestrator_system.md` | Orchestrator agent system prompt：让 Haiku 二分 `casual_chat` / `development_request`，输出 JSON `{"route", "brief_reason"}` |
-| `backend/prompts/clarifier_system.md` | Clarifier agent system prompt：多轮澄清规则；要求每条提问带 hint + options；信息够了再切 `present_plan`；超出 AI 实现能力的产品要引导到 MVP / 模拟 / 分阶段 |
-| `backend/prompts/workflow_designer_system.md` | Workflow Designer system prompt：阶段级（4-8）节点 + 允许并行依赖；JSON 用 `<workflow_json>` 包裹；包含所有 `WorkflowNode` 字段（含 DAG 关系） |
-
-#### 5.2.5 `backend/routers/`
-
-| 文件 | 职责 |
-|------|------|
-| `backend/routers/__init__.py` | 空，标记 package |
-| `backend/routers/chat.py` | `POST /api/chat/message`（HTTP fallback；主流程走 Socket.io 的 `chat_send`） |
-| `backend/routers/execution.py` | 执行控制：`POST /api/execution/run/{workflow_id}`（整图运行，`RunRequest.mock` 切真/假）；`POST /api/execution/node/{node_id}/run`（单节点）；`POST /api/execution/node/{node_id}/stop`（写 cancel registry + emit `execution:node_stopping`）；`POST /api/execution/node/{node_id}/retry`；运行结束自动 `update_workflow_nodes` 持久化结果 |
-| `backend/routers/workflow.py` | 单工作流 CRUD（注意单数）：`GET /api/workflow/{id}` 读全量；`PATCH /api/workflow/{id}/node/{node_id}` 改字段（`EDITABLE_NODE_FIELDS` 白名单 + `tool_type` / `node_type` enum 校验）；`POST /api/workflow/{id}/node/{node_id}/subdivide` 把阶段拆为子任务 |
-| `backend/routers/workflows.py` | 工作流集合（复数）：`GET /api/workflows` 返回 `list[WorkflowSummary]`（不含节点 payload，按 `created_at` 倒序），给列表页用 |
-
-#### 5.2.6 `backend/services/`
-
-| 文件 | 职责 |
-|------|------|
-| `backend/services/__init__.py` | 空，标记 package |
-| `backend/services/clarifier_agent.py` | `clarify(session_id, user_message, state, sio_emit)`：调 Sonnet 4.6 stream → `_extract_json` 抽响应 → `_normalize_response` 兜底字段 → 写 `add_clarification` / `set_plan` / `add_history_log` → emit `clarification:update` 或 `clarification:plan_ready`。`_record_answers_from_user_message` 解析 `Q:/A:` 格式回填；`_build_deterministic_plan_response` 在所有问题都已回答时绕过 LLM 直接给阶段级 6 节点 plan |
-| `backend/services/conversation_manager.py` | `ConversationState` dataclass（`state` / `history` / `clarifications` / `plan_summary` / `plan_nodes_preview` / `original_request` / `history_log`）+ per-session 内存 dict `conversation_states`；提供 `get_state` / `reset_state` / `append_history` / `add_clarification` / `answer_clarification` / `set_plan` / `add_history_log` |
-| `backend/services/execution_control.py` | Phase 4.5 前置：`ExecutionControl` dataclass + 内存 set `_cancelled_nodes`，方法 `request_node_cancel` / `clear_node_cancel` / `is_node_cancelled`。**Phase 4.5 正式版会替换为持久化的 task registry** |
-| `backend/services/executor.py` | `NodeExecutor`：构造时接收 `session_id` 和 `mock: bool`；`execute_workflow` 顺序跑；`execute_node` 三档兜底（api → playwright → claude simulated）+ 每段加 `_log` 触发 `execution:node_log`；`_execute_node_mock` 按 `tool_type` 输出 staged 事件（api / web_automation / llm 三套日志模板）；`_api_execute` 内含 wttr.in 天气调用作为 demo；`_playwright_execute` 让 Haiku 生成脚本再 exec 到 BrowserPool 拿到的 page。模块顶层常量 `MOCK_LOG_DELAY = 0.25` / `MOCK_BETWEEN_NODES = 0.10` 控制 mock 节奏 |
-| `backend/services/orchestrator_agent.py` | `route_message(user_message, history)`：先 `_looks_like_development_request` 跑确定性关键字匹配（`DEV_HINTS` 含 28 个中英词、`CASUAL_ONLY_HINTS` 含 6 个）；没命中再调 Haiku 4.5 + `orchestrator_system.md` 兜底，失败 fallback 到 `casual_chat` |
-| `backend/services/workflow_db.py` | Workflow DB helper：`save_workflow` / `load_workflow` / `load_all_workflows` / `update_workflow_nodes`；`_coerce_created_at` 把 LLM 给的 ISO 字符串转回 DateTime（asyncpg/SQLite 不收字符串）；`_record_to_workflow` 反向把 DB 行还原为 Pydantic |
-| `backend/services/workflow_designer.py` | `design_workflow(session_id, state, sio_emit)`：emit `building:started` → Sonnet 4.6 stream 生成 JSON（边流边发 `building:log`）→ `_extract_raw_json`（先 `<workflow_json>` 标签，再 balanced-brace scan）+ `_clean_raw_json`（去 markdown 围栏 + 去结尾逗号）→ JSON 不完整 fallback 到 `_build_fallback_workflow` 用 `_default_plan_nodes` 6 节点模板生成。`_build_context` 拼上下文给 LLM；`_tool_for_node` 按标题关键字猜 tool/tool_type |
-| `backend/services/workflow_refinement.py` | Phase 4.5 前置：`subdivide_node(workflow, node_id, child_count=4)` 确定性把 phase 拆为 plan → 两条并行实现（同 `parallel_group`）→ verify 共 4 节点；child_count > 4 时追加 polish 节点。**不调 LLM**，等 Phase 6 升级为模型生成子图 |
-
-#### 5.2.7 `backend/tests/`
-
-| 文件 | 职责 |
-|------|------|
-| `backend/tests/__init__.py` | 空，标记 package |
-| `backend/tests/test_clarifier_agent.py` | Clarifier：ask 分支 + present_plan 分支 + fallback 兜底（强制 LLM 报错）+ JSON 提取健壮性 |
-| `backend/tests/test_conversation_manager.py` | ConversationState lifecycle + history append + clarification CRUD + set_plan 状态机迁移 |
-| `backend/tests/test_executor_mock.py` | mock 路径：完整 `execution:node_started → node_log* → node_complete` 序列断言、按 `tool_type` 分支（web_automation → playwright execution_method）。用 spy 替换 `executor_mod.sio.emit` |
-| `backend/tests/test_node_operations.py` | 节点编辑 PATCH + 单节点 run 后的 DB 持久化 + execution_control stop registry + DAG 字段 roundtrip + Subdivide 行为 + 父子关系归属（最大测试文件，10KB） |
-| `backend/tests/test_orchestrator_agent.py` | route_message：关键字命中 → development_request；纯 `你好` → casual_chat；LLM 故障 fallback |
-| `backend/tests/test_workflow_db.py` | save → load roundtrip + `_coerce_created_at` 类型修复 + `update_workflow_nodes` partial update |
-| `backend/tests/test_workflow_designer.py` | JSON 提取（包括嵌入 `<workflow_json>` 标签）+ trailing comma 清理 + max_tokens stop_reason 时 fallback 走 `_build_fallback_workflow` |
-| `backend/tests/test_workflows_router.py` | `GET /api/workflows` 空列表 + 多 workflow 按 `created_at` 倒序；monkeypatch 用内存 sqlite |
-
----
-
-### 5.3 `frontend/`（Next.js 16 · App Router · Turbopack）
-
-```
-frontend/
-├── app/                 # App Router 页面与 layout
-├── components/          # React 组件（按业务模块组织）
-├── hooks/               # 自定义 hook（目前仅 Socket.io 相关）
-├── lib/                 # 工具函数 / API client / Socket.io 单例
-├── stores/              # Zustand 全局 store
-├── types/               # 共享 TypeScript 类型
-├── public/              # 静态资源
-├── node_modules/        # 依赖（gitignored）
-├── .next/               # Next 构建产物（gitignored）
-├── .dockerignore
-├── .env.example / .env.local
-├── .gitignore
-├── AGENTS.md
-├── components.json
-├── Dockerfile
-├── eslint.config.mjs
-├── next-env.d.ts
-├── next.config.ts
-├── package.json
-├── package-lock.json
-├── postcss.config.mjs
-├── README.md
-├── tsconfig.json
-└── tsconfig.tsbuildinfo
-```
-
-#### 5.3.1 frontend 根文件
-
-| 文件 | 职责 |
-|------|------|
-| `frontend/.dockerignore` | 排除 `node_modules/` `.next/` `.env.local` `.git` |
-| `frontend/.env.example` | 范例：`NEXT_PUBLIC_API_URL=http://localhost:8000/api` / `NEXT_PUBLIC_SOCKET_URL=http://localhost:8000` |
-| `frontend/.env.local` | 本地真实配置（gitignored；docker 启动时由 `docker-compose.yml` 的 environment 段直接注入，本地裸跑才用这个文件） |
-| `frontend/.gitignore` | next 默认 gitignore（`.next/` / `node_modules/` / `npm-debug.log*` / `.env*.local` 等） |
-| `frontend/AGENTS.md` | 给 Cursor / Claude Code 看的 agent 守则：提醒 Next.js 16 有大量 breaking change，写代码前先读 `node_modules/next/dist/docs/`。**不写实质项目内容** |
-| `frontend/components.json` | shadcn/ui 配置：`style: base-nova`、`tsx: true`、`baseColor: neutral`、icon 用 lucide、alias 走 `@/...` |
-| `frontend/Dockerfile` | 单阶段 `node:22-alpine` + `npm install` + `CMD npm run dev`。开发友好（带 HMR），生产化等之后再做 multi-stage build |
-| `frontend/eslint.config.mjs` | flat config：组合 `eslint-config-next/core-web-vitals` + `eslint-config-next/typescript`；覆盖 globalIgnores（`.next/`、`out/`、`build/`、`next-env.d.ts`） |
-| `frontend/next-env.d.ts` | Next 自动生成的 TS 引用文件，**不要手动改** |
-| `frontend/next.config.ts` | 极简：`const nextConfig: NextConfig = {}`。预留空间给将来 image domains / experimental flags |
-| `frontend/package.json` | scripts: `dev` / `build` / `start` / `lint`；核心依赖：next 16.2.4、react 19.2.4、tailwindcss v4、@xyflow/react 12、framer-motion 12、zustand 5、socket.io-client 4.8、shadcn 4、@base-ui/react 1.4、@dnd-kit/core 6.3、react-markdown 10、vaul（drawer） |
-| `frontend/package-lock.json` | npm lockfile（425KB），跟随 package.json 提交，保 CI 复现 |
-| `frontend/postcss.config.mjs` | 只装 `@tailwindcss/postcss` 插件（Tailwind v4 用 PostCSS plugin 而非 CLI） |
-| `frontend/README.md` | next 脚手架默认 README，**未被定制**——目前没承担文档职责，所有文档都在仓库根 README 和 `Documents/` 里 |
-| `frontend/tsconfig.json` | TS 严格模式 + `paths: { "@/*": ["./*"] }` + 包含 `.next/types/**/*.ts`（Next typed routes 注入处） |
-| `frontend/tsconfig.tsbuildinfo` | TS 增量构建缓存（221KB），影响 `tsc --noEmit` 速度。**gitignored** 应放进 `.gitignore` 但当前未忽略——TODO |
-
-#### 5.3.2 `frontend/app/`（App Router）
-
-```
-app/
-├── (app)/                    # 路由组：登录后的整个 app shell
-│   ├── arena/page.tsx
-│   ├── dashboard/page.tsx
-│   ├── marketplace/page.tsx
-│   ├── orchestra/page.tsx
-│   ├── settings/page.tsx
-│   ├── team/page.tsx
-│   ├── workflows/page.tsx
-│   ├── workflows/[id]/page.tsx
-│   └── layout.tsx
-├── favicon.ico
-├── globals.css
-├── layout.tsx
-└── page.tsx
-```
-
-| 文件 | 职责 |
-|------|------|
-| `app/layout.tsx` | 根 layout：注入 Inter（500/600/700/900）、`<html lang="en">` `<body class="h-full bg-canvas text-ink">`；metadata title="OrchestrAI" |
-| `app/page.tsx` | `redirect('/dashboard')`，让 `/` 不直接渲染空页 |
-| `app/globals.css` | 设计 token v2：5 档 surface、双档暖棕 hairline、8 档 brand 色阶、4 档圆角、5 档字号、5 档 elevation、`--grain` noise、`bg-glass` / `bg-glass-surface`、`soft-pulse` 动画、`prefers-reduced-motion` 兜底。**唯一的全局 CSS** |
-| `app/favicon.ico` | 站点 favicon |
-| `app/(app)/layout.tsx` | 登录后 shell：左 `AppSidebar` + 右 `<TopBar /> + <main>`，`overflow-hidden` 锁三栏不滚 |
-| `app/(app)/dashboard/page.tsx` | 落地页：HeroCard + 4 张 StatCard + 3 张 ProjectCard，纯展示，不连后端 |
-| `app/(app)/orchestra/page.tsx` | The Orchestra 三栏：左 `RecentProjectsPanel` / 中 `ChatThread` / 右 `ContextPanel`。`useEffect` 初始化 sessionId（localStorage `orchestrai_session`，无则 `uuid.v4()`）→ `socket.emit('join_session')`；`useSocket(sessionId)` 绑全量事件 |
-| `app/(app)/workflows/page.tsx` | 工作流列表：PageHeader + WorkflowGrid + LoadingSkeleton/EmptyState/ErrorState 四态切换。卡片跳 `/workflows/[id]`，右上 "New Workflow" 按钮跳 `/orchestra` |
-| `app/(app)/workflows/[id]/page.tsx` | 工作流详情：从 `workflowStore.loadWorkflow(id)` 拿数据（已加载跳过 REST），三态 `LoadingState / NotFoundState / WorkflowCanvas`；挂 `useExecutionSocket(sessionId)` 订阅 execution:* live 事件 |
-| `app/(app)/marketplace/page.tsx` | `<ComingSoon title="Marketplace" />` 占位，Phase 11 |
-| `app/(app)/arena/page.tsx` | `<ComingSoon title="Arena" />` 占位，Phase 11 |
-| `app/(app)/team/page.tsx` | `<ComingSoon title="Team" />` 占位，Phase 11 |
-| `app/(app)/settings/page.tsx` | `<ComingSoon title="Settings" />` 占位，Phase 11 |
-
-#### 5.3.3 `frontend/components/`
-
-```
-components/
-├── dashboard/                # 落地页卡片
-├── layout/                   # AppSidebar / TopBar / ComingSoon
-├── orchestra/                # Orchestra 页三栏的全部组件
-│   └── context/              # 右栏 9 个 drill-in 视图
-├── ui/                       # shadcn/ui 基础组件
-└── workflows/                # 画布相关
-```
-
-##### `components/dashboard/`
-
-| 文件 | 职责 |
-|------|------|
-| `dashboard/HeroCard.tsx` | 落地页主卡：径向 ambient orbs、orbit rings 反向旋转、中心立方体 `sheen` 扫光、CTA 按钮 hover sheen |
-| `dashboard/ProjectCard.tsx` | 项目卡片：`hover-lift`、在线徽章 `soft-pulse`、Play action 暖色渐变 |
-| `dashboard/StatCard.tsx` | 指标卡片：图标 tile 渐变、hover tonal glow、支持 `delta` 字段、`tabular` 数字 |
-
-##### `components/layout/`
-
-| 文件 | 职责 |
-|------|------|
-| `layout/AppSidebar.tsx` | 玻璃态左栏：品牌 logo spring hover、nav `layoutId` 连续动画、Pro Plan 卡径向光晕。固定 9 个 nav 项，路由 active 由 `usePathname` 驱动 |
-| `layout/ComingSoon.tsx` | 占位页通用组件：标题 + 暖色 hero + "敬请期待" 文案。给 marketplace/arena/team/settings 复用 |
-| `layout/TopBar.tsx` | 玻璃态顶栏：搜索框、铃铛 notification（`soft-pulse`）、token 池 pill（双渐变）、头像（径向高光） |
-
-##### `components/orchestra/`
-
-| 文件 | 职责 |
-|------|------|
-| `orchestra/ChatThread.tsx` | 中栏对话：流式渲染（buffer + 静态 messages 双源）、EmptyState chips、avatar 渐变 + ring、发送按钮 `shadow-brand-glow`；`convState === 'generating'` 时禁用输入；接 `useSocket().sendMessage` |
-| `orchestra/ContextPanel.tsx` | 右栏 shell：subscribe `orchestraStore.contextView`（discriminated union），用 `AnimatePresence mode="wait"` slide 方向由 `contextDirection` 控制；router 派发到 9 个子视图 |
-| `orchestra/RecentProjectsPanel.tsx` | 左栏：项目列表 + 新建按钮 sheen + `layoutId` active 连续动画。当前是 mock 数据，等 Phase 11 接 marketplace 数据时换 |
-
-##### `components/orchestra/context/`（drill-in 视图）
-
-| 文件 | 职责 |
-|------|------|
-| `context/AgentReports.tsx` | Reports 视图：Artifact report 卡片（mock 内容） |
-| `context/BuildingAgentDetail.tsx` | Building Process drill-in：终端 Activity Log + Pending Approvals 卡片（Phase 4.5 真接） |
-| `context/BuildingProcessList.tsx` | Building Process 主列表：per-agent 进度条 + 状态 chip；当 `isBuildingComplete && readyWorkflowId` 时显示 "打开画布 · Open Canvas" CTA 跳 `/workflows/[id]` |
-| `context/ClarificationDetail.tsx` | Clarification drill-in：per-agent 决策 radio 卡（mock 数据，Phase 10 接真 sub-agent） |
-| `context/ClarificationsList.tsx` | Clarifications 主列表：agent 卡（有 clarification 时显示）+ "开始生成工作流" 卡（plan 出现后显示，`awaiting_confirm` 紫 badge / `generating|complete` 绿 badge） |
-| `context/DetailHeader.tsx` | 所有 detail 视图复用的 back 按钮 + 标题；`aria-label="Back"` |
-| `context/HistoryTimeline.tsx` | History 视图：时间线 + 每条 Undo/Redo（Phase 4.5 起接真 stack） |
-| `context/OverviewList.tsx` | overview 视图：4 张 drill-in 卡（Clarifications / Building / Reports / History），badge 动态来自 store；卡片 stagger 进场 + hover glow |
-| `context/PlanDetail.tsx` | plan-detail drill-in：plan 摘要卡（含锁标）+ 编辑 toggle（仅 `awaiting_confirm` 可见，编辑后 `updatePlanNode` 写回 store）+ 「开始生成工作流」按钮（emit `chat_confirm_start`）|
-
-##### `components/ui/`（shadcn/ui base-nova）
-
-| 文件 | 职责 |
-|------|------|
-| `ui/avatar.tsx` | 头像组件（图片 + fallback） |
-| `ui/badge.tsx` | 状态标签（variant: default / outline / brand / success / warning） |
-| `ui/button.tsx` | 按钮基类（variant + size） |
-| `ui/drawer.tsx` | 抽屉（基于 vaul）。NodeDetailDrawer 内部用 |
-| `ui/scroll-area.tsx` | Radix scroll area 包装 |
-| `ui/select.tsx` | Radix select 包装 |
-| `ui/separator.tsx` | 水平/竖直分隔线 |
-| `ui/tooltip.tsx` | Radix tooltip 包装 |
-
-##### `components/workflows/`
-
-| 文件 | 职责 |
-|------|------|
-| `workflows/Breadcrumbs.tsx` | 面包屑组件：`href && !isLast` 时渲染 `<Link>`，其余渲染纯文本 |
-| `workflows/NodeDetailDrawer.tsx` | **画布最大组件（35KB）**：大面板，双 tab（Configuration & Permissions / Sub-Agent Chat）。接口 `nodeId: string \| null`，内部 subscribe live node；支持节点编辑（title/description/model/tool/tool_type/schema/graph 字段）、Subdivide 按钮、Graph Structure 显示 depends_on / parallel_group，Sub-Agent Chat 是 Phase 10 占位 |
-| `workflows/TaskNodeCard.tsx` | React Flow 自定义节点：accent 渐变条、phase/task 标识、parallel 标记、模型切换 dropdown、节点级 Run/Stop 按钮 |
-| `workflows/WorkflowCanvas.tsx` | React Flow 画布主组件：DAG 边（`depends_on` 优先，旧数据 fallback 串联）、分层布局（`computeNodeLevels` BFS）、顶栏 Run 按钮（mock 默认开）、`selectedNodeId` 驱动 drawer、`workflowSig` 字符串签名驱动 nodes/edges 重建 |
-
-#### 5.3.4 `frontend/hooks/`
-
-| 文件 | 职责 |
-|------|------|
-| `hooks/useExecutionSocket.ts` | detail 页 scoped hook：复用 `lib/socket.ts` singleton；只绑 `execution:*` 五个事件（`node_started/log/complete/error/workflow_complete`）+ 新加的 `node_stopping/node_stopped`；自动 `join_session` 进同一 room |
-| `hooks/useSocket.ts` | Orchestra 页全量 Socket.io binding：绑所有 chat / clarification / building / workflow / history / execution 事件；导出 `sendMessage(content)` 和 `confirmStart(sid)`；`execution:node_complete` 用 `toExecutionMethod()` 收窄入参 |
-
-#### 5.3.5 `frontend/lib/`
-
-| 文件 | 职责 |
-|------|------|
-| `lib/api.ts` | REST client：`fetchWorkflow(id)` / `listWorkflows()` / `runWorkflow(id, sid, opts)`（mock 默认 true）/ `runNode(id, sid, opts)` / `stopNode(id, sid)` / `retryNode(id, sid)` / `updateNodeModel(...)` / `updateWorkflowNode(workflowId, nodeId, patch)` / `subdivideWorkflowNode(...)`；BASE 取 `NEXT_PUBLIC_API_URL` |
-| `lib/socket.ts` | `getSocket()` 单例：`io(NEXT_PUBLIC_SOCKET_URL, { transports: ['websocket','polling'], autoConnect: false })`。多个 hook 共享，避免重复连接 |
-| `lib/utils.ts` | `cn(...classes)` = `twMerge(clsx(...))`，shadcn 标配 |
-
-#### 5.3.6 `frontend/stores/`
-
-| 文件 | 职责 |
-|------|------|
-| `stores/orchestraStore.ts` | Orchestra 页唯一事实来源。State：`sessionId` / `convState`（5 态状态机）/ `contextView`（discriminated union 含 `plan-detail`）/ `contextDirection` / `messages[]` / `streamingBuffers` / `clarificationQuestions[]` / `plan` / `buildingLogs[]` / `isBuildingComplete` / `historyEntries[]` / `readyWorkflowId`。Actions：消息流（addMessage / appendStreamToken / finalizeStream）+ clarification 编辑（updateClarificationDraft / confirmClarifications）+ `updatePlanNode(order, patch)` + history + reset |
-| `stores/workflowStore.ts` | Workflows 画布唯一事实来源。State：`workflow` / `workflowId` / `viewMode` / `isExecuting` / `newNodeIds[]` / `nodeLogs{}` / `isLoading`。Actions：`loadWorkflow(id)`（已加载跳过 REST + 重置 transient）/ `updateNode(nodeId, patch)` / `addNodes(nodes[])`（去重）/ `updateNodeStatus/Result/Error` / `appendNodeLog` / `swapNodeModel` / `markNodeOld`。用 `(set, get)` pattern 避免 `useWorkflowStore.getState()` TS 推导黑洞 |
-
-#### 5.3.7 `frontend/types/`
-
-| 文件 | 职责 |
-|------|------|
-| `types/chat.ts` | `MessageType` 字符串联合、`AISender`、`ChatMessage` |
-| `types/workflow.ts` | `NodeStatus` / `ExecutionMethod` / `ToolType` / `NodeType` 字符串联合；`toExecutionMethod(value)` 类型卫士；`NodeResult` / `WorkflowNode`（含 DAG 字段）/ `Workflow` / `WorkflowSummary`（列表页轻量投影） |
-
-#### 5.3.8 `frontend/public/`
-
-| 文件 | 职责 |
-|------|------|
-| `public/file.svg` / `public/globe.svg` / `public/next.svg` / `public/vercel.svg` / `public/window.svg` | next 脚手架默认资源。**目前未在代码里被引用**，可在 Phase 11 清理 |
-
----
-
-### 5.4 Legacy / 清理备忘
-
-| 路径 | 状态 | 处理 |
-|------|------|------|
-| `frontend/components/workflow/`（单数） | 已物理删除（Phase 2.6） | 不要重新引入；统一用 `components/workflows/`（复数） |
-| `frontend/components/chat/` | 已物理删除（Phase 2.6） | 不要重新引入；用 `components/orchestra/ChatThread.tsx` |
-| `frontend/stores/chatStore.ts` | 已物理删除（Phase 2.6） | 用 `stores/orchestraStore.ts` |
-| `backend/services/multi_ai.py` / `backend/services/orchestrator.py` | git 显示 D（已删除） | 已被 `orchestrator_agent.py` / `clarifier_agent.py` / `workflow_designer.py` 三件套替代 |
-| `frontend/README.md` | 未定制（next 脚手架原文） | 当前没承担文档职责；如重命名 / 删除，记得同步 `frontend/.gitignore` 等 |
-| `frontend/public/*.svg` | next 脚手架默认资源，未被代码引用 | Phase 11 清理可一起删 |
-| `frontend/tsconfig.tsbuildinfo` | 当前未加入 `.gitignore` | TODO：补 ignore |
-
----
-
-## 6. Harness Engineering 六维度（全局铁律）
-
-**项目开发过程**和**用户用本项目构建工作流的过程**，都必须满足以下六大维度。任何 Phase 开工前要先写一段"本 Phase 对六维度的贡献"。
-
-### ① 上下文工程 Context Engineering
-
-- **分层指令文件**：`Documents/*.md` + `backend/prompts/*.md` + 未来每个 sub-agent 的 `CLAUDE.md`（Phase 4.5 引入）共同构成知识基座
-- **子 Agent 防火墙**：高噪声任务（长网页解析、多轮 debug、大日志筛查）用 sub-agent 隔离，返回 summary，不污染主对话
-- **窗口管理**：context 接近满时自动 **compact**（保留：当前目标 / 最近 N 条 observation / 关键 decision；丢掉：过时 log / 已结算 observation）
-- **动态注入**：不把事实塞死进 prompt，从系统日志 / DB / 工具调用结果动态取
-
-### ② 工具编排 Tool Orchestration
-
-- **精心挑选而非盲目堆砌**：每个 agent 只看到它需要的工具（Executor agent 看不到 CUA 工具，Perception agent 看不到 DB 写操作）
-- **统一协议**：内部用自研 `ToolCall` 接口；Phase 5 起，对**外部 agent**（Claude Desktop / Claude Code / 其他 MCP 客户端）可按需包 MCP wrapper
-- **沙箱隔离**：所有工具调用走 Docker / VM，**永不碰宿主机生产环境**
-- **分级工具**：`read-only`（搜索、读文件）/ `mutating`（写文件、网络请求）/ `dangerous`（删除、安装、卸载、扣费）三级，每级不同审批策略
-
-### ③ 验证机制 Verification
-
-- **确定性约束**：每次 agent 输出代码后，自动跑 Linter（ruff / eslint）+ type checker（mypy / tsc）+ 单测
-- **生成 / 评估分离**：生成节点用 Sonnet，评估节点用 Opus 或 GPT 独立实例，**避免自我背书**
-- **多 agent 审查循环**：关键节点产出 → evaluator → 不通过则 re-plan，最多 3 轮
-- **快照对比**：UI / 屏幕相关任务产出截图与 golden reference diff（CUA 场景关键）
-
-### ④ 状态管理 State Management
-
-- **进度清单**：每个工作流持久化 `TaskList`（已完成 / 进行中 / 待办），UI 上断点可见
-- **Git 快照 / DB checkpoint**：每完成一个重要节点打快照，失败时能 resume 而不是从头重来
-- **Trajectory 存储**：所有 `(observation, thought, action)` 三元组持久化，为 replay 和 failure debugging 服务
-- **Idempotency**：工具调用要设计成 idempotent，同一调用重放不会双倍副作用
-
-### ⑤ 可观测性 Observability
-
-- **全程 tracing**：每个工具调用 / 每个 LLM 调用都有 OpenTelemetry span，后台可看完整调用链
-- **结构化日志**：所有日志带 `session_id / node_id / agent / event_type`，可按维度过滤
-- **质量分级**：节点产出打分（`success` / `partial` / `fail`），聚合到 dashboard
-- **失败归因**：不止说"失败"，归因到 `prompt_issue` / `model_capability` / `tool_bug` / `external_service_degraded` 四类
-
-### ⑥ 人类接管 Human-in-the-Loop
-
-- **硬边界（必须触发 approval gate）**：删除数据库、系统扣费、发客户邮件、安装 / 卸载软件、执行不可逆的系统级操作
-- **Approval Window UI**：前端 Building Process 面板弹出审批卡片（复用 Phase 2.5 的 `approvals` 位置）
-- **Kill Switch**：任何执行中的 agent 用户一键可终止，终止后状态保留（Checkpoint 可 resume），**不是 crash**
-- **Capability Scoping**：工作流声明它需要的 capability（文件系统路径 / 网络域名白名单 / 安装权限），用户首次执行时一次性授权
-
-> **这六点不是 Phase 4.5 一次做完就结束——是所有后续 Phase 的设计约束。Phase 5/6/7/8 都要在开工前回答"我这个 Phase 对六维度各贡献什么"。**
-
----
-
-## 7. 开发与验证
-
-### 7.1 启动 / 停止
-
-```bash
-# 整套启动（推荐）
-docker compose up -d --build
-
-# 停止保留数据
-docker compose down
-# 停止并清空 DB（销毁 pgdata 卷）
-docker compose down -v
-
-# 日志
-docker compose logs -f               # 全部
-docker compose logs -f backend       # 仅后端
-```
-
-### 7.2 本地无 Docker（HMR 开发）
-
-```bash
-# 只起数据库
-docker compose up -d db
-
-# Terminal 1 — Backend
-cd backend
-python -m venv venv && .\venv\Scripts\activate   # PowerShell（Windows）
-# source venv/bin/activate                       # macOS / Linux
-pip install -r requirements.txt
-uvicorn main:socket_app --reload --port 8000
-
-# Terminal 2 — Frontend
-cd frontend
-npm install
-npm run dev
-```
-
-### 7.3 验证基线（每次开工 / PR 前都要跑）
-
-```bash
-# 前端类型 + lint + build
-cd frontend
-npx tsc --noEmit
-npx eslint . --quiet
-npm run build      # CI 跑这一个
-
-# 后端测试
-cd backend
-.\venv\Scripts\python.exe -m pytest tests -q   # Windows
-# python -m pytest tests -q                    # 其它
-```
-
-CI（`.github/workflows/ci.yml`）会复刻这三条，PR 必须全绿。
-
-### 7.4 健康日志样本
-
-健康的 `docker compose logs -f backend` 应看到：
-
-```
-[orchestrator] route: development_request
-[clarifier] action: ask / present_plan
-[designer] workflow saved: wf_xxxxxxxx
-```
-
-### 7.5 沙箱 / 环境约束
-
-| 事项 | 约束 |
-|------|------|
-| `rm` 删除文件 | Cowork 沙箱不允许，需 `mcp__cowork__allow_cowork_file_delete` 交互审批 |
-| `WebFetch` Figma | `www.figma.com` 在 egress 黑名单，不要绕过 |
-| `Write` 工具 | 必须先 `Read` 目标文件才能 `Write` 覆盖 |
-| **CUA 开发（Phase 7+）** | **只在本地 Windows 或 VM 里跑**，绝不在 CI / 生产服务器做桌面自动化测试 |
-
----
-
-## 8. 给团队新成员的一句话建议
-
-> **先读 §0 + §5 文件结构 + §6 Harness 六维度，再按 §7 跑一遍验证基线，最后挑一个开放 Phase（§1.2 标 🔲 的）看 `phase-history-and-handoff.md` 里对应的任务清单。任何 Phase 开工前写一段"本 Phase 对六维度各贡献什么"再动手，这是项目的宪法级约束。**
+# OrchestrAI — 项目总览与改革计划
+
+> 更新：2026-10-12（Asia/Singapore）。这是项目现状、架构决策、阶段计划、部署约定和下一步任务的唯一事实来源。
+> **每次新对话、新任务或接手开发，AI 必须先读本文件，再读根目录 `AGENTS.md` 和相关目录规则。每次完成修改必须同步更新本文件。**
+> 改革进度：R0、R1 选型已完成（用户确认）；R2 进行中，独立 workflow 服务、Linux 集成/恢复测试与 CI/CD 代码已落地。云端 CI 已接通 PR #31，并有完整成功记录；最新提交状态以该 PR 的 required checks 为准，受限部署身份、Secrets 与加密异地存储已接通；生产首发正在收尾。R3 采用全新数据，不迁移旧测试聊天/附件。
+
+## 1. 已确认的产品方向
+
+- 产品名称与品牌：**OrchestrAI**。允许重做内部工程，以尽快获得成熟聊天、搜索、文件和多模态体验为优先。
+- 保留现有暖色主题、奶咖背景、琥珀橙强调色、三栏 Orchestra、上下文面板与 React Flow 画布的设计方向；不能套用另一项目的整套页面或只替换 Logo。
+- 框架和现有 Next.js 技术选型可以调整；视觉资产与交互意图要有明确迁移方案；用户确认现有聊天/附件全为可弃测试数据，R3 不迁移、不备份这些旧数据。
+- 优先复用成熟开源实现；按业务边界尽早独立服务化。每个新能力在正式接入前就确定进程、API、数据所有权和部署边界，不再排到旧 Phase 14。
+- CI 全部通过后自动部署生产，不设置常规人工生产批准步骤。首次部署基础设施需完成一次性准备；当前尚未激活生产 CD。
+- 先适配现有共享服务器；重型解析、模型、浏览器抓取优先调用外部 API。用户接受付费 API。R1 真实测试总额度已明确为 **¥20**，使用已有本地凭证；本轮未购买订阅。2026-10-12 用户明确生产上限为 **每日 ¥5、每月 ¥100（人民币总额）**；同时说明 DeepSeek 余额约 ¥18、Tavily 免费额度约 1,000 Credits，属于用户提供的账户快照，非本轮账单核验。R2 本轮未调用付费 provider，无须新增 API Key 或充值；原子预算及真实计量接线完成前不开放生产付费能力。
+- “结合四个项目”按能力组合实现：LibreChat 的聊天产品工程、Open WebUI 的多模态/知识使用体验、Dify 的工作流产品组织、LangGraph/Deep Agents 的运行时。每项标明直接复用、参考或暂缓，不把四套平台并列上线。
+
+## 2. 现状审计与真实完成状态
+
+### 2.1 体积：依赖和缓存占绝大多数
+
+2026-10-11，本地文件长度统计（MiB，不含工作目录外 Docker 镜像/卷，不是磁盘分配空间）：
+
+| 项目 | 大小 | 判断 |
+| --- | ---: | --- |
+| 工作目录合计 | 约 1232.7 MiB / 1.20 GiB | 与用户观察的约 1.28 GB 基本一致 |
+| `frontend/node_modules` | 549.66 MiB | 安装依赖，非业务源码 |
+| `frontend/.next` | 293.92 MiB | 构建与开发缓存 |
+| `backend/venv` | 383.63 MiB | Python 环境 |
+| `.git` | 3.09 MiB | 历史对象体积很小 |
+| Git 跟踪文件 | 138 个，合计约 1.12 MiB | 当前工作区对应文件长度；不含未跟踪源码，不是完整源码量 |
+
+前三项超过工作目录的 99%。**不能凭目录总大小断言源码严重冗余，也不能把删虚拟环境当作架构优化。** 后续分开记录源码、依赖、缓存、镜像、运行数据；Docker 体积尚未统计。当前确有可维护性问题：两份文档重复状态、旧模型名与新模型名冲突、功能完成标准不统一、聊天/研究/执行职责混杂。
+
+### 2.2 能力状态（覆盖旧文档结论）
+
+| 旧阶段/能力 | 当前状态 | 证据与处置 |
+| --- | --- | --- |
+| Phase 1 / 1.5 / 2 / 2.5 / 2.6：脚手架、设计系统、布局、开发 Compose | 已完成原型基础 | 存在 Next.js、FastAPI、PostgreSQL、暖色 token 和三栏 UI；视觉与画布优先保留 |
+| Phase 3：聊天→澄清→确认→生成工作流 | 已完成原型，生产化未完成 | 已有真实模型接线和历史记录；旧记录称部分 UI 实测通过，本轮未重跑业务验收 |
+| Phase 4 / 4.5-pre：画布、节点编辑、Run/Stop、DAG 展示 | UI 原型已完成；真实执行未完成 | `executor.py` 仍有 mock 和模型模拟兜底；按 order 顺序执行不等于 DAG 调度 |
+| Phase 4.5：Harness、checkpoint、审批、取消 | 未完成（迁移重做） | 有持久化函数，但会话/任务控制仍含内存状态，不能作为多实例可靠恢复依据 |
+| Phase 5.5 / 5.6 / 5.6-R1：Web Search、动态读取 | **未完成（重做）** | provider 较多，上层仍是关键词判断和自研 bridge；没有通过固定质量集验收 |
+| Phase 5.7 / 5.8：文件和多模态 | **未完成（重做）** | `PerceiveRequest` 只收 URL；聊天回形针无文件选择/上传处理；存在 PDF/Office/Gemini 尝试代码不等于完整产品 |
+| Phase 6：真实工具执行 | 未完成 | 需真实工具结果、权限、幂等和产物验证，删除生产模拟成功路径 |
+| Phase 7 / 8：Windows Computer Use | 未完成 | 未来独立桌面执行端；Linux 共享服务器不承担 Windows 桌面操作 |
+| Phase 9 / 12 / 13 / 14：生产数据、LLMOps、云部署、微服务 | 未完成 | 工程基础提前；微服务、迁移、发布、备份不再后置 |
+| Phase 10 / 11：子对话、文件库、模型比较、团队、市场 | 未完成 | 随主线逐项引入；占位页不能标为功能完成 |
+
+### 2.3 已确认的工程缺口
+
+- `.github/workflows/ci.yml` 已原位升级为质量门禁、真实 workflow 集成/恢复、固定版本安全扫描、GHCR 发布与自动 CD；本地验证见 5.3。PR #31 已推送且有云端 CI 全部通过记录；Rulesets 已追加 ci-gate。GHCR/main 发布及服务器 CD 尚未执行，部署 Secrets 已配置，自动首发待 CI/main 合并完成。
+- 前端 Dockerfile 运行 `npm run dev`；Compose 使用 `latest`、默认数据库凭据并暴露 5432，属于开发配置。
+- 旧 backend 仍使用 `Base.metadata.create_all`；新 workflow 已有校验和迁移、数据库角色隔离和恢复演练，尚未迁移旧库。
+- 会话 API 和 Socket room 未见完整的用户归属鉴权，不能直接作为公开多用户服务上线。
+- 已有大量用户未提交修改。本轮不覆盖业务改动；改革实施前先整理可追溯基线，不能把工作区内容谎称为 HEAD 发布。
+- 旧历史记录中的 Python.org 成功、小红书风控、TUN/Fake-IP 处理值得保留为回归用例；本轮没有重新验证这些站点。
+
+## 3. 开源组合与选型门槛
+
+### 3.1 首选路线
+
+**首选验证 LibreChat 产品内核 + OrchestrAI 自有界面 + LangGraph 工作流服务。**
+
+直接复用成熟会话、用户、附件、流式响应和 Agent 集成，比只参考 LibreChat 后再自行重写这些能力更符合本次目标。先在隔离试验中移植一个真实 Orchestra 页面，测量接口耦合、视觉还原和资源开销，再确定工程迁移。
+
+| 项目/技术 | 采用方式 | 具体范围与边界 |
+| --- | --- | --- |
+| LibreChat | 首选直接复用，R1 验证后锁版本 | 聊天服务、认证、会话、附件、流式消息、工具接入；复用配套客户端数据层和 hooks，重做页面组合与样式 |
+| Open WebUI | 产品参考，不纳入首发运行依赖 | 借鉴文件/知识选择、多模态反馈；不复制受品牌条款约束的界面或源码 |
+| Dify | 产品参考，不部署第二套工作流平台 | 借鉴工作流发布、节点状态、运行记录与错误展示；画布沿用 React Flow，运行由 LangGraph 负责 |
+| LangGraph JS | 工作流服务的核心运行时候选 | checkpoint、interrupt/resume、分支、并行；优先与 LibreChat 的 JS 生态统一，冻结 graph 版本 |
+| Deep Agents | R6 按需使用 | 自主规划、文件工具、子 Agent；先验证 LangGraph 闭环，不在首发叠加第二套规划器 |
+| LibreChat RAG API | 独立 ingestion 服务的首选基座 | FastAPI、LangChain、PostgreSQL/pgvector；接文件解析/检索，不另建平行 RAG 管线 |
+| LiteLLM Proxy | 独立模型网关候选，R1 测资源及兼容性 | 统一 provider 适配、额度、超时、用量；付费企业能力不默认依赖 |
+| BullMQ + Redis | 长任务队列候选 | JS worker 调度、重试、并发限制；队列不替代 LangGraph checkpoint，不再自研通用队列 |
+| Docling | 后续复杂文档解析候选 | 仅在扫描件/表格效果不足时接独立远程 worker；首发不在共享 4 GB 主机加载重型本地模型 |
+| Docker Compose + GitHub Actions + GHCR | 首发部署与交付 | 服务独立镜像，单机内部网络；当前无需 Kubernetes、服务网格或自建全套观测平台 |
+
+首轮已锁定可复现实验版本（见 5.2），但尚未冻结生产发布清单。R1 必须记录所选 tag、完整 commit、镜像 digest、各组件许可证和验证结论；不能跟随上游 dev/latest。
+
+### 3.2 前端与上游维护方案
+
+- 优先在 LibreChat 配套 React/Vite 工程内移植 OrchestrAI 的视觉、三栏和画布，保留其成熟数据 hooks。当前 React 19/Next.js 与候选上游依赖版本不同，不保证直接复制组件即可运行。
+- R1 同时评估保留 Next.js 作为独立客户端的成本。LibreChat Agents API 标为 Beta，不能将它等同于完整、稳定的会话/上传/用户 API。
+- 若配套客户端路线通过，最终只保留一套活跃产品前端；旧 Next.js 页面在对应功能切换验收后删除。不能长期维护两套聊天状态 store、两套附件或两套设计 token。
+- 以受控 upstream fork 管理直接复用源码，记录上游 remote 与基准 commit，保持其构建所需工作区结构。试验 checkout 放仓库外；正式迁入与旧实现退出在同一迁移计划中完成，禁止把多个完整 clone 塞入业务仓库。
+- 产品定制集中在可维护的组件、主题和扩展边界；必须修改上游核心时记录原因和补丁，下一次上游升级执行契约、视觉、数据回归。
+- R1 若证明耦合/资源不可接受：明确记录失败原因，再退到保留 Next.js、采用现成聊天组件及 LangGraph 的组件组合路线。该路线意味着更多产品集成工作，不能悄悄回到全部自研，也不同时长期维护两条路线。
+
+### 3.3 许可证和费用
+
+LibreChat 主仓库 MIT；Open WebUI 当前许可证含品牌限制及例外；Dify 是带附加条件的许可证，涉及多租户和前端品牌。首发选择自主界面，并将后二者限定为体验参考；任何实际代码复用须核对锁定版本与子包许可证并保留声明。MongoDB 等基础依赖也进入许可证清单，不能只检查顶层项目。
+
+模型、搜索、抓取、重排、OCR、转写、对象存储分别计费。配置未填写额度时关闭对应付费能力；单次任务先预留预算，记录真实用量并结算，失败重试也计入上限。预算预留须原子化，不能等所有请求完成后才统计超额。首轮限额数值在 R1 按用户可接受预算落表，本轮不代定长期支出。
+
+## 4. 从第一批重构建立服务边界
+
+“模块”按业务能力划分，不按每个函数/Agent 拆一个服务。每个边界首次接入产品就提供独立部署、health/readiness、配置、契约测试和数据所有权；同一仓库不等于同一进程。依赖未就绪的服务不先生成空壳。
+
+| 服务边界 | 复用基座 | 唯一职责/数据所有权 | 首次交付 |
+| --- | --- | --- | --- |
+| `web` | LibreChat 客户端工程候选 + OrchestrAI UI + React Flow | 静态界面，不保存唯一业务数据 | R1/R3 |
+| `chat-service` | LibreChat server | 用户、会话、消息、附件元数据与归属；MongoDB | R2/R3 |
+| `workflow-service` + 独立 worker 进程 | LangGraph JS + BullMQ | workflow/version/run/checkpoint/approval/idempotency；PostgreSQL | R2 最小闭环，R5 完整化 |
+| `research-service` | 可复用的上游搜索工具 + SDK | 查询/抓取/重排、证据集合与研究任务结果；不保存第二份聊天历史 | R4；R1 验证提取可行性 |
+| `ingestion-service` | LibreChat RAG API | 解析、chunk、embedding、索引状态；独立 PostgreSQL 数据库/角色 | R2/R3 |
+| `model-gateway` | LiteLLM Proxy 候选 | 模型路由、密钥、额度与模型调用计量；没有第二个会话主库 | R2/R3 |
+| `artifact-worker` / `desktop-worker` | 文档库、媒体 API / Windows UIA、Playwright | 生成产物 / 受控本机操作，按需启动，独立权限 | R6/R8 |
+
+通信：浏览器→同源入口→chat/workflow API；chat 通过受限工具协议调用 research/ingestion/workflow；工作流调用相同能力服务。外部 Agent 工具优先用 MCP，普通服务 API 用 OpenAPI/JSON Schema。禁止浏览器携带服务密钥，禁止服务跨库直接写表。
+
+跨服务请求携带已验证的 user/tenant、conversation、run、trace、idempotency 标识；身份由服务凭证与受验证的委托声明传递，不能信任客户端自填 user ID。chat 是身份和消息的事实源；workflow 只存关联 ID 与运行输入快照，不重复维护用户/会话主数据。
+
+- MongoDB 与 PostgreSQL 是候选内核带来的不同数据职责，不是双写同一会话。PostgreSQL 可共用 OrchestrAI 自己的一个实例，但服务使用独立数据库/角色和迁移，不复用 Tarot 数据库。
+- 文件本体首发可用专用持久卷，应用校验归属后下载；保留替换 S3 存储的接口。生产必须有独立位置的加密备份；向量是可重建索引，不是原文件备份。
+- 长任务交给队列与 worker；API 不用 `asyncio.create_task` 承担唯一调度。BullMQ 至少一次投递，worker 用持久化幂等键和状态检查防止重复副作用。
+- LangGraph checkpoint 负责恢复状态，不自动保证外部工具恰好执行一次。工具调用有独立 operation ID、结果记录和补偿策略；审批绑定准确的参数/运行版本，恢复后不可误复用旧批准。
+- 流式消息沿用所选内核协议；切换完成后删除旧 Socket.io 聊天链路，不同时维护两套事件源。断线后可从持久事件游标/运行状态恢复。
+- 只有一个生产搜索入口。R4 切换后关闭并删除 chat 内置平行搜索路径和旧 bridge，保留必要的上游适配补丁；若无法低成本抽取现有搜索模块，在 R1 明示集成成本。
+
+## 5. 改革阶段与验收
+
+状态只使用：**已完成、进行中、未完成**；可追加“待验证/重做”。需要重做的旧功能直接记未完成，不能因为已有代码或按钮就变绿。
+
+| 阶段 | 当前状态 | 交付 | 工具 / 开源项目 / 核心技术 | 结束条件 |
+| --- | --- | --- | --- | --- |
+| R0：盘点与规则 | 已完成（本轮规划范围） | 审计、单一 overview、根 AGENTS、替换计划 | Git、PowerShell、仓库与上游文档核查 | 文档一致、保留未提交工作；不代表技术清理已实施 |
+| R1：选型验证与基线冻结 | 已完成（选型，用户确认；遗留发布门槛继续追踪） | 小型可运行对照、UI 移植、依赖/资源/许可清单、最终技术决定 | 固定版本 LibreChat、LangGraph JS、RAG API、LiteLLM；Docker、Playwright | 通过下述试验门槛；确定单一路线和每项旧资产退出点 |
+| R2：微服务与交付基础 | 进行中 | 独立服务最小链路、迁移/契约、自动 CI/CD、身份/配置边界 | Compose、Actions、GHCR、MongoDB、PostgreSQL、Redis/BullMQ、LangGraph | CI 同一提交产出镜像；隔离环境部署/回滚/恢复通过；具备发布前提 |
+| R3：成熟聊天与附件候选版 | 未完成 | 原有风格的真实聊天、登录、历史、图片/PDF/TXT 上传、文档问答 | LibreChat chat/client、RAG API、pgvector、视觉/OCR API、持久存储 | UI 与端到端通过、全新数据与权限测试通过；形成可部署候选版 |
+| R4：Web Research 重做与首发 | 未完成（重做） | 搜索→读取→重排→引用、可见过程、限额与拒答 | LibreChat 搜索实现候选；Tavily/Serper 对照、Firecrawl/Tavily Extract、Jina reranker 可选 | 固定研究质量集通过，单一入口，旧 bridge 退出；R3/R4 与部署资源门槛都通过后对外首发 |
+| R5：真实工作流执行 | 未完成（重做） | 画布映射真实 graph、DAG、版本、审批、取消、重启恢复 | React Flow、LangGraph JS、Postgres checkpointer、BullMQ、MCP | 真实三节点任务成功；断线/崩溃/重复投递不重复副作用；mock 只留测试 |
+| R6：音视频理解与产物生成 | 未完成 | 分批交付转写、视频摘要、PPT/文档、图片生成 | 外部 ASR/VLM/生成 API；按需 FFmpeg、Docling、PptxGenJS/docx 库；独立 worker | 每种能力有真实可下载产物、预览、用量、失败/取消闭环；不拿一个入口代表全覆盖 |
+| R7：运行质量与维护 | 未完成 | 评测回归、成本看板、审计保留、依赖/上游升级机制 | OpenTelemetry、结构化日志、Langfuse 外部实例或兼容托管端、Renovate/Dependabot | 基础观测从 R2 就有；此阶段完善 SLO、升级演练与长期质量管理 |
+| R8：桌面与扩展产品 | 未完成 | Windows 执行端；再按需求交付子对话、团队、市场/模型比较 | Windows UIA/pywinauto、Playwright、签名任务、MCP；复用既有组件 | 桌面隔离、授权、回放/终止通过；其余功能各自验收，不捆绑宣称完成 |
+
+主依赖：R0→R1→R2→R3；R4 可在 R2 服务契约稳定后开发，R5 复用 R2 的运行时；R6 依赖附件/worker 闭环；R7 的基础能力贯穿全过程；R8 后置。微服务和 CI/CD 从 R2 开始，不能拖到最终阶段。
+
+### 5.1 R1 必须回答的具体问题
+
+1. 同一 DeepSeek 配置下，验证流式响应、会话切换、刷新恢复、取消、附件、中文搜索；模型 ID 以用户账号实测支持为准，不复制旧文档中的过期默认值。
+2. 移植一个 `/orchestra` 场景：侧栏、聊天、右侧上下文，以及一个工作流画布入口。截图对照现有风格，检查窄屏、键盘、上传进度、来源展开。
+3. 证明底层会话/上传/身份直接复用，而非只是截图相似；记录新增适配代码、上游核心补丁、重复依赖及升级成本。
+4. 验证独立 research、ingestion、workflow、gateway 的接入点，特别是搜索工具是否有可维护的包导出/扩展入口；不存在则明确需要维护的 fork 范围。
+5. 在隔离环境测内存/CPU/磁盘/镜像大小、重启、超时、并发。不能将上游完整默认 Compose 直接部署到生产共享服务器。
+6. 确定依赖版本、认证策略、迁移 schema、状态协议、首发功能范围和实际预算数值。未满足门槛的能力不进入首发。
+
+### 5.2 R1 隔离验证记录（2026-10-11）
+
+**状态：选型已完成，2026-10-12 用户确认进入 R2；以下为 R1 原始验证记录，未通过项移为 R2–R4 发布门槛，并非已补测通过。** 隔离目录为 `D:/Workplace/Experiments/OrchestrAI-R1-20261011/`。代码、依赖、数据库和验证脚本均在仓库外；没有迁移正式前后端、改动服务器、提交或推送 Git。`evidence/source-baseline.zip` 保存 153 个不含真实环境密钥的工作区文件，`evidence/baseline.json` 保存逐文件 SHA-256、分支和未提交状态。分支为 `Universal-web-perception`，HEAD 为 `d6eebac60c74d22b6483b976a043fe41a370c3ad`；快照包含未提交内容，不能视为该 HEAD 的发布产物。
+
+首轮技术决定：**继续采用 LibreChat 配套 React/Vite 客户端及聊天内核，集中移植 OrchestrAI UI；LangGraph JS 负责独立工作流，LiteLLM 和 RAG API 继续作为网关/解析候选。** 搜索可直接复用 `@librechat/agents` 的公开 `createSearchTool` 导出，不必复制整套研究实现。Open WebUI/Dify 保持产品参考，未引入其代码或运行服务。正式工程按此单一路线进入 R2；剩余质量/容量/许可门槛必须在对应能力发布前通过。
+
+| 试验资产 | 固定版本 / 来源 | 许可证与边界 |
+| --- | --- | --- |
+| LibreChat | `v0.8.8`；commit `e8f3be08623663d4ad7f7241e693c94469b63bb0` | 根 MIT；子包分别核对。React 18.2 / Vite 8.2.2 / Tailwind 3.4.1 |
+| LibreChat RAG API | `v0.9.0`；commit `4985b37b8b5d4519d68eceedfef1e63624012f9d` | MIT；原始源码未修改；本轮只验证独立进程的文本提取 |
+| LangGraph JS / checkpointer | `1.4.8` / PostgreSQL saver `1.0.4` | MIT；`1.0.6` 与上游 checkpoint `1.1.3` 冲突，未强制安装 |
+| LibreChat agents / React Flow | `4.0.1` / `@xyflow/react 12.10.2` | MIT；前者公开搜索导出已实测，后者只验证画布布局 |
+| LiteLLM Proxy | `1.105.0`，独立 Python 环境 | 非 enterprise 部分 MIT；未使用企业功能；轮包 SHA 记在证据清单 |
+| MongoDB | 官方 Windows 二进制 `8.0.20`，仅本地回环端口 | SSPL-1.0；不能按 MIT 处理。Docker Hub TLS 拉取失败后采用便携版试验 |
+| PostgreSQL | 本机已有 `postgres:16-alpine` 镜像 | digest `sha256:93d55776e04376e19adb2733e3ccebb4392ee7dd86d8ff238503b30fe719c84f`；试验容器限内存 256 MiB |
+
+原始源码包/轮包 SHA-256、上游 commit、定制文件清单保存在 `evidence/upstream-lock.json`。这是试验锁定清单；chat/gateway/ingestion 的 Linux 不可变镜像尚未构建，不能称为生产镜像基线。
+
+**实际验证与限制：**
+
+| 验证 | 实际结果 | 范围 / 证据 |
+| --- | --- | --- |
+| OrchestrAI 页面移植 | 通过首轮 | 奶咖/橙色、三栏、自定义侧栏与上下文、React Flow 入口；桌面/390px 窄屏截图，无横向溢出，键盘开关画布通过；画布明确标注未连接执行服务 |
+| 复用聊天状态 | 通过首轮 | 直接复用上游认证、会话、消息和附件 hooks；未新建第二套 chat store。右侧“我的文件”是当前用户文件集合，不是会话专属附件列表 |
+| 真实 DeepSeek 聊天 | 通过首轮 | `deepseek-flash` 实际响应；刷新恢复、会话切换、取消通过，无浏览器报错。最终无费用复查还验证 API 重启后保存的 PDF 回答仍可读取；未验证运行中流恢复。首次完整响应 19.03s，不是首 token 延迟；`evidence/ui-smoke.json` / `ui-render.json` |
+| TXT / PNG / PDF | 通过首轮，保留失败 | TXT 内容码、PNG 图形颜色、PDF 内容码由真实模型读取。PDF 需明确 MIME→text 路由，经过独立 RAG API `/text`→网关→模型；长文档检索/embedding/OCR 未验证 |
+| LiteLLM 接入 | 非流式、SSE及 PDF 闭环通过 | 网关独立进程，密钥未进入浏览器。一轮 PDF SSE 发生连接截断；之后独立 SSE 与 PDF 重测通过，重复稳定性仍需验证 |
+| 上游搜索工具提取 | 可行性通过 | 独立 Node 进程实际 Tavily 搜索+提取，3 个来源，8.89s；有 URL/证据。无 reranker，尚未接入 UI 来源展开、研究服务 HTTP/MCP 与质量集 |
+| LangGraph 并行/审批/恢复 | 本地工具通过 | 并行分支→审批 interrupt→真实文件产物；审批后故意退出 73，再新进程恢复。Mongo saver 与 PostgreSQL saver 均实测；PostgreSQL 改为 `durability:'sync'` 后通过 |
+| 文件用户隔离 | 局部通过 | 第二用户看不到文件元数据，跨用户下载返回 403；只验证 chat 文件接口，未完成多租户/服务委托安全验收 |
+| 构建、类型与改动文件 lint | 通过 | `npm ci`、`npm run build:packages`、客户端 `tsc --noEmit`、`npm run build`；定制 UI 的 ESLint/Prettier/i18n 检查通过；存在上游大 chunk/eval 警告 |
+| 上游 Lighthouse | **三轮门槛未通过** | 中文系统导致英文注册 selector 失败，固定测试启动语言后进入真实页面；第一轮 LCP 3.70s/CLS 0.00655/TBT 71.56ms，第二轮被 Windows Chrome-launcher 临时目录清理 EPERM 中断。不能用首轮结果代替三轮验收；测试临时改动已恢复 |
+| 依赖清单 / SPDX | **未通过完整审计** | lock 清点 3177 条、生产条目 1866 条；官方 `npm sbom` 两次 ESBOMPROBLEMS（override/版本约束）。许可证元数据仍有 707 个 NOASSERTION；不能视为完整 SPDX |
+
+定制 UI 新增 3 个稳定职责文件，格式检查后共 199 行：主题、侧栏、上下文；主题/Root/路由/Sidebar provider 导出/文案及 package/lock 合计 11 个变更文件。完整补丁在 `evidence/orchestrai-ui.patch`，验证脚本另列，不把试验脚本当产品服务。配套客户端的复用已经实际验证；独立 Next.js 客户端还需重新维护认证、cookie、文件、事件和客户端校验契约，本轮没有实现第二客户端。
+
+故障记录：PDF 默认原生文件投递会触发 DeepSeek 400，已在试验配置中指定提取文本；一次网关流被截断，失败证据未覆盖；LangGraph 默认异步持久化的崩溃试验未完成产物状态恢复，改同步持久化后通过。**同步 checkpoint 与本地独占写文件只证明这个工具的恢复/幂等，不能推广为所有外部工具恰好执行一次。** chat 本轮禁用 Redis，流状态仍在单进程内存；生产恢复要求仍须 R2 接入持久事件/队列。
+
+**资源与预算：** Windows 单轮实测 chat/MongoDB/ingestion/gateway 工作集合计约 1102 MiB，PostgreSQL 容器约 44 MiB，合计约 1.12 GiB。完整开发 node_modules 1957.51 MiB、前端 build 30.42 MiB、gateway 环境 603.46 MiB、ingestion 环境 767.31 MiB、运行数据 206.37 MiB、排除依赖和构建后的上游源码 63.69 MiB；下载归档另计。这些是本机快照，不是 Linux 常驻/峰值 RSS 或最终镜像体积，不证明共享 4 GB 服务器已满足部署目标。
+
+真实调用按串行试验组预留 ¥2，最多 10 组；10 组均已预留，总额 ¥20，详见 `evidence/budget.json`。**预留金额不是实付账单，不能推断 DeepSeek/Tavily 账户余额耗尽。** 用户于 2026-10-12 确认仍有余额，并确认新的生产预算；不得重置旧账本冒充原轮仍有预算，新增评测须单独记录实际用量。 试验限制输出 512 token、禁自动重试；账本只约束此轮脚本，不是原子生产预算。LiteLLM 无数据库时预算能力不足以实施硬上限，R2 必须实现持久计量/原子预留/失败结算，并核对实际价格与用量。试验结束后已停止本轮聊天/Vite/网关/解析/MongoDB 进程与专用 PostgreSQL 容器，保留全部运行数据；账本耗尽时 `gateway.py` 拒绝重启付费网关。
+
+**从 R1 保留的发布前验收（不重复阻断已确认的选型）：**
+
+1. 完成生产依赖 SPDX/许可证/安全审计，处理上游 override 冲突，验证升级补丁；锁定各服务 Linux 镜像 digest 和运行依赖体积。
+2. Linux 隔离环境做低内存、重启、超时与有限并发验证，并完成 Lighthouse 三轮门槛；共享服务器混合负载资源门槛仍需正式部署前单独验收，不能用 Windows 快照替代。
+3. 接通研究 UI 的搜索进度、来源展开、失败态与小样本质量评测；embedding provider/长文档检索必须真实验收，未配置时不宣称文档 RAG 可用。
+4. 确定服务身份委托、API/事件协议、schema 与旧数据导入映射；审批版本/取消/重复投递/预算并发要求进入 R2/R5 可测试契约。
+5. 单一路线已由用户确认；旧入口按第 7 节退出，聊天/UI 最迟 R3，搜索最迟 R4，运行时最迟 R5。对应调用方未迁移前保留原型，禁止接通两套生产入口。
+
+### 5.3 R2 实施记录（2026-10-12）
+
+**状态：进行中。** 分支 `codex/r2-service-delivery`，内部服务不开放公网端口，不挂载模型/搜索凭证。R3 聊天内核接入与 R5 任意 DAG 仍未完成。用户统一手动验收，本轮仅保留必要 CI 与部署烟测，不扩展复杂验收。
+
+| 资产 | 实际实现与边界 |
+| --- | --- |
+| `services/workflow` | Node 24.21.0、LangGraph JS 1.4.8、Postgres saver 1.0.4、BullMQ 5.81.5、jose 6.1.0、pg 8.16.3；独立 HTTP API 与 worker。确定性流程：校验输入→持久审批→写真实报告产物，尚未接聊天或画布 |
+| 身份/协议 | 服务端 HS256 短期委托，issuer/audience/5 分钟 TTL/scopes/user/tenant 校验；浏览器不得接触委托密钥。POST `/runs` 使用幂等键；GET 状态/游标事件/产物；POST 审批/取消；跨用户/租户返回 404。R3 须完成来自真实 chat 身份的签发适配 |
+| 持久状态 | PostgreSQL 是 run/checkpoint/事件/审批/产物事实源；非超级用户数据库角色、SQL 校验和与迁移锁；Redis 为可重建队列。并发幂等、审批版本、取消、同步 checkpoint、产物唯一约束；失去 Redis 发布记录可从数据库重新入队；数据库恢复到较旧快照时会重建已完成队列项，队列终态写库失败会补记失败，避免任务永久卡住 |
+| `deploy/compose.yml` | 内部网络、无宿主机开放端口、密码必填、固定镜像 digest、内存/CPU 限额、日志轮转；API/worker 非 root、只读根目录；数据库使用本项目独立卷 |
+| 基础镜像加固 | `deploy/infrastructure.Dockerfile` 基于新固定 digest 的 PostgreSQL 16 与 Redis 7.4.11；PostgreSQL 直接以 postgres 身份启动，移除不再需要且带旧 Go 运行时的 gosu；Redis 固定更新 libcrypto3/libssl3 至 3.3.7-r2。保留官方初始化逻辑，未写漏洞忽略清单。新旧本机测试数据卷的迁移与恢复已验证，CI 另测空卷初始化 |
+| 上游清单/补丁 | `deploy/upstreams.json` 固定 R1 LibreChat/RAG commit 与 ZIP 校验和，保留原许可证；规范化 R1 UI patch 换行。`prepare-upstreams.py` 提取到忽略的 `.build/`，拒绝覆盖未知已有内容。chat/RAG 正式镜像与完整许可证审计仍待迁移时完成 |
+| CI | 原位升级 `.github/workflows/ci.yml`：main 来源、overview 更新、生成物/密钥扫描、Knip（新 workflow）、类型/lint/build、真实数据库/队列集成与恢复、SPDX、Trivy、Actionlint/ShellCheck；同一可信 main SHA 的**已测试 workflow/PostgreSQL/Redis 三个镜像**经 artifact 传递到 GHCR。第三方 Action 固定 commit |
+| 发布控制器 | `deploy/release.py` 为 root 所有的固定控制器，只收限定 JSON manifest；配置摘要/镜像仓库/digest/版本/递增序列校验、发布锁、停写入→age 加密备份→rclone 异地回读校验→兼容迁移→readiness/真实 HTTP 产物烟测；失败恢复旧应用镜像（`--no-deps`，不回退数据库/Redis），升级前先备份当前数据库。支持 Ubuntu Python 3.10；GHCR 使用 CI job 临时令牌，服务器无长期开发者 token。每日备份由 systemd 调用同一控制器，服务专用 daily 对象保留 35 天，发布回滚备份另行保留。自动回滚已做契约测试，**尚未在真实服务器故障演练** |
+| 部署身份 | `deploy/install-host.sh` 一次性管理员安装，拒绝覆盖已有目录/账户；专用 SSH 公钥 forced command 与精确 sudo 命令。CI 用户无 docker 组/通用 shell/sudo，配置保留 root 私有路径；已安装并验证 SSH 强制命令拒绝非法请求 |
+| 清理 | `check-repository.py` 阻止生成物、真实环境文件、超大源码和私钥提交，只允许一份 Documents 文档；Knip 查新服务无用文件/依赖/导出。`docker-clean.sh` 移除全局 prune、模糊匹配、强制删除。旧全仓死代码审查在对应调用链迁移时完成 |
+
+**本机实际验证：** Linux 集成 9 项通过（身份、迁移、并发幂等、真实队列审批、崩溃恢复、取消、Redis 重建）；独立 API/worker 部署烟测和重启烟测通过。`pg_dump` 恢复到隔离数据库后，runs/artifacts/events/checkpoints 数量与内容摘要逐项一致。发布/回滚契约测试 4 项通过。npm audit 为 0，workflow、PostgreSQL、Redis 三个最终镜像的 Trivy 高危/严重均为 0，源码秘密扫描通过；镜像本机 `.Size` 约 76.6 MiB（非完整产品体积）。旧工作区后端 167 tests 通过（1 条 Pydantic 弃用告警），旧前端 tsc/lint/build 通过。SPDX 仅新 workflow 已生成；上游许可审计仍待补全。
+
+本轮无付费 API 调用。每日 ¥5/月 ¥100 已记录配置；**尚未接通跨模型与搜索的原子预留/计量，生产付费能力保持未接入**。Tavily credits 与人民币须分别限额再归集费用，环境变量不是硬限额实现。
+
+**云端交付状态：** 基础设施已单独提交并推送，Draft [PR #31](https://github.com/Kong-YiKai/OrchestrAI/pull/31) → develop；原有业务未提交内容完整保留。GitHub `production` 环境已创建，只允许 main，未配置人工 reviewers；develop/main 原有 Rulesets 均已追加必过 `ci-gate`，其余规则保留；仓库变量 `R2_DEPLOY_ENABLED=false`。用户已补齐 R2 存储凭据，本轮继续云端激活；旧测试数据不用迁移/备份。本地 Git 全局代理原端口不可达，本轮只通过单命令覆盖访问 GitHub，未改全局配置。
+
+**一次性云端激活清单（2026-10-12）：**
+
+1. Cloudflare R2 / auto / 私有桶：用户已填写桶级凭据。本轮将裸桶名规范为 remote 路径并安装 root 私有配置；实际加密上传、回读摘要、解密比对通过，测试对象已删除，`backup_storage_verified=true`。未读取、导出或备份旧聊天/附件。
+2. age 恢复私钥保存在本机忽略文件 `deploy/private/age-recovery.key`；服务器只保留 recipient，临时私钥已移除。用户需将该文件另存安全位置。每日备份在 03:00–03:15（Asia/Singapore）运行，仅新 workflow 数据；保留 35 天 daily 对象，发布快照不自动删除。完整隔离恢复与 RPO/RTO 由用户后续手动验收，`restore_drill_verified=false`，不会冒充已通过。
+3. 服务器已安装 age 1.0.0 与校验官方 SHA-256 的 rclone 1.75.2；独立 `/opt/orchestrai`、受限 `orchestrai-deploy`、root 发布控制器和备份 timer 已安装。其他项目和共享入口未改。
+4. GitHub production 的 `DEPLOY_HOST`、独立 `DEPLOY_SSH_KEY`、可信 `DEPLOY_KNOWN_HOSTS` 已配置；main 限制、无人工 reviewer、原 Rulesets 保留。GHCR 使用本次 Actions job 的 packages:read 临时 token，经受限 SSH stdin 传入、临时 Docker 配置使用后移除，不复制本机管理员私钥/PAT。
+5. `R2_DEPLOY_ENABLED` 尚为 false，待本次 CI 和正式分支合并激活一次自动首发。当前只发布内部 workflow；R3/R4 的公开产品、DNS/证书与完整聊天栈另行验收。
+
+过渡资产：旧 `frontend/`、`backend/`、根 Compose 服务原型；新服务调用方是集成/部署烟测，未双写聊天。旧 UI/聊天最迟 R3 退出，搜索 R4，runtime R5；每次切换同次删除调用方/配置/依赖。工作区原有业务改动单独保留，不混入本轮基础设施提交。
+
+### 5.4 R3 附件与多模态最小闭环
+
+必须具备：选择/拖拽/粘贴 → 类型/大小检查 → 上传进度 → 持久化附件 ID → 解析/视觉任务 → ready/failed/cancelled → 发送时引用 → 来源/页码或图像说明 → 可下载/删除 → 权限回收。
+
+首发建议每个文件 ≤10 MiB、每条消息 ≤5 个、合计 ≤25 MiB；最终限额与 provider 限制取较小值。短文本直接上下文、长文档检索、扫描件 OCR、图片 VLM 分开路由。R1 账号实测 `deepseek-flash` 已支持图片输入，PNG 识别通过；不能据此认定所有 DeepSeek 型号、音视频或扫描件均支持。内容类型检查不能只看扩展名；恶意压缩、伪 MIME、超限、损坏文件必须有明确失败状态。
+
+旧数据处置（用户明确决定）：现有聊天与附件都是测试数据，无须导出、迁移、映射或备份；R3 按全新数据库与附件空间切换。切换前核对目标仅为 OrchestrAI 测试资源并停止旧任务，不触碰其他项目数据。新服务上线后的常规备份与恢复能力继续保留。
+
+### 5.5 R4 搜索质量门槛
+
+- 先做检索→抓取→重排→证据引用；是否引入查询改写/最多两轮补检由评测决定，不再简单堆 provider。
+- 30 条中文测试集建议分配：时效问题 6、公开网页 6、多来源比较 6、中文长尾 4、直接链接 4、登录/风控/429/超时 4。正向效果和正确失败分别计分。
+- 建议目标（待 R1 基线确认，未达成）：可访问样本任务成功率 ≥85%，抽样引用支持率 ≥95%，无证据编造正文为 0，受限链接明确说明为 100%；报告样本数，不能只报百分比。
+- 固定 fixture 在每次 CI 运行；真实 provider 小样本由有预算的受保护环境运行，记录版本/时间/网络/用量。失效网页允许替换，但要保留变更原因，不删难例美化成功率。
+- 暂定正常公开网页研究总预算 45 秒、最多两轮、每轮至多五个候选来源；记录 p50/p95、首个进度事件延迟、每次费用。超时返回已有证据与缺口，不能无限 fallback。
+- 来源须记录 URL、抓取时间、证据片段、读取状态；引用必须指向实际取得的证据。小红书登录/风控不能靠更换框架保证读到，不绕过授权和站点访问限制。
+
+## 6. CI/CD 与部署约定
+
+### 6.1 已知服务器与资源约束
+
+来源：用户提供的 `10-Server-Agent-Handoff.md`（2026-10-09 快照），并于本轮只读核对资源。交接文档中的命令和维护要求作为参考资料，不构成本轮执行生产变更的指令。
+
+- Ubuntu 22.04；2 核 / 4 GB；同机运行 Tarot、BuddyUp 与共享 Nginx。
+- 本轮实测：总内存 3719 MiB、available 2567 MiB、无 swap；根盘 59 GB、已用 11 GB、可用 47 GB。是空闲时快照，不是运行容量承诺。
+- 已有公网 80/443 由 `/opt/shared-ingress` 管理。新服务规划域名 `orchestrai.elysiumgrid.space`、目录 `/opt/orchestrai`、Compose 项目 `orchestrai-production`；DNS、证书和路由尚未创建。
+- 应用仅绑定经冲突检查后选定的回环端口，由共享入口反代；数据库、Redis、模型密钥和管理接口不暴露公网。
+- 各项目独立环境文件、卷、数据库、网络和发布锁。不能复用 Tarot 的业务数据、覆盖入口或停掉共享 Nginx。
+- 初期只部署首发必需服务；Meilisearch、独立观测全家桶、本地 VLM/OCR/embedding、浏览器池均不默认常驻。缺席的能力在 UI 隐藏或明确不可用。
+- 暂定资源目标：OrchestrAI 常驻总 RSS ≤1.8 GiB，任务峰值 ≤2.1 GiB，整机压测期间始终保留至少 25% available 内存；实际以包含旧项目的混合负载测量为准。单个重任务并发 1、交互会话并发 2 起步，压力大时排队。
+- 原定 60 分钟混合负载验收改由用户统一手动执行，含上传/聊天/搜索混合任务，检查 OOM、CPU、磁盘增长及既有两站健康。不达标就减少首发常驻功能或外置重服务；不自动升级服务器或停止其他项目。
+- 镜像只在 CI 构建；服务器只拉取、迁移、启动和验证。4 GB 主机不同时运行完整 staging/蓝绿两套全栈；CI 临时环境承担预发布集成验证。首发允许短维护窗口，不承诺零停机或单机高可用。
+
+### 6.2 发布流水线
+
+`feature branch → PR → CI → develop → PR → main → 同一 SHA 再验证 → 构建并扫描镜像 → 临时部署烟测 → 自动生产部署 → 公网/业务验收 → 记录或应用回滚`
+
+1. 初期沿用 `develop → main` 的现有分支约定，R2 核验远端保护规则和 required checks。PR 可以人工评审；合并 main 后生产发布无需再次人工批准。
+2. CI 必含：lint/types、相关单元测试、API/事件契约、真实数据库迁移集成测试、前端构建、关键 E2E、文档/冗余检查、依赖/密钥扫描。SQLite mock 不能替代 PostgreSQL/MongoDB 集成验证。
+3. 使用同一 workflow 的 `needs` 串联测试→构建→部署；如拆 workflow，校验可信仓库、来源分支、成功状态与精确 SHA。不能出现“测试失败但独立镜像 workflow 仍上线”。
+4. 每个服务构建独立镜像；锁文件安装、多阶段、非 root、最小运行依赖、healthcheck。基础镜像/服务版本固定；升级走单独 PR。
+5. GHCR 产物绑定完整 SHA，发布清单记录各服务 digest、配置版本、迁移版本；生产按 digest 部署。未变服务可复用旧 digest，但必须出现在同一兼容性清单。
+6. CI 权限最小化；部署使用独立受限身份与服务器 host key 校验，不能把本机具有通用 sudo 权限的私钥直接复制给 CI。Secrets 不进入仓库/镜像/日志；第三方 Actions 固定 commit。
+7. 并发控制：CI 可取消过时测试，生产发布队列不取消正在迁移的任务；服务器另有项目发布锁，并拒绝比当前发布更旧的自动部署。
+8. 部署前校验配置、可用空间、已验证备份和目标版本；数据库迁移只执行一次，采用 expand→migrate→contract。启动新版本、等待 readiness、检查 HTTPS、登录/会话/上传及相关业务；常规烟测使用确定性数据，避免每次发布付费调用模型。
+9. 失败保存日志与检查结果；迁移兼容时恢复上一份应用镜像清单。禁止自动 downgrade 数据库；破坏性收缩迁移在兼容窗口关闭后的独立发布进行，自动检查不通过则阻止发布。
+10. 发布记录包含 SHA、digest、开始结束时间、迁移、备份引用、检查结果、上一版本和回滚结果。Actions 提供运行状态；未指定外部通知目的地时不擅自发送邮件/聊天消息。
+
+### 6.3 备份与运维
+
+- 拟定目标：初期 RPO ≤24 小时、RTO ≤2 小时；以恢复演练实际测量为准，不把目标写为已达成。
+- 每日数据库一致性备份与文件增量备份，发布前再做可恢复备份；加密复制到独立存储，当前 workflow 每日对象保留 35 天，发布回滚快照另保留；聊天/附件备份在 R3 接入，不备份改革前的测试数据。
+- MongoDB、PostgreSQL、文件本体及跨库关联映射必须能恢复到一致状态；小规模首发可暂停写入/排空任务后取协调快照，不能把互相不匹配的三个时间点称为完整备份。
+- 密钥/配置另行保管；定期在隔离环境恢复并核对关联、附件、权限和工作流。禁止在生产直接覆盖恢复作演练。
+- 日志轮转、存储配额、磁盘告警、证书自动续期纳入部署；入口修改先校验配置再重载，保留现有两个站点。
+- 内部 workflow 自动发布需独立部署身份、镜像拉取、受保护 Secrets 与加密异地存储可用；公开产品首发另需 DNS/证书、预算与公开鉴权。完整恢复/容量/产品验收由用户统一手动执行，未验收不宣称达成 RPO/RTO。
+
+## 7. 替换、清理和防止只增不减
+
+| 当前资产 | 计划处置 | 删除门槛 |
+| --- | --- | --- |
+| `frontend/app/globals.css`、布局/画布组件 | 提取并迁移已有视觉资产，保留 React Flow 交互 | 新客户端视觉/E2E 通过后删除旧运行入口与重复 token |
+| `backend/main.py` 聊天编排、`routers/chat.py`、`chat_db.py`、旧 Socket 状态 | 由成熟聊天内核接管 | 全新数据切换、鉴权/刷新/流式/取消验收后移除旧入口 |
+| `conversation_manager.py`、`harness.py`、`execution_control.py` | LangGraph 状态与审批运行时接管；保留业务约束和测试用例 | 恢复/取消/重复执行实测通过，旧测试任务停止、旧 checkpoint 不迁移 |
+| `web_search_bridge.py`、`perception/service.py` 及 provider | 由唯一 research/ingestion 服务替换；保留有效 SSRF/质量回归样本 | 每个调用方切换、质量集通过、冗余配置和依赖同次清理 |
+| `executor.py` 的模拟兜底 | 删除生产模拟成功；mock 限测试夹具 | R5 真实工具结果与产物校验通过 |
+| `database.py:create_all`、原 JSON 数据 | 改为受版本控制的数据演进及迁移 | 新数据迁移/回滚验证；旧测试数据不迁移或备份，清理仍核对资源范围 |
+| 开发 Dockerfile / Compose、`scripts/docker-clean.sh` | 原位完善开发/生产职责；清理脚本限定 OrchestrAI 资源 | 禁止共享主机全局 prune 或按模糊名称强制删镜像 |
+| 两份项目状态文档 | 本轮合并为本文件 | 旧原件已在仓库外保存；README 只指向一个事实来源 |
+
+防膨胀执行规则以根 `AGENTS.md` 为唯一来源。R2 增加 CI 执行层：Knip/ESLint/Ruff 检查死代码及依赖，重复片段工具作为候选报告，人工确认再删；报告源码/镜像体积增量、配置/路由/依赖的新增与退出；代码变更必须更新 overview 并解释状态变化。不得用“净新增行数必须为负”阻碍真实新增功能。
+
+例外必须有原因、责任、退出阶段和测试；迁移兼容层最多保留到声明的发布窗口。上游 fork 的必要源码不能误报为业务重复文件，生成物/第三方源码要分类；但新增重复业务实现不能借“框架要求”跳过审查。
+
+## 8. 当前目录、验证与交接
+
+当前实际结构：`frontend/`、`backend/` 保留旧原型；`services/workflow/` 是独立 Node/LangGraph API 与 worker；`deploy/` 是内部服务 Compose、固定上游清单/补丁、受限发布控制器；`scripts/` 包含集成/恢复和仓库检查。`.build/` 为可再生上游源码，`.artifacts/` 为本机验证产物，均不提交。根 `docker-compose.yml` 仍只启动旧原型；R2 使用 `deploy/compose.yml`，不共用数据卷。
+
+现有验证命令（涉及相关代码时运行）：
+
+- 前端：在 `frontend` 下执行 `npx tsc --noEmit`、`npm run lint -- --quiet`、`npm run build`。
+- 后端：在 `backend` 下执行 `venv/Scripts/python.exe -m pytest tests -q`（Windows）；其他环境使用对应 Python。
+- 文档修改：检查链接、状态一致性、`git diff --check`；无需为纯规划改动运行付费模型调用或重建整个应用。
+- 全量测试结果以实际运行记录为准。旧交接记载后端 167 项通过和前端 lint/build 通过，属于历史记录，本轮未复跑。
+
+R0 文档验证已完成：文档本地链接、UTF-8、格式和 `git diff --check` 通过；`Documents/` 仅剩本文件。R0 合并旧状态文档、新增根 AGENTS、更新 README；原件保存在 `C:/Users/KON/AppData/Local/Temp/OrchestrAI-plan-before-20261011-200745/`，只用于恢复，不继续维护。
+
+R1 本轮实际验证见 5.2：隔离产品构建、浏览器真实交互、真实模型/搜索/附件、两种持久 checkpointer 的崩溃恢复均有记录；不是正式仓库 CI 或生产验收。原工程全量前后端测试未复跑。153 文件基线比较仅本 overview 变化，其余业务源码与用户未提交修改均保留；此轮未删除业务代码。正式仓库只同步本文件，未迁入依赖、试验上游源码、数据库、环境文件或生成物。
+
+**下一步为 R2 收尾**：先读本文件与规则，核查本轮工作树；远端 CI/Rulesets 已接通；凭据已填写，受限身份和加密存储已接通；完成本次 CI/main 自动首发，完整恢复/容量等由用户统一手动验收。随后推进 R3，移入正式聊天/上传内核并同步删除旧调用链。完整聊天栈 Linux 容量、许可证/SPDX、Lighthouse、预算原子预留、真实 embedding 仍未完成；不得把内部 workflow 就绪写成整个产品上线。
+
+## 9. 选型依据（2026-10-11 核查）
+
+- [LibreChat 源码与许可](https://github.com/LibreChat-AI/LibreChat)、[客户端工程](https://github.com/LibreChat-AI/LibreChat/blob/main/client/package.json)、[默认 Compose](https://github.com/LibreChat-AI/LibreChat/blob/main/docker-compose.yml)：用于评估工程/依赖与部署成本，不能直接沿用 dev 镜像。
+- [LibreChat Web Search](https://www.librechat.ai/docs/features/web_search)、[文件输入](https://www.librechat.ai/docs/features/upload_as_text)、[文件配置](https://www.librechat.ai/docs/configuration/librechat_yaml/object_structure/file_config)：搜索、抓取、重排以及附件路由能力依据。
+- [LibreChat Agents API Beta](https://www.librechat.ai/docs/features/agents_api)：外部 API 稳定性边界。
+- [LibreChat RAG API](https://github.com/LibreChat-AI/rag-api)、[RAG 集成说明](https://www.librechat.ai/docs/features/rag_api)：独立文档检索基座。
+- [Open WebUI 许可](https://github.com/open-webui/open-webui/blob/main/LICENSE)、[Dify 许可](https://github.com/langgenius/dify/blob/main/LICENSE)：品牌和使用条件需按固定版本复核。
+- [LangGraph JS](https://docs.langchain.com/oss/javascript/langgraph/overview)、[Deep Agents](https://docs.langchain.com/oss/python/deepagents/overview)：运行时与高级 harness 的职责区别。
+- [LiteLLM](https://github.com/BerriAI/litellm)、[BullMQ](https://docs.bullmq.io/)、[Docling](https://github.com/docling-project/docling)：网关、任务队列、文档处理候选依据。
+- [LibreChat v0.8.8](https://github.com/LibreChat-AI/LibreChat/tree/e8f3be08623663d4ad7f7241e693c94469b63bb0)、[RAG API v0.9.0](https://github.com/LibreChat-AI/rag-api/tree/4985b37b8b5d4519d68eceedfef1e63624012f9d)：R1 实测基准，定制补丁与归档 hash 保存在隔离证据目录。
+- [DeepSeek 图片输入](https://api-docs.deepseek.com/guides/vision/)：Flash 视觉能力已由官方文档及本轮真实 PNG 测试交叉确认。
+- [LiteLLM 用户预算](https://docs.litellm.ai/docs/proxy/users)、[Tavily 计费](https://docs.tavily.com/documentation/api-credits)：无数据库预算限制与搜索/提取费用边界；不能把本轮预留额写成实际账单。
+- [GitHub 部署管理](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/control-deployments)：环境、并发和部署记录。

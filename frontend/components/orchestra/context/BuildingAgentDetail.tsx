@@ -3,8 +3,10 @@
 import { motion } from 'framer-motion';
 import { Settings, Terminal } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { decideApproval } from '@/lib/api';
 import type { ContextPanelNav } from '../ContextPanel';
 import { DetailHeader } from './DetailHeader';
+import { useOrchestraStore } from '@/stores/orchestraStore';
 import { useWorkflowStore } from '@/stores/workflowStore';
 
 // Stubs kept for backward compat (older imports in Phase 5 code)
@@ -36,6 +38,10 @@ const AI_TONE: Record<string, { card: string; avatar: string }> = {
 
 export function BuildingAgentDetail({ nav, agentId }: { nav: ContextPanelNav; agentId: string }) {
   const { workflow } = useWorkflowStore();
+  const approvals = useOrchestraStore((s) =>
+    s.approvals.filter((approval) => !approval.node_id || approval.node_id === agentId),
+  );
+  const updateApproval = useOrchestraStore((s) => s.updateApproval);
   const node = workflow?.nodes.find((n) => n.node_id === agentId);
 
   if (!node) {
@@ -119,13 +125,65 @@ export function BuildingAgentDetail({ nav, agentId }: { nav: ContextPanelNav; ag
         </div>
 
         <SectionLabel>Pending Approvals</SectionLabel>
-        <div className="rounded-[14px] border border-dashed border-hairline bg-canvas-soft/50 p-4 text-center">
-          <Settings className="mx-auto h-5 w-5 text-ink-muted" strokeWidth={1.6} />
-          <p className="mt-2 text-[12.5px] font-medium text-ink-soft">暂无待审批项</p>
-          <p className="mt-1 text-[11.5px] text-ink-muted">
-            节点执行开始后，需要人工决策的操作会显示在这里。
-          </p>
-        </div>
+        {approvals.length === 0 ? (
+          <div className="rounded-[14px] border border-dashed border-hairline bg-canvas-soft/50 p-4 text-center">
+            <Settings className="mx-auto h-5 w-5 text-ink-muted" strokeWidth={1.6} />
+            <p className="mt-2 text-[12.5px] font-medium text-ink-soft">暂无待审批项</p>
+            <p className="mt-1 text-[11.5px] text-ink-muted">
+              节点执行开始后，需要人工决策的操作会显示在这里。
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {approvals.map((approval) => (
+              <div
+                key={approval.approval_id}
+                className="rounded-[14px] border border-warning-200 bg-warning-50/40 p-4"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[13px] font-semibold text-ink">
+                      {approval.action_type}
+                    </p>
+                    <p className="mt-1 text-[11.5px] text-ink-muted">
+                      Risk: {approval.risk_level} · Status: {approval.status}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-white/70 px-2 py-1 text-[10.5px] font-semibold uppercase text-warning-700">
+                    HITL
+                  </span>
+                </div>
+                <pre className="mt-3 max-h-28 overflow-auto rounded-[10px] bg-white/70 p-2 text-left text-[11px] leading-relaxed text-ink-soft">
+                  {JSON.stringify(approval.requested_payload, null, 2)}
+                </pre>
+                {approval.status === 'pending' ? (
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const updated = await decideApproval(approval.approval_id, 'approve');
+                        updateApproval(updated);
+                      }}
+                      className="rounded-[10px] bg-success-600 px-3 py-2 text-[12px] font-semibold text-white"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const updated = await decideApproval(approval.approval_id, 'deny');
+                        updateApproval(updated);
+                      }}
+                      className="rounded-[10px] border border-hairline bg-white px-3 py-2 text-[12px] font-semibold text-ink-soft"
+                    >
+                      Deny
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </>
   );

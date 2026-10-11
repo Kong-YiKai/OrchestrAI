@@ -1,7 +1,14 @@
 import { create } from 'zustand';
 import type { ChatMessage } from '@/types/chat';
+import type { ApprovalRecord, SessionCheckpointState } from '@/lib/api';
 
-export type ConvState = 'idle' | 'clarifying' | 'awaiting_confirm' | 'generating' | 'complete';
+export type ConvState =
+  | 'idle'
+  | 'clarifying'
+  | 'awaiting_confirm'
+  | 'generating'
+  | 'complete'
+  | 'cancelled';
 
 export interface ClarificationOption {
   id: string;
@@ -78,6 +85,7 @@ interface OrchestraStore {
 
   historyEntries: HistoryEntry[];
   readyWorkflowId: string | null;
+  approvals: ApprovalRecord[];
 
   setSessionId: (id: string) => void;
   setConvState: (s: ConvState) => void;
@@ -95,6 +103,9 @@ interface OrchestraStore {
   addHistoryEntry: (entry: HistoryEntry) => void;
   setHistoryEntries: (entries: HistoryEntry[]) => void;
   setReadyWorkflowId: (id: string) => void;
+  hydrateCheckpoint: (state: SessionCheckpointState) => void;
+  addApproval: (approval: ApprovalRecord) => void;
+  updateApproval: (approval: ApprovalRecord) => void;
   reset: () => void;
 }
 
@@ -111,6 +122,7 @@ const initialState = {
   isBuildingComplete: false,
   historyEntries: [] as HistoryEntry[],
   readyWorkflowId: null,
+  approvals: [] as ApprovalRecord[],
 };
 
 export const useOrchestraStore = create<OrchestraStore>((set) => ({
@@ -186,6 +198,39 @@ export const useOrchestraStore = create<OrchestraStore>((set) => ({
   setHistoryEntries: (entries) => set({ historyEntries: entries }),
 
   setReadyWorkflowId: (id) => set({ readyWorkflowId: id }),
+  addApproval: (approval) =>
+    set((state) => ({
+      approvals: [
+        approval,
+        ...state.approvals.filter((item) => item.approval_id !== approval.approval_id),
+      ],
+    })),
+  updateApproval: (approval) =>
+    set((state) => ({
+      approvals: state.approvals.map((item) =>
+        item.approval_id === approval.approval_id ? approval : item,
+      ),
+    })),
+  hydrateCheckpoint: (checkpoint) =>
+    set({
+      convState: checkpoint.state,
+      clarificationQuestions: (checkpoint.clarifications ?? []) as ClarificationQuestion[],
+      plan: checkpoint.plan_summary
+        ? {
+            title: '已恢复的计划',
+            summary: checkpoint.plan_summary,
+            nodes: (checkpoint.plan_nodes_preview ?? []) as PlanNode[],
+            confirmation_prompt: '是否继续生成工作流？',
+          }
+        : null,
+      historyEntries: (checkpoint.history_log ?? []) as HistoryEntry[],
+      contextView:
+        checkpoint.state === 'awaiting_confirm'
+          ? { name: 'clarifications' }
+          : checkpoint.state === 'generating'
+            ? { name: 'building' }
+            : { name: 'overview' },
+    }),
 
   reset: () => set(initialState),
 }));

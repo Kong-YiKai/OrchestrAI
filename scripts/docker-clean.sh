@@ -1,20 +1,17 @@
 #!/usr/bin/env bash
-# Remove dangling images and any stale orchestrai-* images not matching the
-# canonical names defined in docker-compose.yml (orchestrai/backend, orchestrai/frontend).
+# Local prototype images only. Production release/rollback images are retained.
 set -euo pipefail
 
-echo "=== Removing dangling images ==="
-docker image prune -f
-
-echo ""
-echo "=== Removing stale orchestrai-* images (old naming convention) ==="
-STALE=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep -E "^(orchestrai-|docker-frontend|docker-backend)" || true)
-if [ -n "$STALE" ]; then
-  echo "$STALE" | xargs docker rmi -f
-else
-  echo "None found."
+if [[ $# -eq 0 ]]; then
+  docker image ls 'orchestrai/*'
+  echo 'To remove an unused local image, pass its exact orchestrai/name:tag. Never run global prune on the shared server.'
+  exit 0
 fi
-
-echo ""
-echo "=== Current images ==="
-docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.Size}}"
+for image in "$@"; do
+  if [[ ! "$image" =~ ^orchestrai/[a-z0-9-]+:[a-zA-Z0-9._-]+$ ]]; then
+    echo 'Only exact local orchestrai/name:tag references are accepted.' >&2
+    exit 2
+  fi
+done
+# No force: Docker rejects images referenced by existing containers.
+docker image rm -- "$@"

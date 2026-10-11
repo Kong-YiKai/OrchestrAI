@@ -6,7 +6,7 @@ backend/venv/
 .pytest_cache/
 
 # Node
-frontend/node_modules/
+node_modules/
 frontend/.next/
 
 # Env (secrets)
@@ -36,3 +36,10 @@ pgdata/
 # AI assistant project context docs
 CLAUDE.md
 **/CLAUDE.md
+
+# Reproducible upstream build contexts and local runtime evidence
+.build/
+.artifacts/
+deploy/private/
+deploy/.env.*
+!deploy/.env.example

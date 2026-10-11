@@ -2,10 +2,47 @@ import type { Workflow, WorkflowNode, WorkflowSummary } from '@/types/workflow';
 
 const BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
+export interface SessionCheckpointState {
+  state: 'idle' | 'clarifying' | 'awaiting_confirm' | 'generating' | 'complete' | 'cancelled';
+  history?: { role: string; content: string }[];
+  clarifications?: unknown[];
+  plan_summary?: string | null;
+  plan_nodes_preview?: unknown[];
+  original_request?: string;
+  history_log?: unknown[];
+}
+
+export interface ResumeSessionResponse {
+  status: 'resumed' | 'not_found';
+  session_id: string;
+  state: SessionCheckpointState | null;
+}
+
+export interface ApprovalRecord {
+  approval_id: string;
+  session_id: string;
+  workflow_id?: string | null;
+  node_id?: string | null;
+  action_type: string;
+  risk_level: string;
+  requested_payload: Record<string, unknown>;
+  status: 'pending' | 'approved' | 'denied';
+  decision?: string | null;
+  note?: string;
+  created_at?: string;
+  decided_at?: string | null;
+}
+
 export async function fetchWorkflow(workflowId: string): Promise<Workflow | null> {
   const res = await fetch(`${BASE}/workflow/${workflowId}`);
   if (!res.ok) return null;
   return (await res.json()) as Workflow;
+}
+
+export async function resumeSession(sessionId: string): Promise<ResumeSessionResponse> {
+  const res = await fetch(`${BASE}/sessions/${sessionId}/resume`, { method: 'POST' });
+  if (!res.ok) throw new Error(`resumeSession failed: ${res.status}`);
+  return (await res.json()) as ResumeSessionResponse;
 }
 
 /** List all workflows as lightweight summaries (no node payload), newest first. */
@@ -58,6 +95,34 @@ export async function stopNode(nodeId: string, sessionId: string) {
     body: JSON.stringify({ session_id: sessionId }),
   });
   return res.json();
+}
+
+export async function decideApproval(
+  approvalId: string,
+  decision: 'approve' | 'deny',
+  note = '',
+): Promise<ApprovalRecord> {
+  const res = await fetch(`${BASE}/execution/approval/${approvalId}/decision`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ decision, note }),
+  });
+  if (!res.ok) throw new Error(`decideApproval failed: ${res.status}`);
+  return (await res.json()) as ApprovalRecord;
+}
+
+export async function killSession(sessionId: string, reason = 'user_requested') {
+  const res = await fetch(`${BASE}/execution/kill`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId, reason }),
+  });
+  if (!res.ok) throw new Error(`killSession failed: ${res.status}`);
+  return res.json() as Promise<{
+    status: 'killed';
+    session_id: string;
+    next_state: SessionCheckpointState['state'];
+  }>;
 }
 
 export async function updateNodeModel(

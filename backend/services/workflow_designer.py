@@ -8,6 +8,8 @@ from typing import Callable
 import anthropic
 from config import settings
 from services.conversation_manager import ConversationState, add_history_log
+from services.harness import record_execution_trace
+from services.observability.logger import log_event
 from models.workflow import Workflow, WorkflowNode, NodeStatus, NodeType, ToolType
 
 _client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
@@ -38,6 +40,12 @@ async def _emit_log(sio_emit_fn: Callable, session_id: str, log_type: str, messa
         "agent": "Workflow Designer",
     }
     await sio_emit_fn("building:log", log, room=session_id)
+    log_event(
+        event_type="building_log",
+        session_id=session_id,
+        agent="workflow_designer",
+        payload={"type": log_type, "message": message, "detail": detail},
+    )
 
 
 async def design_workflow(
@@ -76,13 +84,29 @@ async def design_workflow(
             final_message = await stream.get_final_message()
             stop_reason = final_message.stop_reason
     except Exception as e:
+        await record_execution_trace(
+            event_type="workflow_design_failed",
+            session_id=session_id,
+            agent="workflow_designer",
+            payload={"error_type": type(e).__name__, "error": str(e)},
+        )
         await _emit_log(sio_emit_fn, session_id, "error", f"生成失败: {str(e)[:40]}")
         return None
 
     workflow = _parse_workflow(full_text)
     if not workflow:
         tail = full_text[-300:].replace('\n', ' ')
-        print(f"[designer] parse failed. stop_reason={stop_reason} len={len(full_text)} tail={tail}")
+        await record_execution_trace(
+            event_type="workflow_json_parse_failed",
+            session_id=session_id,
+            agent="workflow_designer",
+            payload={
+                "stop_reason": stop_reason,
+                "response_length": len(full_text),
+                "tail": tail,
+                "fallback_used": True,
+            },
+        )
         detail = f"(stop_reason={stop_reason})" if stop_reason == "max_tokens" else ""
         await _emit_log(
             sio_emit_fn,
