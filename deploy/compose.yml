@@ -20,7 +20,7 @@ x-app: &app
 
 services:
   postgres:
-    image: postgres:16-alpine@sha256:93d55776e04376e19adb2733e3ccebb4392ee7dd86d8ff238503b30fe719c84f
+    image: ${POSTGRES_IMAGE:-orchestrai/postgres:local}
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
@@ -40,7 +40,7 @@ services:
     logging: *logs
     networks: [internal]
   redis:
-    image: redis:7.4.2-alpine@sha256:02419de7eddf55aa5bcf49efb74e88fa8d931b4d77c07eff8a6b2144472b6952
+    image: ${REDIS_IMAGE:-orchestrai/redis:local}
     restart: unless-stopped
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?required}

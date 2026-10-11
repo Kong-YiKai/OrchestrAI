@@ -104,15 +104,26 @@ jobs:
         env:
           BUILD_REVISION: ${{ github.sha }}
         run: python scripts/test-services.py
-      - name: Scan the tested runtime image
+      - name: Scan every tested production image
         run: |
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa image --scanners vuln --severity HIGH,CRITICAL --exit-code 1 orchestrai/workflow:local
-          docker save orchestrai/workflow:local -o workflow-image.tar
+          mkdir -p .artifacts/image-scans
+          status=0
+          for service in workflow postgres redis; do
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v orchestrai-trivy-cache:/root/.cache -v "$PWD/.artifacts/image-scans:/reports" aquasec/trivy@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa image --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format json --output "/reports/$service.json" "orchestrai/$service:local" || status=1
+          done
+          if [[ "$status" != 0 ]]; then exit "$status"; fi
+          docker save orchestrai/workflow:local orchestrai/postgres:local orchestrai/redis:local -o release-images.tar
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: image-scans-${{ github.sha }}
+          path: .artifacts/image-scans/*.json
+          retention-days: 30
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: workflow-${{ github.sha }}
           path: |
-            workflow-image.tar
+            release-images.tar
             workflow.spdx.json
           retention-days: 7
 
@@ -147,19 +158,21 @@ jobs:
           REVISION: ${{ github.sha }}
           SEQUENCE: ${{ github.run_number }}
         run: |
-          image="ghcr.io/${REPOSITORY,,}/workflow"
           printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           trap 'docker logout ghcr.io' EXIT
-          docker load -i workflow-image.tar
-          docker tag orchestrai/workflow:local "$image:$REVISION"
-          docker push "$image:$REVISION"
-          IMMUTABLE_IMAGE="$(docker inspect --format '{{index .RepoDigests 0}}' "$image:$REVISION")"
-          export IMMUTABLE_IMAGE
+          docker load -i release-images.tar
+          for service in workflow postgres redis; do
+            image="ghcr.io/${REPOSITORY,,}/$service"
+            docker tag "orchestrai/$service:local" "$image:$REVISION"
+            docker push "$image:$REVISION"
+            docker inspect --format '{{index .RepoDigests 0}}' "$image:$REVISION" > "$service.digest"
+          done
           python - <<'PY'
           import importlib.util,json,os,pathlib
           spec=importlib.util.spec_from_file_location('release','deploy/release.py')
           release=importlib.util.module_from_spec(spec); spec.loader.exec_module(release)
-          manifest=dict(revision=os.environ['REVISION'],image=os.environ['IMMUTABLE_IMAGE'],sequence=int(os.environ['SEQUENCE']),schema=1,config_digest=release.config_digest(pathlib.Path('deploy')))
+          images={service:pathlib.Path(service+'.digest').read_text().strip() for service in ['workflow','postgres','redis']}
+          manifest=dict(revision=os.environ['REVISION'],image=images['workflow'],postgres_image=images['postgres'],redis_image=images['redis'],sequence=int(os.environ['SEQUENCE']),schema=1,config_digest=release.config_digest(pathlib.Path('deploy')))
           value=json.dumps(manifest,separators=(',',':'))
           pathlib.Path('release.json').write_text(value)
           with open(os.environ['GITHUB_OUTPUT'],'a') as output: output.write('manifest='+value+'\n')

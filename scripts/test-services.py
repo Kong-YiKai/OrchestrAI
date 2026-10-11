@@ -22,6 +22,8 @@ def main():
             ['POSTGRES_PASSWORD', 'WORKFLOW_DB_PASSWORD', 'REDIS_PASSWORD', 'DELEGATION_SECRET']), encoding='utf-8')
         os.chmod(ENV, 0o600)
     revision = os.environ.get('BUILD_REVISION', 'local')
+    for service in ('postgres', 'redis'):
+        run('docker', 'build', '-f', 'deploy/infrastructure.Dockerfile', '--target', service, '-t', f'orchestrai/{service}:local', 'deploy')
     run('docker', 'build', '--build-arg', f'BUILD_REVISION={revision}', '--target', 'test', '-t', 'orchestrai/workflow-test:local', 'services/workflow')
     run('docker', 'build', '--build-arg', f'BUILD_REVISION={revision}', '--target', 'runtime', '-t', 'orchestrai/workflow:local', 'services/workflow')
     try:

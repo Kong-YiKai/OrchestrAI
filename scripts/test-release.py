@@ -10,6 +10,7 @@ release = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(release)
 POLICY = {'image_repository':'ghcr.io/kong-yikai/orchestrai/workflow'}
 MANIFEST = {'revision':'a'*40,'image':POLICY['image_repository']+'@sha256:'+'b'*64,'sequence':2,'schema':1,'config_digest':'c'*64}
+MANIFEST.update({service+'_image':'ghcr.io/kong-yikai/orchestrai/'+service+'@sha256:'+'d'*64 for service in ('postgres','redis')})
 
 class PolicyTests(unittest.TestCase):
     def test_valid(self):
