@@ -2,7 +2,7 @@
 
 > 更新：2026-10-12（Asia/Singapore）。这是项目现状、架构决策、阶段计划、部署约定和下一步任务的唯一事实来源。
 > **每次新对话、新任务或接手开发，AI 必须先读本文件，再读根目录 `AGENTS.md` 和相关目录规则。每次完成修改必须同步更新本文件。**
-> 改革进度：R0、R1 选型已完成（用户确认）；R2 进行中，独立 workflow 服务、Linux 集成/恢复测试与 CI/CD 代码已落地。云端 CI、受限部署身份和异地备份尚未接通；未部署生产，聊天/附件迁移仍在 R3。
+> 改革进度：R0、R1 选型已完成（用户确认）；R2 进行中，独立 workflow 服务、Linux 集成/恢复测试与 CI/CD 代码已落地。云端 CI 正在 PR #31 验证，受限部署身份和异地备份尚未接通；未部署生产，聊天/附件迁移仍在 R3。
 
 ## 1. 已确认的产品方向
 
@@ -203,7 +203,7 @@ LibreChat 主仓库 MIT；Open WebUI 当前许可证含品牌限制及例外；D
 | --- | --- |
 | `services/workflow` | Node 24.21.0、LangGraph JS 1.4.8、Postgres saver 1.0.4、BullMQ 5.81.5、jose 6.1.0、pg 8.16.3；独立 HTTP API 与 worker。确定性流程：校验输入→持久审批→写真实报告产物，尚未接聊天或画布 |
 | 身份/协议 | 服务端 HS256 短期委托，issuer/audience/5 分钟 TTL/scopes/user/tenant 校验；浏览器不得接触委托密钥。POST `/runs` 使用幂等键；GET 状态/游标事件/产物；POST 审批/取消；跨用户/租户返回 404。R3 须完成来自真实 chat 身份的签发适配 |
-| 持久状态 | PostgreSQL 是 run/checkpoint/事件/审批/产物事实源；非超级用户数据库角色、SQL 校验和与迁移锁；Redis 为可重建队列。并发幂等、审批版本、取消、同步 checkpoint、产物唯一约束；失去 Redis 发布记录可从数据库重新入队 |
+| 持久状态 | PostgreSQL 是 run/checkpoint/事件/审批/产物事实源；非超级用户数据库角色、SQL 校验和与迁移锁；Redis 为可重建队列。并发幂等、审批版本、取消、同步 checkpoint、产物唯一约束；失去 Redis 发布记录可从数据库重新入队；数据库恢复到较旧快照时会重建已完成队列项，队列终态写库失败会补记失败，避免任务永久卡住 |
 | `deploy/compose.yml` | 内部网络、无宿主机开放端口、密码必填、固定镜像 digest、内存/CPU 限额、日志轮转；API/worker 非 root、只读根目录；数据库使用本项目独立卷 |
 | 上游清单/补丁 | `deploy/upstreams.json` 固定 R1 LibreChat/RAG commit 与 ZIP 校验和，保留原许可证；规范化 R1 UI patch 换行。`prepare-upstreams.py` 提取到忽略的 `.build/`，拒绝覆盖未知已有内容。chat/RAG 正式镜像与完整许可证审计仍待迁移时完成 |
 | CI | 原位升级 `.github/workflows/ci.yml`：main 来源、overview 更新、生成物/密钥扫描、Knip（新 workflow）、类型/lint/build、真实数据库/队列集成与恢复、SPDX、Trivy、Actionlint/ShellCheck；同一可信 main SHA 的**已测试镜像**经 artifact 传递到 GHCR。第三方 Action 固定 commit |
@@ -215,12 +215,14 @@ LibreChat 主仓库 MIT；Open WebUI 当前许可证含品牌限制及例外；D
 
 本轮无付费 API 调用。每日 ¥5/月 ¥100 已记录配置；**尚未接通跨模型与搜索的原子预留/计量，生产付费能力保持未接入**。Tavily credits 与人民币须分别限额再归集费用，环境变量不是硬限额实现。
 
-**一次性云端激活清单（尚未完成）：**
+**云端交付状态：** 基础设施已单独提交并推送，Draft [PR #31](https://github.com/Kong-YiKai/OrchestrAI/pull/31) → develop；原有业务未提交内容完整保留。GitHub `production` 环境已创建，只允许 main，未配置人工 reviewers；仓库变量 `R2_DEPLOY_ENABLED=false`。用户明确先完成代码和 CI，暂不填写 R2 存储凭据。本地 Git 全局代理原端口不可达，本轮只通过单命令覆盖访问 GitHub，未改全局配置。
+
+**一次性云端激活清单（未完成项继续追踪）：**
 
 1. 用户已有 **Cloudflare R2 / auto / 已建桶**；待配置具体桶名、账户 Endpoint 与桶级凭据。已准备忽略文件 `deploy/private/rclone.conf` 和 `deploy/private/deployment.json`，后者 `backup_remote` 填 `orchestrai-backup:桶名/orchestrai/workflow`。使用 OrchestrAI 专用路径与最小读写凭据；SecretKey 不发聊天、不入 Git。服务器 `/opt/orchestrai/secrets/rclone.conf` 配置 remote `orchestrai-backup`；支持 rclone S3 兼容端。
 2. 在用户安全位置生成 age 恢复密钥，服务器只存公钥 recipient；填写 `deployment.json` 备份对象路径。先验证上传→下载→解密→隔离恢复，再设 `restore_drill_verified=true`。当前仅实现发布前备份；每日备份/7 日 + 4 周保留及跨 chat/文件协调备份仍待接通，尚未达到 RPO/RTO 验收。
 3. 安装 Docker/Compose、age、rclone；评审后运行 `sudo sh deploy/install-host.sh <CI公钥路径>`。新生成独立 CI SSH key，不复用 ubuntu 管理私钥；服务器使用专用只读包凭据登录私有 GHCR。
-4. GitHub `production` 环境只允许 main，不设置常规人工 reviewer。Secrets：`DEPLOY_HOST`、`DEPLOY_SSH_KEY`、经已有可信 SSH 记录核验的 `DEPLOY_KNOWN_HOSTS`；分支保护追加 `ci-gate`，保留原有规则。现有本机 Git 凭据可访问仓库，GitHub 连接器访问该私有仓库返回 404；无需让用户把 token 发入聊天。
+4. GitHub `production` 已完成 main 限制且无人工 reviewer。尚待 Secrets：`DEPLOY_HOST`、`DEPLOY_SSH_KEY`、经已有可信 SSH 记录核验的 `DEPLOY_KNOWN_HOSTS`；分支保护追加 `ci-gate`，保留原有规则。现有本机 Git 凭据可访问仓库，GitHub 连接器访问该私有仓库返回 404；无需让用户把 token 发入聊天。
 5. 首次激活前 `R2_DEPLOY_ENABLED=false`；镜像拉取、异地恢复、隔离部署/回滚及资源验收通过后改 true。此开关不是每次发布人工审批。当前只发布内部 workflow，R3/R4 公网、DNS/证书、多租户另行验收。
 
 过渡资产：旧 `frontend/`、`backend/`、根 Compose 服务原型；新服务调用方是集成/部署烟测，未双写聊天。旧 UI/聊天最迟 R3 退出，搜索 R4，runtime R5；每次切换同次删除调用方/配置/依赖。工作区原有业务改动单独保留，不混入本轮基础设施提交。

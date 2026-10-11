@@ -120,3 +120,18 @@ test('lost Redis publication is reconstructed from durable run state',{skip:!int
   assert.ok(added.includes(run.id));
   await store.cancel(run.id,who);
 });
+
+test('terminal Redis jobs reconcile after a database restore or failed status write',{skip:!integration},async()=>{
+  const recovered=await store.create(who,randomUUID(),{text:'older database snapshot'});
+  const exhausted=await store.create(who,randomUUID(),{text:'failure event was not recorded'});
+  const added=[],removed=[];
+  await publish(store,{
+    getJob:async id=>({getState:async()=>id.startsWith(exhausted.id)?'failed':'completed',remove:async()=>removed.push(id)}),
+    add:async(name,data)=>added.push(data.id),
+  });
+  assert.ok(added.includes(recovered.id));
+  assert.ok(removed.includes(`${recovered.id}-1`));
+  assert.equal((await store.owned(store.pool,exhausted.id,who)).status,'failed');
+  assert.ok(!added.includes(exhausted.id));
+  await store.cancel(recovered.id,who);
+});

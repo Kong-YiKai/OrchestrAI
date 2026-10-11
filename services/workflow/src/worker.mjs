@@ -13,7 +13,22 @@ export async function publish(store, queue) {
     // the run source of truth, instead of trusting an old published marker forever.
     const jobId = `${row.id}-${row.dispatch_version}`;
     const existing = await queue.getJob(jobId);
-    if (existing) continue;
+    if (existing) {
+      const state = await existing.getState();
+      if (state === 'failed') {
+        // Persist terminal retry exhaustion even if Postgres was offline when
+        // the worker's failed callback originally tried to record it.
+        await store.transaction(async c => {
+          const update = await c.query("UPDATE runs SET status='failed',error_code='execution_failed',updated_at=now() WHERE id=$1 AND dispatch_version=$2 AND status IN ('queued','running') RETURNING id",[row.id,row.dispatch_version]);
+          if (update.rowCount) await store.event(c,row.id,'failed',{error_code:'execution_failed'});
+        });
+        continue;
+      }
+      // After restoring a database snapshot Redis may have a newer completion.
+      // Re-run against the restored checkpoint and idempotent artifact record.
+      if (state !== 'completed') continue;
+      await existing.remove();
+    }
     // Durable outbox: a crash between add/update safely repeats the same job ID.
     await queue.add('execute',{ id:row.id,version:row.dispatch_version },{
       jobId,attempts:3,backoff:{ type:'exponential',delay:1000 },
