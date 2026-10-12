@@ -6,6 +6,8 @@
 
 > **R3 已完成代码与服务器内部候选部署，待用户统一手动验收。** PR #33/#34 已合并；main `901beb6` 的 CI、八种不可变镜像发布、自动 CD 与部署烟测全部通过。新服务六份协调加密快照及完成清单已在 Cloudflare R2 回读校验，服务恢复健康。百炼 1024 维检索与聊天/PDF/图片真实联调此前通过；本轮收尾无付费 provider 调用。公网 DNS/TLS/搜索留 R4，画布与通用 harness 留 R5，见 5.4。
 
+> **R4 已完成代码、必要 CI/CD 与公开部署，待用户统一手动验收。** PR #35/#36 已合并；main `312b37a` 的九种不可变镜像发布、自动 CD、公开 HTTPS/登录/研究烟测通过。研究复用 LibreChat Agents/Tavily/BM25，新增一个独立服务，七份协调加密快照已在 Cloudflare R2 回读校验；真实小样本与手动验收限制见 5.5。下一阶段为 R5 真实画布与 harness。
+
 ## 1. 已确认的产品方向
 
 - 产品名称与品牌：**OrchestrAI**。允许重做内部工程，以尽快获得成熟聊天、搜索、文件和多模态体验为优先。
@@ -140,7 +142,7 @@ LibreChat 主仓库 MIT；Open WebUI 当前许可证含品牌限制及例外；D
 | R1：选型验证与基线冻结 | 已完成（选型，用户确认；遗留发布门槛继续追踪） | 小型可运行对照、UI 移植、依赖/资源/许可清单、最终技术决定 | 固定版本 LibreChat、LangGraph JS、RAG API、LiteLLM；Docker、Playwright | 通过下述试验门槛；确定单一路线和每项旧资产退出点 |
 | R2：微服务与交付基础 | 已完成（代码与内部部署；待用户手动验收） | 独立服务最小链路、迁移/契约、自动 CI/CD、身份/配置边界 | Compose、Actions、GHCR、PostgreSQL、Redis/BullMQ、LangGraph | CI 同一提交产出镜像；隔离环境部署/回滚/恢复通过；具备发布前提 |
 | R3：成熟聊天与附件候选版 | 已完成（代码、CI/CD 与内部部署；待用户手动验收） | 原有风格的真实聊天、登录、历史、图片/PDF/TXT 上传、文档问答与新服务协调备份 | LibreChat chat/client、RAG API、pgvector、百炼 text-embedding-v4、DeepSeek 视觉、LiteLLM、持久存储；OCR 未接入 | 核心真实联调与权限烟测通过；可信 main 部署候选版、六份加密快照异地回读通过 |
-| R4：Web Research 重做与首发 | 进行中（2026-10-13 开始实施） | 搜索→读取→重排→引用、可见过程、限额与拒答 | 固定 LibreChat agents 搜索工具、Tavily 搜索/读取、BM25 初始重排；复用 PostgreSQL/Redis 与模型网关预算，新增独立 research 服务 | 必要 CI/部署烟测通过，单一入口；真实 provider 小样本与公网 DNS/TLS，完整质量/容量由用户手动验收 |
+| R4：Web Research 重做与首发 | 已完成（代码、CI/CD 与公开部署；待用户手动验收） | 搜索→读取→重排→引用、可见过程、限额与拒答 | 固定 LibreChat agents 搜索工具、Tavily 搜索/读取、BM25 初始重排；复用 PostgreSQL/Redis 与模型网关预算，新增独立 research 服务 | 必要 CI/部署烟测通过，单一入口；真实 provider 小样本与公网 DNS/TLS，完整质量/容量由用户手动验收 |
 | R5：真实工作流执行 | 未完成（重做） | 画布映射真实 graph、DAG、版本、审批、取消、重启恢复；自主任务复用成熟 harness | React Flow、LangGraph JS、Deep Agents JS 首选评估、Postgres checkpointer、BullMQ、MCP | 真实三节点任务成功；断线/崩溃/重复投递不重复副作用；mock 只留测试 |
 | R6：音视频理解与产物生成 | 未完成 | 分批交付转写、视频摘要、PPT/文档、图片生成 | 外部 ASR/VLM/生成 API；按需 FFmpeg、Docling、PptxGenJS/docx 库；独立 worker | 每种能力有真实可下载产物、预览、用量、失败/取消闭环；不拿一个入口代表全覆盖 |
 | R7：运行质量与维护 | 未完成 | 评测回归、成本看板、审计保留、依赖/上游升级机制 | OpenTelemetry、结构化日志、Langfuse 外部实例或兼容托管端、Renovate/Dependabot | 基础观测从 R2 就有；此阶段完善 SLO、升级演练与长期质量管理 |
@@ -272,7 +274,7 @@ R3 无剩余代码或服务器交付收尾项；用户统一手动验收完整�
 
 ### 5.5 R4 搜索质量门槛
 
-**状态：进行中，代码与本机必要验证通过；可信 main CI/CD 尚未执行。** 分支 `codex/r4-web-research`。修改现有客户端补丁、网关预算/配置、Compose、CI 与发布控制器；新增独立 research API/worker（同一容器）、数据库角色/校验和迁移、固定 fixture/队列测试和本站 TLS/续期资产。没有数据删除项；旧原型已退出活跃源码，chat 内置搜索保持禁用。本阶段新增一个研究镜像/常驻进程，完整 schema=3 为九种镜像、十个常驻进程，复用本项目 PostgreSQL 与 Redis，不增加重型本地抓取模型。
+**状态：已完成代码、必要 CI/CD 与公开部署，待用户手动质量/容量/恢复/许可证验收（2026-10-13）。** 分支 `codex/r4-web-research`。修改现有客户端补丁、网关预算/配置、Compose、CI 与发布控制器；新增独立 research API/worker（同一容器）、数据库角色/校验和迁移、固定 fixture/队列测试和本站 TLS/续期资产。没有数据删除项；旧原型已退出活跃源码，chat 内置搜索保持禁用。本阶段新增一个研究镜像/常驻进程，完整 schema=3 为九种镜像、十个常驻进程，复用本项目 PostgreSQL 与 Redis，不增加重型本地抓取模型。
 
 直接复用 `@librechat/agents@4.0.1` 的 Tavily 搜索/批量提取，已有依赖 `okapibm25@1.4.1` 在本地重排；Chinese Intl.Segmenter + ASCII token 编码避免 BM25 的英文分词/正则输入问题。浏览器只有 chat 登录身份，chat 签发独立短期 research 委托；research 自有库是查询、任务、证据和结果事实源，不维护第二份聊天历史。`services/research/openapi.json` 是独立版本化契约，服务仅内网提供 `/openapi.json`，chat 不转发该路径；研究目录统一 LF，防止 Windows checkout 改变迁移校验和。BullMQ/Redis DB1 是可从 SQL 重建的队列；单实例串行执行、每用户最多一个活跃任务、全局排队最多二十个。引用须来自实际提取正文且为精确连续摘录，搜索摘要不能当作读取正文；这是引用校验，**不等于引用语义支持率已经达标**。
 
@@ -280,9 +282,17 @@ R3 无剩余代码或服务器交付收尾项；用户统一手动验收完整�
 
 Tavily 凭据只进现有 LiteLLM 网关，受限 transport hook 固定 provider URL，检查公开目标 DNS/IP、禁止私网/任意 provider/crawl/付费重试。模型与搜索共用 SQLite 原子人民币预留：每日 ¥5/月 ¥100；另限制 Tavily 每日 30/月 1,000 credits。即使免费额度也按保守 7 分/credit 归集；不是实际账单。receipt 缓存 35 天，原子保留 operation ID/请求摘要/结算；到期只清正文缓存，未知费用/重复调用围栏和账本保留。研究证据自身在 research 库保存，可由用户删除。R3 模型 schema 不变，附加 provider schema 支持 schema=3→2 的应用回滚，无自动数据库 downgrade；schema=3 日常协调快照增加 `research.dump`，共七份。schema=3 每次自动发布在内部鉴权/附件/委托烟测之后，另校验真实公开 HTTPS `/login` 为 200；失败进入同一应用回滚处理。过时 PR 的 CI 自动取消，main 的 CI/CD 保持排队且不取消正在发布的任务。
 
-本机实际通过：客户端构建/类型、预算 5 项、search transport 4 项、研究 engine 固定 fixture、真实 SQL/队列权限/幂等/取消/崩溃围栏/证据保留、候选登录/附件/workflow/研究无付费烟测、桌面/390px 实际渲染及 Escape/关闭/失败态、发布 8 项契约和干净上游归档补丁应用。research npm audit 为 0，Trivy 高危/严重为 0（其他镜像仍以本轮 CI 为准）。本地真实 provider 保留失败：TUN/Fake-IP 将公共域名解析为 198.18.x.x，私网保护拒绝直接链接/批量提取；普通中文检索实际返回五个来源、消耗 1 credit，但没有正文/回答，未把该结果记为成功。随后仅对本地 candidate 使用服务器实际公共 DNS 地址的临时 Compose extra_hosts，完成一次三样本真实调用并立即恢复：Python 文档读取 9.64 秒/1 credit、中文比较 17.36 秒/2 credits，均输出精确引用。比较样本包含非官方来源，未声称“仅官方”要求达标。小红书第三例取得的只是登录导航与重复备案页脚，误记 completed；已添加这类 shell/登录错误/挑战页的拒绝和固定回归，修复后待重测，不能把页脚当作笔记正文。真实服务器小样本尚待完成；30 条质量集、容量/恢复/许可证整体人工验收仍由用户执行。
+本机实际通过：客户端构建/类型、预算 5 项、search transport 4 项、研究 engine 固定 fixture、真实 SQL/队列权限/幂等/取消/崩溃围栏/证据保留、候选登录/附件/workflow/研究无付费烟测、桌面/390px 实际渲染及 Escape/关闭/失败态、发布 8 项契约和干净上游归档补丁应用。research npm audit 为 0，Trivy 高危/严重为 0（其他镜像仍以本轮 CI 为准）。本地真实 provider 保留失败：TUN/Fake-IP 将公共域名解析为 198.18.x.x，私网保护拒绝直接链接/批量提取；普通中文检索实际返回五个来源、消耗 1 credit，但没有正文/回答，未把该结果记为成功。随后仅对本地 candidate 使用服务器实际公共 DNS 地址的临时 Compose extra_hosts，完成一次三样本真实调用并立即恢复：Python 文档读取 9.64 秒/1 credit、中文比较 17.36 秒/2 credits，均输出精确引用。比较样本包含非官方来源，未声称“仅官方”要求达标。小红书第三例取得的只是登录导航与重复备案页脚，误记 completed；已添加这类 shell/登录错误/挑战页的拒绝和固定回归，修复后本机真实重测为 partial、来源 unavailable、无回答、无模型调用（7.68 秒/1 credit）；不能把页脚当作笔记正文。服务器真实小样本见下方；30 条质量集、容量/恢复/许可证整体人工验收仍由用户执行。
 
-用户在腾讯云完成 DNS；服务器确认 `orchestrai.elysiumgrid.space` → `43.173.126.57`。独立共享入口配置已实际启用 HTTPS，复用已注册 ACME 账号及固定 Certbot digest，证书到期 2027-01-10；本站 systemd 续期 timer 使用既有跨站 flock，固定调用 `/usr/local/sbin/orchestrai-renew-certificate`，未修改 Tarot/BuddyUp 的配置或 timer。服务器本机 HTTPS `/login` 为 200；当前应用仍是 R3 main 901beb6，R4 不把证书上线当作研究部署完成。后续 CI/CD 通过后再核验公开登录、研究、协调异地快照及其他站点健康。现有 DeepSeek/Tavily/百炼凭据够用，无需新 Key/注册/充值。
+用户在腾讯云完成 DNS；服务器确认 `orchestrai.elysiumgrid.space` → `43.173.126.57`。独立共享入口配置已实际启用 HTTPS，复用已注册 ACME 账号及固定 Certbot digest，证书到期 2027-01-10；本站 systemd 续期 timer 使用既有跨站 flock，固定调用 `/usr/local/sbin/orchestrai-renew-certificate`，未修改 Tarot/BuddyUp 的配置或 timer。服务器及公开 HTTPS `/login` 为 200；R4 研究已随可信 main 自动发布，并完成下方生产烟测与新七份协调快照。现有 DeepSeek/Tavily/百炼凭据够用，无需新 Key/注册/充值。
+
+**云端交付与生产烟测：** [PR #35](https://github.com/Kong-YiKai/OrchestrAI/pull/35) → develop、[PR #36](https://github.com/Kong-YiKai/OrchestrAI/pull/36) → main 已合并。首轮 CI #38308258493、生产 PR CI #38310189051 均为 success；曾取消重复 develop push，留下同名 ci-gate 失败而阻断合并，已补跑 #38310182189 attempt 2 全部通过，未绕过分支保护。后续不得取消影响受保护提交的 develop 检查。可信 main `312b37a010f8410ef7b6a2c619716d355c323503` 的 [Actions #38313979879](https://github.com/Kong-YiKai/OrchestrAI/actions/runs/38313979879) 检查、九种镜像发布与自动 deploy 全部 success；服务器清单 schema=3，root 发布记录 outcome=deployed。配置摘要为 `8dd71d01337cb6f053f6d753ddb054dc292c28d702bf62cb8cb7e2f7ab0f2364`，与 Git/CI 的 LF 字节一致；生产只拉 digest，不构建。
+
+真实服务器普通网络（没有本机 Fake-IP 修正）小样本：`https://www.python.org/doc/`：completed，5.75 秒，1 credit，6 条精确引用；`https://www.xiaohongshu.com/explore`：partial，0.53 秒，1 credit，0 条精确引用。公开文档有实际正文与精确摘录；受限链接明确没有正文/回答。通过实际浏览器公开 HTTPS 登录、刷新后持久研究记录、来源展开/链接、受限失败态、桌面/390px 无页面横向溢出和关闭（长 URL 标题在窄屏有局部截断，留手动界面验收），未增加 provider 调用。只验证这两个生产样本，不能推断整体引用语义或质量指标。
+
+上线后实际执行七份协调加密 daily backup：暂停七个写入进程，workflow/ingestion/research dump、Mongo archive、附件/图片 tar、预算 SQLite 直接 age 加密，逐份 Cloudflare R2 回读校验后上传完成清单；所有十个进程恢复健康。清单 `daily-20261012T222718Z.dump.age.snapshot.json`，回读 sha256 `c5f51872f8b4443e853ac521c0d230681824de7c6cd4c81af73a5d030eccffb1`，consistency=all-writers-stopped/revision 与当前发布一致。证书 timer 已启用，续期 service 实际启动退出 0（未到续期日期）；Tarot、BuddyUp 和本站 HTTPS 均为 200。资源为单次空闲快照，未做容量/混合负载或完整隔离恢复演练，不宣称 RPO/RTO/长期稳定性达标。
+
+**手动入口：** `https://orchestrai.elysiumgrid.space/login`，账号在本机忽略文件 `deploy/private/production-account.json`，不要提交/发送密码；公开注册保持关闭。登录后顶部“联网研究”输入问题/公开链接，检查来源、引用、取消、刷新记录和失败态；普通聊天不会自动触发研究。最新环境模板为 `deploy/.env.example`，既有生产私有凭据已原位保留并扩充，无需重新填写空模板。R5 接入画布和成熟 harness，R6 再补音视频/生成。
 
 - 先做检索→抓取→重排→证据引用；是否引入查询改写/最多两轮补检由评测决定，不再简单堆 provider。
 - 30 条中文测试集建议分配：时效问题 6、公开网页 6、多来源比较 6、中文长尾 4、直接链接 4、登录/风控/429/超时 4。正向效果和正确失败分别计分。
@@ -290,6 +300,10 @@ Tavily 凭据只进现有 LiteLLM 网关，受限 transport hook 固定 provider
 - 固定 fixture 在每次 CI 运行；真实 provider 小样本由有预算的受保护环境运行，记录版本/时间/网络/用量。失效网页允许替换，但要保留变更原因，不删难例美化成功率。
 - 暂定正常公开网页研究总预算 45 秒、最多两轮、每轮至多五个候选来源；记录 p50/p95、首个进度事件延迟、每次费用。超时返回已有证据与缺口，不能无限 fallback。
 - 来源须记录 URL、抓取时间、证据片段、读取状态；引用必须指向实际取得的证据。小红书登录/风控不能靠更换框架保证读到，不绕过授权和站点访问限制。
+
+R4 收尾保留两项非阻断维护细节：窄屏长 URL 标题有局部截断，R5 界面维护时修正；当前控制器的 35 天 daily 删除匹配尚未包含 `research.dump`，研究备份暂时保留更久，七份快照完整性及回读不受影响。下一次维护发布须补齐该匹配及保留测试，最迟 2026-11-16（首份研究 daily 到期前）；不删除当前有效快照，不宣称七类对象的自动到期清理都已验证。完整恢复、容量、许可证及 30 条搜索质量集由用户手动验收。
+
+上线空闲快照：研究 81.33 MiB、全 OrchestrAI 十进程合计约 1199.25 MiB（Docker stats 内存口径，非总 RSS/峰值），整机 available 1519 MiB/3719 MiB；未做混合负载压测，不能推断容量目标已经达成。
 
 ## 6. CI/CD 与部署约定
 
@@ -299,7 +313,7 @@ Tavily 凭据只进现有 LiteLLM 网关，受限 transport hook 固定 provider
 
 - Ubuntu 22.04；2 核 / 4 GB；同机运行 Tarot、BuddyUp 与共享 Nginx。
 - 部署前实测：总内存 3719 MiB、available 2567 MiB、无 swap；根盘 59 GB、已用 11 GB、可用 47 GB。是空闲时快照，不是运行容量承诺。
-- 已有公网 80/443 由 `/opt/shared-ingress` 管理。新服务规划域名 `orchestrai.elysiumgrid.space`、目录 `/opt/orchestrai`、Compose 项目 `orchestrai-production`；DNS、证书和路由尚未创建。
+- 已有公网 80/443 由 `/opt/shared-ingress` 管理。本站域名 `orchestrai.elysiumgrid.space`、目录 `/opt/orchestrai`、Compose 项目 `orchestrai-production`；R4 已创建独立 DNS/证书/路由和共享锁续期，其他站点配置未改。
 - 应用仅绑定经冲突检查后选定的回环端口，由共享入口反代；数据库、Redis、模型密钥和管理接口不暴露公网。
 - 各项目独立环境文件、卷、数据库、网络和发布锁。不能复用 Tarot 的业务数据、覆盖入口或停掉共享 Nginx。
 - 初期只部署首发必需服务；Meilisearch、独立观测全家桶、本地 VLM/OCR/embedding、浏览器池均不默认常驻。缺席的能力在 UI 隐藏或明确不可用。
@@ -325,7 +339,7 @@ Tavily 凭据只进现有 LiteLLM 网关，受限 transport hook 固定 provider
 ### 6.3 备份与运维
 
 - 拟定目标：初期 RPO ≤24 小时、RTO ≤2 小时；以恢复演练实际测量为准，不把目标写为已达成。
-- 每日协调数据库/文件备份，发布前再做可恢复备份；加密复制到独立存储，当前 daily 对象保留 35 天，发布回滚快照另保留。R3 已接入 workflow/ingestion/Mongo/附件/图片/预算六份协调快照，并实际完成上传回读；不备份改革前的测试聊天/附件。
+- 每日协调数据库/文件备份，发布前再做可恢复备份；加密复制到独立存储，daily 保留目标为 35 天（研究部分的到期匹配待补齐，见 5.5），发布回滚快照另保留。R3 已接入六份协调快照，R4 加入 research dump，共七份，并实际完成上传回读；不备份改革前的测试聊天/附件。
 - MongoDB、PostgreSQL、文件本体及跨库关联映射必须能恢复到一致状态；小规模首发可暂停写入/排空任务后取协调快照，不能把互相不匹配的三个时间点称为完整备份。
 - 密钥/配置另行保管；定期在隔离环境恢复并核对关联、附件、权限和工作流。禁止在生产直接覆盖恢复作演练。
 - 日志轮转、存储配额、磁盘告警、证书自动续期纳入部署；入口修改先校验配置再重载，保留现有两个站点。
@@ -350,11 +364,11 @@ Tavily 凭据只进现有 LiteLLM 网关，受限 transport hook 固定 provider
 
 ## 8. 当前目录、验证与交接
 
-当前实际结构：`services/` 包含 workflow、chat、ingestion、gateway、web、mongo 的独立镜像职责；`deploy/compose.yml` 与 `compose.product.yml` 组合为唯一候选入口。`deploy/` 保存固定上游清单/可追踪补丁与受限控制器；`scripts/` 为构建、配置、烟测和治理。旧 frontend/backend 已退出 Git，本机忽略保留；根开发 Compose 已删除。`.build/` 可再生源码、`.artifacts/` 验证产物及私有配置均不提交。
+当前实际结构：`services/` 包含 workflow、chat、research、ingestion、gateway、web、mongo 的独立镜像职责；`deploy/compose.yml`、`compose.product.yml` 与 `compose.research.yml` 组合为唯一产品入口。`deploy/` 保存固定上游清单/可追踪补丁与受限控制器；`scripts/` 为构建、配置、烟测和治理。旧 frontend/backend 已退出 Git，本机忽略保留；根开发 Compose 已删除。`.build/` 可再生源码、`.artifacts/` 验证产物及私有配置均不提交。
 
 现有验证命令（涉及相关代码时运行）：
 
-- 新产品：`python scripts/build-product.py`（构建/客户端类型）；`python scripts/test-product.py`（确定性烟测，不调用付费 provider）。
+- 新产品：`python scripts/build-product.py`（构建/客户端类型）；`python scripts/test-product.py --research`（确定性烟测，不调用付费 provider）；`python scripts/test-research.py`（独立真实 SQL/队列 fixture）。
 - 治理/发布：`python scripts/check-repository.py`、`python scripts/test-release.py`；各镜像原始 Trivy 报告经 `scripts/check-image.py --service SERVICE REPORT` 检查。
 - workflow：该服务的 npm types/lint/build/test，以及 CI 真实 PostgreSQL/Redis 集成。
 - 文档修改：检查链接、状态一致性、`git diff --check`；无需为纯规划改动运行付费模型调用或重建整个应用。
@@ -364,7 +378,7 @@ R0 文档验证已完成：文档本地链接、UTF-8、格式和 `git diff --ch
 
 R1 本轮实际验证见 5.2：隔离产品构建、浏览器真实交互、真实模型/搜索/附件、两种持久 checkpointer 的崩溃恢复均有记录；不是正式仓库 CI 或生产验收。原工程全量前后端测试未复跑。153 文件基线比较仅本 overview 变化，其余业务源码与用户未提交修改均保留；此轮未删除业务代码。正式仓库只同步本文件，未迁入依赖、试验上游源码、数据库、环境文件或生成物。
 
-**当前正在实施 R4；用户统一手动验收范围不变。** R3 核心聊天/附件/图片/向量链路、可信 main CI→镜像发布→内部部署、六份协调加密快照异地回读均已完成；状态和手动入口见 5.4。无需新 Key/充值，不再扩展 Lighthouse/容量/完整恢复验收。R4 接入唯一搜索入口、DNS/TLS 与公开首发；R5 接通画布和现成 harness。完成记录在本地 overview 同步，已部署代码仍为 main 901beb6，不为纯状态记录重建镜像。
+**R4 代码、CI/CD 与公开部署已完成；下一步 R5，用户手动验收范围不变。** 聊天/附件/图片/向量、唯一研究入口、DNS/TLS、可信 main CI→不可变镜像→自动部署、七份协调加密快照异地回读均已完成；手动入口与未验收限制见 5.5。无需新 Key/充值，不扩展 Lighthouse/容量/完整恢复验收。R5 接通画布和现成 harness，R6 补音视频与生成。完成记录在本机 overview 同步；已部署 main `312b37a`，本次纯状态记录不重建产品镜像。
 
 ## 9. 选型依据（2026-10-11 核查）
 
