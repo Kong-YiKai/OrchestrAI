@@ -1,6 +1,7 @@
 deploy/** text eol=lf
 deploy/patches/*.patch whitespace=-blank-at-eol
 services/workflow/** text eol=lf
+services/research/** text eol=lf
 services/chat/** text eol=lf
 services/ingestion/** text eol=lf
 services/gateway/** text eol=lf

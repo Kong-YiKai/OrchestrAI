@@ -33,6 +33,18 @@ def migrate():
         db.execute('PRAGMA journal_mode=WAL')
         if not db.execute("SELECT 1 FROM sqlite_master WHERE name='schema_version'").fetchone():
             db.executescript(DDL)
+        if not db.execute("SELECT 1 FROM sqlite_master WHERE name='provider_schema'").fetchone():
+            # Separate additive provider schema: the unchanged model schema stays
+            # readable by the R3 gateway during an application-only rollback.
+            db.executescript('''BEGIN IMMEDIATE;
+CREATE TABLE provider_schema(version INTEGER NOT NULL);
+INSERT INTO provider_schema VALUES (1);
+CREATE TABLE credit_periods(period TEXT PRIMARY KEY, credits INTEGER NOT NULL CHECK(credits>=0));
+CREATE TABLE provider_calls(id TEXT PRIMARY KEY REFERENCES calls(id), request_hash TEXT NOT NULL,
+ reserve_credits INTEGER NOT NULL, charged_credits INTEGER, response TEXT);
+COMMIT;''')
+        if db.execute('SELECT version FROM provider_schema').fetchone() != (1,):
+            raise RuntimeError('provider_budget_schema_mismatch')
         if db.execute('SELECT version FROM schema_version').fetchone() != (SCHEMA,):
             raise RuntimeError('budget_schema_mismatch')
 
@@ -45,7 +57,7 @@ def connect():
     return db
 
 
-def reserve(model, amount, request_id=None):
+def reserve(model, amount, request_id=None, credits=0, request_hash=None):
     now = datetime.now(timezone(timedelta(hours=8)))
     day, month = now.strftime('day:%Y-%m-%d'), now.strftime('month:%Y-%m')
     limits = [int(float(os.getenv('MODEL_DAILY_LIMIT_CNY', '5')) * 100),
@@ -54,6 +66,13 @@ def reserve(model, amount, request_id=None):
     db = connect()
     try:
         db.execute('BEGIN IMMEDIATE')
+        # Transport receipts are a short-lived replay cache. Durable research
+        # evidence lives in the research DB; accounting/uncertain-call fences
+        # remain after receipts expire, so expiry never authorizes a paid retry.
+        if credits:
+            cutoff = (now - timedelta(days=35)).isoformat()
+            db.execute('UPDATE provider_calls SET response=NULL WHERE response IS NOT NULL '
+                       'AND id IN (SELECT id FROM calls WHERE created_at<?)', (cutoff,))
         if db.execute('SELECT 1 FROM calls WHERE id=?', (request_id,)).fetchone():
             raise HTTPException(409, 'duplicate_model_operation')
         for period, limit in zip([day, month], limits):
@@ -63,15 +82,26 @@ def reserve(model, amount, request_id=None):
                 raise HTTPException(429, 'provider_budget_exceeded')
         for period in [day, month]:
             db.execute('UPDATE periods SET amount_fen=amount_fen+? WHERE period=?', (amount, period))
+        if credits:
+            credit_limits = [int(os.getenv('SEARCH_DAILY_CREDITS', '30')),
+                             int(os.getenv('SEARCH_MONTHLY_CREDITS', '1000'))]
+            for period, limit in zip([day, month], credit_limits):
+                db.execute('INSERT INTO credit_periods VALUES (?,0) ON CONFLICT DO NOTHING', (period,))
+                used = db.execute('SELECT credits FROM credit_periods WHERE period=?', (period,)).fetchone()[0]
+                if used + credits > limit:
+                    raise HTTPException(429, 'search_credit_budget_exceeded')
+                db.execute('UPDATE credit_periods SET credits=credits+? WHERE period=?', (credits, period))
         db.execute('INSERT INTO calls VALUES (?,?,?,?,NULL,?,?,?)',
                    (request_id, day, month, amount, model, 'reserved', now.isoformat()))
+        if credits:
+            db.execute('INSERT INTO provider_calls VALUES (?,?,?,NULL,NULL)', (request_id, request_hash, credits))
         db.commit()
         return request_id
     finally:
         db.close()
 
 
-def settle(request_id, amount):
+def settle(request_id, amount, credits=None, response=None):
     db = connect()
     try:
         db.execute('BEGIN IMMEDIATE')
@@ -84,6 +114,14 @@ def settle(request_id, amount):
         for period in call[:2]:
             db.execute('UPDATE periods SET amount_fen=amount_fen+? WHERE period=?', (delta, period))
         db.execute("UPDATE calls SET state='settled',charged_fen=? WHERE id=?", (amount, request_id))
+        if credits is not None:
+            old = db.execute('SELECT reserve_credits FROM provider_calls WHERE id=?', (request_id,)).fetchone()
+            if not old:
+                raise RuntimeError('provider_reservation_missing')
+            for period in call[:2]:
+                db.execute('UPDATE credit_periods SET credits=credits+? WHERE period=?', (credits-old[0], period))
+            db.execute('UPDATE provider_calls SET charged_credits=?,response=? WHERE id=?',
+                       (credits, json.dumps(response, ensure_ascii=False), request_id))
         db.commit()
     finally:
         db.close()

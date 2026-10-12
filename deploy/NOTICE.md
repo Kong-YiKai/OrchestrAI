@@ -12,6 +12,9 @@ checkouts remain outside Git. Images retain the upstream root license.
 | pgvector | 0.8.7, f37c13f68b57d2c3472b2214fbcff699d6d34876 | PostgreSQL License; extension compiled against the runtime PostgreSQL base |
 | MongoDB | 8.0.20 | SSPL-1.0; internal application database, not a public database hosting API |
 | React Flow | 12.10.2 | MIT; reused in the OrchestrAI canvas shell |
+| LibreChat Agents | 4.0.1 | MIT; research reuses the existing upstream search/extraction tool, not a second chat platform |
+| okapibm25 | 1.4.1 | MIT; existing Agents dependency, local ranking without another provider |
+| BullMQ / jose / pg | 5.81.5 / 6.1.0 / 8.16.3 | MIT; shared versions with workflow, independently deployed research state/queue/auth |
 
 Open WebUI and Dify are product references only; neither codebase is copied or
 deployed. Python runtime dependencies are pinned in each service's requirements.

@@ -1,0 +1,30 @@
+{
+  "name": "@orchestrai/research",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {"node": ">=24"},
+  "scripts": {
+    "start": "node src/service.mjs",
+    "migrate": "node src/migrate.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check src/service.mjs && node --check src/engine.mjs && node --check src/migrate.mjs"
+  },
+  "dependencies": {
+    "@librechat/agents": "4.0.1",
+    "bullmq": "5.81.5",
+    "jose": "6.1.0",
+    "pg": "8.16.3",
+    "okapibm25": "1.4.1"
+  },
+  "overrides": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "handlebars": "4.7.10",
+    "minimatch@3": {"brace-expansion": "^1.1.20"},
+    "minimatch@5": {"brace-expansion": "^2.1.6"},
+    "minimatch@9": {"brace-expansion": "^2.1.6"},
+    "minimatch@10": {"brace-expansion": "^5.0.11"},
+    "undici@6": "6.28.1",
+    "undici@7": "7.29.1"
+  }
+}

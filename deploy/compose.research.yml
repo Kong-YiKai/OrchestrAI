@@ -1,0 +1,55 @@
+# Schema 3 adds one independent service. Schema 2 remains a valid rollback target.
+services:
+  postgres:
+    environment:
+      RESEARCH_DB_PASSWORD: ${RESEARCH_DB_PASSWORD:?required}
+      RESEARCH_MIGRATION_PASSWORD: ${RESEARCH_MIGRATION_PASSWORD:?required}
+    volumes:
+      - ./research-init.sh:/opt/research-init.sh:ro
+  gateway:
+    environment:
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+      RESEARCH_GATEWAY_KEY: ${RESEARCH_GATEWAY_KEY:?required}
+      SEARCH_DAILY_CREDITS: ${SEARCH_DAILY_CREDITS:-30}
+      SEARCH_MONTHLY_CREDITS: ${SEARCH_MONTHLY_CREDITS:-1000}
+  chat:
+    environment:
+      RESEARCH_API_URL: http://research:8091
+      RESEARCH_DELEGATION_SECRET: ${RESEARCH_DELEGATION_SECRET:?required}
+      TRUST_PROXY: '2'
+    depends_on:
+      research: {condition: service_healthy}
+  research:
+    image: ${RESEARCH_IMAGE:-orchestrai/research:local}
+    init: true
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp:size=32m]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      DATABASE_URL: postgresql://research:${RESEARCH_DB_PASSWORD:?required}@postgres:5432/research
+      REDIS_URL: redis://:${REDIS_PASSWORD:?required}@redis:6379/1
+      RESEARCH_DELEGATION_SECRET: ${RESEARCH_DELEGATION_SECRET:?required}
+      RESEARCH_GATEWAY_KEY: ${RESEARCH_GATEWAY_KEY:?required}
+      GATEWAY_KEY: ${GATEWAY_KEY:?required}
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      gateway: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, node, -e, 'fetch("http://127.0.0.1:8091/health/ready").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    mem_limit: 256m
+    cpus: 0.5
+    logging: {driver: json-file, options: {max-size: 10m, max-file: '3'}}
+    networks: [internal]
+  research-migrate:
+    image: ${RESEARCH_IMAGE:-orchestrai/research:local}
+    profiles: [tools]
+    environment:
+      DATABASE_URL: postgresql://research_migrator:${RESEARCH_MIGRATION_PASSWORD:?required}@postgres:5432/research
+    command: [node, src/migrate.mjs]
+    networks: [internal]

@@ -1,0 +1,36 @@
+{
+  "openapi": "3.1.0",
+  "info": {"title": "OrchestrAI Research", "version": "0.1.0", "description": "Owned, persisted research tasks. Chat issues a short-lived HS256 delegation with issuer orchestrai-chat, audience orchestrai-research, tenant, subject and research:read/write scopes. SQL owns task state; Redis is rebuildable. Interrupted uncertain provider calls are never automatically retried."},
+  "security": [{"delegation": []}],
+  "paths": {
+    "/queries": {
+      "get": {"operationId": "listResearch", "description": "Latest ten tasks belonging to the delegated user and tenant.", "responses": {"200": {"description": "Owned tasks", "content": {"application/json": {"schema": {"type": "object", "required": ["queries"], "properties": {"queries": {"type": "array", "items": {"$ref": "#/components/schemas/Query"}}}}}}}, "default": {"$ref": "#/components/responses/Error"}}},
+      "post": {"operationId": "createResearch", "parameters": [{"name": "Idempotency-Key", "in": "header", "required": true, "schema": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,128}$"}}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "additionalProperties": false, "required": ["query"], "properties": {"query": {"type": "string", "minLength": 1, "maxLength": 1000, "pattern": "\\S"}}}}}}, "description": "Same owner/key/query returns the existing task. Changed query returns 409; one active task per user and at most twenty globally. A supplied public URL uses extraction. Cancellation cannot undo an external request already sent.", "responses": {"202": {"description": "New or existing task", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Query"}}}}, "default": {"$ref": "#/components/responses/Error"}}}
+    },
+    "/queries/{id}": {
+      "parameters": [{"$ref": "#/components/parameters/Id"}],
+      "get": {"operationId": "getResearch", "responses": {"200": {"description": "Owned task", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Query"}}}}, "default": {"$ref": "#/components/responses/Error"}}},
+      "delete": {"operationId": "deleteResearch", "description": "Delete an owned terminal task. Active tasks return 409; foreign resources return 404.", "responses": {"200": {"description": "Deleted", "content": {"application/json": {"schema": {"type": "object", "required": ["deleted"], "properties": {"deleted": {"const": true}}}}}}, "default": {"$ref": "#/components/responses/Error"}}}
+    },
+    "/queries/{id}/cancel": {
+      "parameters": [{"$ref": "#/components/parameters/Id"}],
+      "post": {"operationId": "cancelResearch", "description": "Fence future task writes and model stages; an in-flight provider operation may still be billed.", "responses": {"200": {"description": "Current owned task", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Query"}}}}, "default": {"$ref": "#/components/responses/Error"}}}
+    }
+  },
+  "components": {
+    "securitySchemes": {"delegation": {"type": "http", "scheme": "bearer", "bearerFormat": "JWT"}},
+    "parameters": {"Id": {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}},
+    "responses": {"Error": {"description": "400 invalid input, 401 invalid identity, 403 missing scope, 404 unknown/foreign task, 409 conflicting operation, 415 non-JSON input, 429 busy, or 503 unavailable. No provider credentials or raw exceptions are exposed.", "content": {"application/json": {"schema": {"type": "object", "required": ["error"], "properties": {"error": {"type": "string"}}}}}}},
+    "schemas": {
+      "Query": {"type": "object", "required": ["id", "query", "status", "phase", "created_at", "updated_at"], "properties": {
+        "id": {"type": "string", "format": "uuid"}, "query": {"type": "string"},
+        "status": {"type": "string", "enum": ["queued", "running", "completed", "partial", "failed", "cancelled"]},
+        "phase": {"type": "string"}, "error": {"type": ["string", "null"]},
+        "created_at": {"type": "string", "format": "date-time"}, "updated_at": {"type": "string", "format": "date-time"},
+        "result": {"type": ["object", "null"], "description": "Incremental evidence snapshot. Billing authority is the gateway ledger; missing usage never means an uncertain call was free.", "properties": {"sources": {"type": "array", "items": {"$ref": "#/components/schemas/Source"}}, "claims": {"type": "array", "items": {"$ref": "#/components/schemas/Claim"}}, "elapsed_ms": {"type": "number"}}}
+      }},
+      "Source": {"type": "object", "required": ["id", "title", "url", "state", "evidence", "fetched_at"], "properties": {"id": {"type": "string"}, "title": {"type": "string"}, "url": {"type": "string", "format": "uri"}, "state": {"enum": ["read", "unavailable"]}, "evidence": {"type": "string"}, "fetched_at": {"type": "string", "format": "date-time"}}},
+      "Claim": {"type": "object", "required": ["text", "source_id", "quote"], "properties": {"text": {"type": "string"}, "source_id": {"type": "string"}, "quote": {"type": "string", "description": "Exact continuous excerpt from a read source. This check does not prove semantic entailment."}}}
+    }
+  }
+}

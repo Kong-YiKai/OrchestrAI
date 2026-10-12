@@ -65,6 +65,32 @@ class BudgetTests(unittest.TestCase):
         with self.assertRaises(HTTPException):
             budget.bound({'model': 'text-embedding-v4', 'input': ['x'] * 11}, 'aembedding')
 
+    def test_search_and_models_share_atomic_cny_budget_and_separate_credits(self):
+        with patch.dict(os.environ, {'SEARCH_DAILY_CREDITS': '2', 'SEARCH_MONTHLY_CREDITS': '2'}):
+            first = budget.reserve('tavily-search', 7, 'search-first', credits=1, request_hash='hash')
+            budget.reserve('tavily-extract', 7, 'search-second', credits=1, request_hash='hash')
+            with self.assertRaises(HTTPException) as rejected:
+                budget.reserve('tavily-search', 7, 'search-third', credits=1, request_hash='hash')
+            self.assertEqual(rejected.exception.status_code, 429)
+            budget.reserve('deepseek-flash', 20)
+            with self.assertRaises(HTTPException):
+                budget.reserve('deepseek-flash', 20)
+            budget.settle(first, 7, credits=1, response={'results': []})
+            budget.settle(first, 7, credits=1, response={'results': []})
+            with budget.connect() as db:
+                self.assertEqual(db.execute('SELECT amount_fen FROM periods').fetchall(), [(34,), (34,)])
+                self.assertEqual(db.execute('SELECT credits FROM credit_periods').fetchall(), [(2,), (2,)])
+                self.assertEqual(db.execute('SELECT version FROM schema_version').fetchone(), (1,))
+                self.assertIsNotNone(db.execute('SELECT response FROM provider_calls WHERE id=?', (first,)).fetchone()[0])
+
+    def test_additive_search_migration_preserves_old_model_ledger(self):
+        call = budget.reserve('deepseek-flash', 20, 'r3-old-reservation')
+        budget.migrate()
+        budget.settle(call, 1)
+        with budget.connect() as db:
+            self.assertEqual(db.execute('SELECT version FROM schema_version').fetchone(), (1,))
+            self.assertEqual(db.execute('SELECT state,charged_fen FROM calls WHERE id=?', (call,)).fetchone(), ('settled', 1))
+
 
 if __name__ == '__main__':
     unittest.main()

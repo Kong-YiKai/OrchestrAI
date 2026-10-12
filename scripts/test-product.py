@@ -17,12 +17,16 @@ def main():
     parser.add_argument('--env-file', type=Path, default=ROOT / 'deploy/private/product.env')
     parser.add_argument('--project', default='orchestrai-r3')
     parser.add_argument('--start', action='store_true')
+    parser.add_argument('--research', action='store_true', help='Schema 3 research health/auth only, no provider calls')
     parser.add_argument('--url', default='http://localhost:3088')
     args = parser.parse_args()
     if (not args.project.startswith('orchestrai-r3') and args.project != 'orchestrai-production') or not args.env_file.exists():
         raise ValueError('explicit R3 project and existing private env required')
     command = ['docker', 'compose', '--env-file', str(args.env_file), '-f', 'deploy/compose.yml',
-               '-f', 'deploy/compose.product.yml', '-p', args.project]
+               '-f', 'deploy/compose.product.yml']
+    if args.research:
+        command += ['-f', 'deploy/compose.research.yml']
+    command += ['-p', args.project]
 
     def compose(*arguments, **kwargs):
         return subprocess.run(command + list(arguments), cwd=ROOT, check=True, **kwargs)
@@ -32,7 +36,12 @@ def main():
         compose('exec', '-T', 'postgres', 'bash', '/opt/ingestion-init.sh')
         for migration in ['migrate', 'ingestion-migrate', 'gateway-migrate']:
             compose('run', '--rm', migration)
+        if args.research:
+            compose('exec', '-T', 'postgres', 'bash', '/opt/research-init.sh')
+            compose('run', '--rm', 'research-migrate')
         compose('up', '-d', '--wait', 'gateway', 'ingestion', 'workflow-api', 'workflow-worker', 'chat', 'web')
+        if args.research:
+            compose('up', '-d', '--wait', 'research')
 
     account_path = ROOT / 'deploy/private/candidate-account.json'
     if account_path.exists():
@@ -78,6 +87,15 @@ def main():
     token = login['token']
     status, _ = request('/api/convos')
     assert status == 200, 'authenticated conversation list'
+    if args.research:
+        status, _ = request('/api/research/queries', authenticated=False)
+        assert status == 401, 'anonymous research access'
+        status, research_list = request('/api/research/queries')
+        assert status == 200 and isinstance(research_list.get('queries'), list), 'research identity delegation'
+        status, _ = request('/api/research/queries/' + str(uuid.uuid4()))
+        assert status == 404, 'research absent/foreign resource hiding'
+        status, _ = request('/api/research/queries', 'POST', {'query': ''}, headers={'Idempotency-Key': uuid.uuid4().hex})
+        assert status == 400, 'research invalid request rejected before any provider call'
 
     boundary = 'orchestrai-' + uuid.uuid4().hex
     body = b''
