@@ -1,0 +1,21 @@
+# Reused software
+
+OrchestrAI builds fixed upstream archives with reviewable patches. Source archive
+hashes, full commits and patch paths are recorded in `upstreams.json`; generated
+checkouts remain outside Git. Images retain the upstream root license.
+
+| Component | Locked version | License / scope |
+| --- | --- | --- |
+| LibreChat | v0.8.8, e8f3be08623663d4ad7f7241e693c94469b63bb0 | Root MIT; API package ISC; package dependencies have their own licenses |
+| LibreChat RAG API | v0.9.0, 4985b37b8b5d4519d68eceedfef1e63624012f9d | MIT; patched authentication, ownership, bounded parsing and controlled schema |
+| LiteLLM | 1.105.0 | MIT community proxy; enterprise features are not enabled |
+| pgvector | 0.8.7, f37c13f68b57d2c3472b2214fbcff699d6d34876 | PostgreSQL License; extension compiled against the runtime PostgreSQL base |
+| MongoDB | 8.0.20 | SSPL-1.0; internal application database, not a public database hosting API |
+| React Flow | 12.10.2 | MIT; reused in the OrchestrAI canvas shell |
+
+Open WebUI and Dify are product references only; neither codebase is copied or
+deployed. Python runtime dependencies are pinned in each service's requirements.
+LibreChat uses its pinned npm lock with the tracked UI/API patch. Product CI
+produces per-image SPDX and vulnerability reports; an SPDX file does not by itself
+confirm that every dependency license has been reviewed. Upstream overrides and
+incomplete license metadata require review during upgrades.

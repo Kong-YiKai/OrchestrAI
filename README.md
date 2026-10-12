@@ -1,6 +1,6 @@
 # OrchestrAI
 
-> **Reform in progress — 2026-10-12:** R1 selected LibreChat + OrchestrAI UI and LangGraph. R2 has an independent workflow service, real database/queue recovery checks, and CI/CD code. Cloud deployment is not activated; production chat, attachments and research remain unfinished. Read [the project overview](Documents/project-overview.md) and [AGENTS.md](AGENTS.md) before development.
+> **Reform in progress — 2026-10-12:** R1 selected LibreChat + OrchestrAI UI and LangGraph. R2's internal workflow service is deployed with automatic CI/CD. Production chat, attachments and research remain unfinished. Read [the project overview](Documents/project-overview.md) and [AGENTS.md](AGENTS.md) before development.
 
 **An AI workflow orchestration platform built for real desktop tasks — not just chatting with an AI.**
 
@@ -74,6 +74,21 @@ python scripts/check-repository.py
 The first command builds separate API/worker runtime and test images, tests real PostgreSQL/Redis, checks HTTP approval/artifacts across container restarts, and verifies a backup in an isolated database. It stops only `orchestrai-r2-test` containers and retains their volumes. Credentials stay in ignored `deploy/.env.test`; test reports/backups in ignored `.artifacts/`.
 
 Prepare fixed LibreChat/RAG sources and the OrchestrAI UI patch with `python scripts/prepare-upstreams.py`; generated `.build/` must not be committed. Production activation and limitations are in overview section 5.3.
+
+The deployment environment template is [deploy/.env.example](deploy/.env.example), for the internal workflow and R3 product candidate. New installations use an ignored `deploy/private/production.env`; existing installations must retain their configured secrets. Automatic production releases supply immutable image references. The product gateway enforces atomic daily/monthly budget reservations; the current production stack remains R2.
+
+R3 embedding provider inputs use [deploy/providers.example.json](deploy/providers.example.json), copied to ignored `deploy/private/providers.json` only when that private file does not already exist. Fill the key and the OpenAI-compatible Base URL for the selected region/workspace; keep the model `text-embedding-v4` and dimension `1024`. The embedding provider and isolated ingestion service have passed a minimal real smoke test; the product candidate is still being integrated. `backend/.env.example` and `frontend/.env.example` below belong to the existing prototype, not the new deployment stack.
+
+### R3 product candidate (integration in progress)
+
+Reuse the filled private provider configuration and prepare a separate local env:
+
+```bash
+python scripts/configure-product.py
+python scripts/build-product.py
+```
+
+The output is `deploy/private/product.env`, ignored by Git. Existing output secrets are retained. Do not use new local database passwords to replace an existing production environment. Product services extend `deploy/compose.yml` with `deploy/compose.product.yml`; they use new MongoDB/attachment volumes and an ingestion database in OrchestrAI's PostgreSQL instance. Registration defaults closed. Startup migrations, account provisioning and product smoke checks are still being integrated; see the overview for the current limitations.
 
 ### Existing prototype
 

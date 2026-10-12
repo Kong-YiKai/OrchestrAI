@@ -1,0 +1,46 @@
+version: 1.3.17
+cache: true
+fileStrategy: local
+fileConfig:
+  endpoints:
+    DeepSeek:
+      fileLimit: 5
+      fileSizeLimit: 10
+      totalSizeLimit: 25
+      supportedMimeTypes: [application/pdf, text/plain, image/png, image/jpeg, image/webp]
+      llmDeliveryOverrides:
+        - mimeType: application/pdf
+          llmDelivery: text
+        - mimeType: text/plain
+          llmDelivery: text
+  text:
+    supportedMimeTypes: [application/pdf, text/plain]
+interface:
+  customWelcome: 今天想一起完成什么？
+  endpointsMenu: false
+  modelSelect: false
+  parameters: false
+  presets: false
+  agents: false
+  sidePanel: false
+  bookmarks: true
+  prompts: false
+  multiConvo: false
+  artifacts: false
+  webSearch: false
+  fileSearch: true
+  customFooter: OrchestrAI · 联网研究与真实画布执行将在后续阶段接通
+endpoints:
+  agents:
+    capabilities: [file_search, context]
+  custom:
+    - name: DeepSeek
+      apiKey: '${GATEWAY_KEY}'
+      baseURL: http://gateway:4000/v1
+      models: {default: [deepseek-flash], fetch: false}
+      titleConvo: false
+      summarize: false
+      modelDisplayLabel: DeepSeek Flash
+      addParams:
+        max_tokens: 2048
+        thinking: {type: disabled}

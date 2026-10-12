@@ -47,7 +47,7 @@ jobs:
       - name: Validate workflow and shell scripts
         run: |
           docker run --rm -v "$PWD:/repo:ro" --workdir /repo rhysd/actionlint@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9
-          docker run --rm -v "$PWD:/repo:ro" --workdir /repo --entrypoint shellcheck rhysd/actionlint@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9 deploy/install-host.sh deploy/postgres-init.sh scripts/docker-clean.sh
+          docker run --rm -v "$PWD:/repo:ro" --workdir /repo --entrypoint shellcheck rhysd/actionlint@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9 deploy/install-host.sh deploy/postgres-init.sh deploy/ingestion-init.sh scripts/docker-clean.sh
       - name: Verify fixed upstream archives and OrchestrAI patch
         run: python scripts/prepare-upstreams.py
       - name: Scan tracked source for secrets
@@ -129,13 +129,55 @@ jobs:
 
   ci-gate:
     if: always()
-    needs: [main-source-guard, repository, frontend, backend, workflow]
+    needs: [main-source-guard, repository, frontend, backend, workflow, product]
     runs-on: ubuntu-latest
     steps:
       - env:
           RESULTS: ${{ toJSON(needs) }}
         run: |
           python -c 'import os,json; assert all(j["result"] == "success" for j in json.loads(os.environ["RESULTS"]).values())'
+
+  product:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Build fixed product images and check client types
+        env:
+          BUILD_REVISION: ${{ github.sha }}
+        run: python scripts/build-product.py
+      - name: Atomic budget, restart and SDK callback contract
+        run: |
+          docker run --rm -e LITELLM_LOCAL_MODEL_COST_MAP=true -v "$PWD/services/gateway/test_budget.py:/app/test_budget.py:ro" --entrypoint python orchestrai/gateway:local -m unittest test_budget -q
+          docker run --rm --entrypoint python orchestrai/ingestion:local -m compileall -q /app/app /app/migrate.py
+      - name: Candidate auth, upload and chat delegation with no paid calls
+        run: |
+          docker build -f deploy/infrastructure.Dockerfile --target postgres -t orchestrai/postgres:local deploy
+          docker build -f deploy/infrastructure.Dockerfile --target redis -t orchestrai/redis:local deploy
+          docker build --target runtime -t orchestrai/workflow:local services/workflow
+          mkdir -p .artifacts/product-inputs
+          python - <<'PY'
+          import json,pathlib
+          p=pathlib.Path('.artifacts/product-inputs')
+          (p/'providers.json').write_text(json.dumps({'embedding_api_key':'test-unused-provider-key','embedding_base_url':'https://unused.invalid/v1','embedding_model':'text-embedding-v4','embedding_dimensions':1024}))
+          (p/'model.env').write_text('DEEPSEEK_API_KEY=test-unused-provider-key\n')
+          PY
+          python scripts/configure-product.py --providers .artifacts/product-inputs/providers.json --model-env .artifacts/product-inputs/model.env
+          python scripts/test-product.py --start --project orchestrai-r3-ci
+      - name: Product image security reports
+        run: |
+          mkdir -p .artifacts/product-scans
+          status=0
+          for service in chat ingestion gateway web; do
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v orchestrai-trivy-cache:/root/.cache -v "$PWD/.artifacts/product-scans:/reports" aquasec/trivy@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa image --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format json --output "/reports/$service.json" "orchestrai/$service:local" || status=1
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v orchestrai-trivy-cache:/root/.cache -v "$PWD/.artifacts/product-scans:/reports" aquasec/trivy@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa image --format spdx-json --output "/reports/$service.spdx.json" "orchestrai/$service:local" || status=1
+          done
+          exit "$status"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: product-scans-${{ github.sha }}
+          path: .artifacts/product-scans/*.json
+          retention-days: 30
 
   publish:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
