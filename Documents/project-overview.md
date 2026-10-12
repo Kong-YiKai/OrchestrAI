@@ -282,7 +282,7 @@ Tavily 凭据只进现有 LiteLLM 网关，受限 transport hook 固定 provider
 
 本机实际通过：客户端构建/类型、预算 5 项、search transport 4 项、研究 engine 5 项、真实 SQL/队列权限/幂等/取消/崩溃围栏/证据保留、候选登录/附件/workflow/研究无付费烟测、桌面/390px 实际渲染及 Escape/关闭/失败态、发布 8 项契约和干净上游归档补丁应用。research npm audit 为 0，Trivy 高危/严重为 0（其他镜像仍以本轮 CI 为准）。本地真实 provider 保留失败：TUN/Fake-IP 将公共域名解析为 198.18.x.x，私网保护拒绝直接链接/批量提取；普通中文检索实际返回五个来源、消耗 1 credit，但没有正文/回答，未把该结果记为成功。真实服务器小样本尚待完成；30 条质量集、容量/恢复/许可证整体人工验收仍由用户执行。
 
-用户在腾讯云完成 DNS；服务器确认 `orchestrai.elysiumgrid.space` → `43.173.126.57`。独立共享入口配置已实际启用 HTTPS，复用已注册 ACME 账号及固定 Certbot digest，证书到期 2027-01-10；本站 systemd 续期 timer 使用既有跨站 flock，未修改 Tarot/BuddyUp 的配置或 timer。服务器本机 HTTPS `/login` 为 200；当前应用仍是 R3 main 901beb6，R4 不把证书上线当作研究部署完成。后续 CI/CD 通过后再核验公开登录、研究、协调异地快照及其他站点健康。现有 DeepSeek/Tavily/百炼凭据够用，无需新 Key/注册/充值。
+用户在腾讯云完成 DNS；服务器确认 `orchestrai.elysiumgrid.space` → `43.173.126.57`。独立共享入口配置已实际启用 HTTPS，复用已注册 ACME 账号及固定 Certbot digest，证书到期 2027-01-10；本站 systemd 续期 timer 使用既有跨站 flock，固定调用 `/usr/local/sbin/orchestrai-renew-certificate`，未修改 Tarot/BuddyUp 的配置或 timer。服务器本机 HTTPS `/login` 为 200；当前应用仍是 R3 main 901beb6，R4 不把证书上线当作研究部署完成。后续 CI/CD 通过后再核验公开登录、研究、协调异地快照及其他站点健康。现有 DeepSeek/Tavily/百炼凭据够用，无需新 Key/注册/充值。
 
 - 先做检索→抓取→重排→证据引用；是否引入查询改写/最多两轮补检由评测决定，不再简单堆 provider。
 - 30 条中文测试集建议分配：时效问题 6、公开网页 6、多来源比较 6、中文长尾 4、直接链接 4、登录/风控/429/超时 4。正向效果和正确失败分别计分。
