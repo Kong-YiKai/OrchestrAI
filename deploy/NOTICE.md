@@ -19,3 +19,16 @@ LibreChat uses its pinned npm lock with the tracked UI/API patch. Product CI
 produces per-image SPDX and vulnerability reports; an SPDX file does not by itself
 confirm that every dependency license has been reviewed. Upstream overrides and
 incomplete license metadata require review during upgrades.
+
+Runtime hardening: MongoDB keeps server 8.0.20; signed vendor packages pin
+mongosh 2.13.0/database-tools 100.19.1 and Ubuntu TLS packages. Unused privileged
+launcher, YAML loader and administration tools are removed. Only dump/restore
+remain for encrypted snapshots. Chat runs Node directly without npm/npx; shell
+MCP via npx is not enabled in this product runtime. R5 execution belongs in its
+own restricted worker.
+
+The tracked LibreChat patch upgrades affected production dependencies. A bounded
+braces parser guard is applied and checked during image build pending an upstream
+release. Raw security reports retain all findings. Exact, expiring runtime
+assessments are in `vulnerability-policy.json`; changing execution boundaries or
+upgrading versions requires reassessment. This is not a zero-vulnerability claim.

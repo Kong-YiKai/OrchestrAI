@@ -14,11 +14,11 @@ def run(*arguments):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--service', choices=['chat', 'ingestion', 'gateway', 'web', 'all'], default='all')
+    parser.add_argument('--service', choices=['chat', 'ingestion', 'gateway', 'web', 'mongo', 'all'], default='all')
     args = parser.parse_args()
     if args.service in {'chat', 'ingestion', 'all'}:
         run(sys.executable, 'scripts/prepare-upstreams.py')
-    for service in ['chat', 'ingestion', 'gateway', 'web']:
+    for service in ['chat', 'ingestion', 'gateway', 'web', 'mongo']:
         if args.service not in {'all', service}:
             continue
         upstream = 'librechat' if service == 'chat' else 'rag'

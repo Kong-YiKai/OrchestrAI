@@ -13,6 +13,19 @@ MANIFEST = {'revision':'a'*40,'image':POLICY['image_repository']+'@sha256:'+'b'*
 MANIFEST.update({service+'_image':'ghcr.io/kong-yikai/orchestrai/'+service+'@sha256:'+'d'*64 for service in ('postgres','redis')})
 
 class PolicyTests(unittest.TestCase):
+    def test_vulnerability_review_is_narrow_and_expires(self):
+        from datetime import date
+        spec=importlib.util.spec_from_file_location('image_check',pathlib.Path(__file__).with_name('check-image.py'))
+        module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+        policy={'assessments':[dict(id='CVE-1',packages=['pkg'],versions=['1'],services=['gateway'],expires='2026-11-12')]}
+        finding=dict(VulnerabilityID='CVE-1',PkgName='pkg',InstalledVersion='1',Severity='HIGH')
+        report={'Results':[{'Vulnerabilities':[finding]}]}
+        self.assertFalse(module.assess(report,'gateway',policy,date(2026,10,12))[0])
+        self.assertTrue(module.assess(report,'chat',policy,date(2026,10,12))[0])
+        self.assertTrue(module.assess(report,'gateway',policy,date(2026,11,13))[0])
+        finding['FixedVersion']='2'
+        self.assertTrue(module.assess(report,'gateway',policy,date(2026,10,12))[0])
+
     def test_valid(self):
         release.validate(MANIFEST,POLICY,None,'c'*64)
         product=dict(MANIFEST,schema=2,**{service+'_image':'ghcr.io/kong-yikai/orchestrai/'+service+'@sha256:'+'d'*64 for service in ('chat','ingestion','gateway','web','mongo')})

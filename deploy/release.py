@@ -52,7 +52,7 @@ def validate(manifest, policy, current, expected_config):
         raise ValueError('invalid sequence')
     if current and manifest['sequence'] <= current['sequence']:
         raise ValueError('stale release refused')
-    if manifest['schema'] not in (1, 2) or manifest['config_digest'] != expected_config:
+    if type(manifest['schema']) is not int or manifest['schema'] not in (1, 2) or manifest['config_digest'] != expected_config:
         raise ValueError('controller/config/schema update requires reviewed installation')
 
 class Deployment:
@@ -218,7 +218,7 @@ class Deployment:
                 '{{index .Config.Labels "org.opencontainers.image.revision"}}'],env=self.env,text=True).strip()
             if label != manifest['revision']:
                 raise ValueError('image revision differs from tested revision')
-            for service in (('chat','ingestion','gateway','web') if manifest['schema']==2 else ()):
+            for service in (('chat','ingestion','gateway','web','mongo') if manifest['schema']==2 else ()):
                 label = subprocess.check_output(['docker','image','inspect',manifest[service+'_image'],'--format',
                     '{{index .Config.Labels "org.opencontainers.image.revision"}}'],env=self.env,text=True).strip()
                 if label != manifest['revision']:
@@ -231,7 +231,9 @@ class Deployment:
                 self.compose(manifest,'up','-d','--wait','postgres','redis')
                 self.compose(manifest,'stop','-t','45','workflow-api','workflow-worker')
                 stopped = True
-                record['backup'] = self.backup(manifest,policy)
+                # First install has no chat/index/file/budget stores yet. Back up
+                # the initialized workflow database before its first migration.
+                record['backup'] = self.backup(dict(manifest,schema=1),policy)
             self.compose(manifest,'up','-d','--wait','postgres','redis')
             self.compose(manifest,'run','--rm','migrate')
             if manifest['schema'] == 2:
@@ -256,7 +258,7 @@ class Deployment:
                     except Exception:
                         record['outcome'] = 'rollback_failed'
                 else:
-                    self.compose(manifest,'stop','workflow-api','workflow-worker')
+                    self.compose(manifest,'stop',*self.writers(manifest))
             raise
         finally:
             record['finished_at'] = int(time.time())

@@ -7,7 +7,7 @@ services:
     volumes:
       - ./ingestion-init.sh:/opt/ingestion-init.sh:ro
   mongo:
-    image: ${MONGO_IMAGE:-mongo:8.0.20@sha256:098862b1339f031900ca66cf8fef799e616d6324fa41b9a263f2ec899552c1ef}
+    image: ${MONGO_IMAGE:-orchestrai/mongo:local}
     restart: unless-stopped
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin

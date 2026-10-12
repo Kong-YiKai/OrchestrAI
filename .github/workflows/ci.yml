@@ -153,9 +153,9 @@ jobs:
         run: |
           mkdir -p .artifacts/product-scans
           status=0
-          docker tag mongo:8.0.20@sha256:098862b1339f031900ca66cf8fef799e616d6324fa41b9a263f2ec899552c1ef orchestrai/mongo:local
           for service in chat ingestion gateway web mongo; do
-            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v orchestrai-trivy-cache:/root/.cache -v "$PWD/.artifacts/product-scans:/reports" aquasec/trivy@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa image --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format json --output "/reports/$service.json" "orchestrai/$service:local" || status=1
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v orchestrai-trivy-cache:/root/.cache -v "$PWD/.artifacts/product-scans:/reports" aquasec/trivy@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa image --scanners vuln --severity HIGH,CRITICAL --format json --output "/reports/$service.json" "orchestrai/$service:local" || status=1
+            python scripts/check-image.py ".artifacts/product-scans/$service.json" --service "$service" || status=1
             docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v orchestrai-trivy-cache:/root/.cache -v "$PWD/.artifacts/product-scans:/reports" aquasec/trivy@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa image --format spdx-json --output "/reports/$service.spdx.json" "orchestrai/$service:local" || status=1
           done
           exit "$status"
