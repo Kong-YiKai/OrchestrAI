@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { rank, claimsFrom, research } from '../src/engine.mjs';
+import { rank, claimsFrom, readablePage, research } from '../src/engine.mjs';
 
 test('Chinese BM25 selects relevant evidence and treats regex as text',()=>{
   const rows=rank('预算并发限额 [x]+',[
@@ -20,6 +20,12 @@ test('Citations must refer to a read page and an exact excerpt',()=>{
     assert.throws(()=>claimsFrom({claims:[claim]},sources));
 });
 const settings={gateway:'http://fixture',transportKey:'test-only',modelKey:'test-only'};
+test('A fetched login/challenge shell is not a readable article',()=>{
+  assert.equal(readablePage('https://www.xiaohongshu.com/explore','发现\n登录\n我\n沪ICP备备案号\n更多\n沪ICP备备案号'),false);
+  assert.equal(readablePage('https://www.xiaohongshu.com/website-login/error?error_code=300012','上海公司注册信息'),false);
+  assert.equal(readablePage('https://example.com/article','Verify you are human'),false);
+  assert.equal(readablePage('https://example.com/article','文章正文。底部登录入口，网站备案信息。'),true);
+});
 const fixtureTool=(sources,failed=false)=>options=>({invoke:async()=>{
   if(sources.length) options.onSearchResults({data:{organic:sources}});
   return {artifact:{web_search:failed?{error:'429'}:{organic:sources}}};

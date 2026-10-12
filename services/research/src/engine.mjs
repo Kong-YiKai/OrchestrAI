@@ -13,6 +13,19 @@ const publicLink = value => {
   catch { return false; }
 };
 const key = value => { try { const u = new URL(value); u.hash=''; return u.href.replace(/\/$/,''); } catch { return ''; } };
+export function readablePage(url, text) {
+  if (!text.trim()) return false;
+  const parsed=new URL(url);
+  if (/\/(?:website-login\/error|captcha|challenge)(?:\/|$)/i.test(parsed.pathname)) return false;
+  if (/^(?:access denied|403 forbidden|verify you are human|checking your browser)/i.test(text.trim()) ||
+      /enable javascript and cookies to continue/i.test(text.slice(0,600))) return false;
+  // Observed Tavily regression: Xiaohongshu returns a repeated legal footer and
+  // login navigation even though the requested feed/note was not obtained.
+  // Fail closed for this known shell; a footer is not evidence of reading a note.
+  if (/(^|\.)xiaohongshu\.com$/.test(parsed.hostname) && /登录/.test(text) &&
+      (text.match(/沪ICP/g) ?? []).length>=2) return false;
+  return true;
+}
 export function rank(query, sources) {
   const scores = bm25(sources.map(s => words(s.evidence).join(' ')), [...new Set(words(query))].slice(0,80));
   return sources.map((s,i) => ({ ...s,score:Number.isFinite(scores[i]) ? scores[i] : 0 }))
@@ -67,7 +80,8 @@ export async function research(run, settings, progress, cancelled, dependencies=
   } catch { /* Unknown extraction is explicitly unavailable below. */ }
   const sources=initial.filter(s => publicLink(s.url)).map((source,index) => {
     const page=extracted.results?.find(p => key(p.url)===key(source.url));
-    const evidence=typeof page?.raw_content==='string' ? page.raw_content.trim().slice(0,12000) : '';
+    const raw=typeof page?.raw_content==='string' ? page.raw_content.trim() : '';
+    const evidence=raw && readablePage(source.url,raw) ? raw.slice(0,12000) : '';
     return { ...source,id:`S${index+1}`,state:evidence ? 'read' : 'unavailable',
       evidence,error:evidence ? null : 'page_not_read_login_blocked_or_provider_failed',fetched_at:new Date().toISOString() };
   });
