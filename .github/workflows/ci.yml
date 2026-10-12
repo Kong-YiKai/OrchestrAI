@@ -10,6 +10,11 @@ on:
 permissions:
   contents: read
 
+# Cancel superseded PR verification, while preserving queued/running main CD.
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   main-source-guard:
     runs-on: ubuntu-latest

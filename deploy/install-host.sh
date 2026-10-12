@@ -7,6 +7,7 @@ command -v docker >/dev/null
 command -v age >/dev/null
 command -v rclone >/dev/null
 command -v python3 >/dev/null
+command -v curl >/dev/null
 source_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 public_key=$(tr -d '\r' < "$1")
 printf '%s\n' "$public_key" | grep -Eq '^ssh-ed25519 [A-Za-z0-9+/=]+( [A-Za-z0-9_.@-]+)?$' || { echo 'Expected one ed25519 public key'; exit 2; }

@@ -218,6 +218,12 @@ class Deployment:
                 '--env-file',str(self.root/'secrets/production.env'),'--project','orchestrai-production',
                 '--url','http://127.0.0.1:3088'] + (['--research'] if manifest['schema']==3 else []),
                 cwd=self.root,check=True,timeout=120,env=self.compose_env(manifest))
+        if manifest['schema'] == 3:
+            status = subprocess.check_output(['curl','--silent','--show-error','--fail',
+                '--connect-timeout','5','--max-time','20','--output','/dev/null','--write-out','%{http_code}',
+                'https://orchestrai.elysiumgrid.space/login'],text=True,timeout=25,env=self.env).strip()
+            if status != '200':
+                raise RuntimeError('public_https_smoke_failed')
 
     def release(self, manifest, policy, current):
         record = dict(manifest, started_at=int(time.time()), previous=current, outcome='failed')
