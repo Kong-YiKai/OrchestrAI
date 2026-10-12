@@ -1,0 +1,6 @@
+{
+  "embedding_api_key": "",
+  "embedding_base_url": "",
+  "embedding_model": "text-embedding-v4",
+  "embedding_dimensions": 1024
+}

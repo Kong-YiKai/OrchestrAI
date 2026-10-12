@@ -1,6 +1,11 @@
 deploy/** text eol=lf
 deploy/patches/*.patch whitespace=-blank-at-eol
 services/workflow/** text eol=lf
+services/chat/** text eol=lf
+services/ingestion/** text eol=lf
+services/gateway/** text eol=lf
+services/web/** text eol=lf
+services/mongo/** text eol=lf
 scripts/*.py text eol=lf
 scripts/*.sh text eol=lf
 .github/workflows/*.yml text eol=lf

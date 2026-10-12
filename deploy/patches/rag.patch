@@ -1,0 +1,429 @@
+--- a/app/config.py
++++ b/app/config.py
+@@ -246,7 +246,9 @@
+             api_key=RAG_OPENAI_API_KEY,
+             openai_api_base=RAG_OPENAI_BASEURL,
+             openai_proxy=RAG_OPENAI_PROXY,
+-            chunk_size=EMBEDDINGS_CHUNK_SIZE,
++            chunk_size=int(EMBEDDINGS_CHUNK_SIZE),
++            max_retries=0,
++            request_timeout=45,
+             check_embedding_ctx_length=RAG_CHECK_EMBEDDING_CTX_LENGTH,
+         )
+         if dimensions is not None:
+--- a/app/middleware.py
++++ b/app/middleware.py
+@@ -1,57 +1,48 @@
+-# app/middleware.py
+ import os
+ import jwt
+-from jwt import PyJWTError
+ from fastapi import Request
+-from datetime import datetime, timezone
+ from fastapi.responses import JSONResponse
+-from app.config import logger
++from app.config import vector_store
+ 
+ 
+ async def security_middleware(request: Request, call_next):
+-    async def next_middleware_call():
++    if request.url.path == '/health':
+         return await call_next(request)
+-
+-    if request.url.path in {"/docs", "/openapi.json", "/health"}:
+-        return await next_middleware_call()
+-
+-    jwt_secret = os.getenv("JWT_SECRET")
+-    if not jwt_secret:
+-        logger.warn("JWT_SECRET not found in environment variables")
+-        return await next_middleware_call()
+-
+-    authorization = request.headers.get("Authorization")
+-    if not authorization or not authorization.startswith("Bearer "):
+-        logger.info(
+-            f"Unauthorized request with missing or invalid Authorization header to: {request.url.path}"
+-        )
+-        return JSONResponse(
+-            status_code=401,
+-            content={"detail": "Missing or invalid Authorization header"},
+-        )
+-
+-    token = authorization.split(" ")[1]
++    secret = os.getenv('JWT_SECRET', '')
++    if len(secret) < 32:
++        return JSONResponse(status_code=503, content={'detail': 'service_not_configured'})
+     try:
+-        payload = jwt.decode(token, jwt_secret, algorithms=["HS256"])
+-        exp_timestamp = payload.get("exp")
+-        if exp_timestamp and datetime.now(tz=timezone.utc) > datetime.fromtimestamp(
+-            exp_timestamp, tz=timezone.utc
+-        ):
+-            logger.info(
+-                f"Unauthorized request with expired token to: {request.url.path}"
+-            )
+-            return JSONResponse(
+-                status_code=401, content={"detail": "Token has expired"}
+-            )
+-
+-        request.state.user = payload
+-        logger.debug(f"{request.url.path} - {payload}")
+-    except PyJWTError as e:
+-        logger.info(
+-            f"Unauthorized request with invalid token to: {request.url.path}, reason: {str(e)}"
+-        )
+-        return JSONResponse(
+-            status_code=401, content={"detail": f"Invalid token: {str(e)}"}
+-        )
+-
+-    return await next_middleware_call()
+\ No newline at end of file
++        token = request.headers.get('Authorization', '')
++        if not token.startswith('Bearer '):
++            raise ValueError()
++        user = jwt.decode(token[7:], secret, algorithms=['HS256'], options={'require': ['exp', 'id']})
++        if not isinstance(user['id'], str) or not user['id']:
++            raise ValueError()
++    except (jwt.PyJWTError, ValueError, KeyError):
++        return JSONResponse(status_code=401, content={'detail': 'invalid_service_identity'})
++    request.state.user = user
++    allowed = {('POST', '/embed'), ('POST', '/embed-upload'), ('POST', '/text'),
++               ('POST', '/query'), ('POST', '/query_multiple'), ('GET', '/documents'), ('DELETE', '/documents')}
++    context = request.method == 'GET' and request.url.path.startswith('/documents/') and request.url.path.endswith('/context')
++    if ((request.method, request.url.path) not in allowed and not context) or request.query_params.get('entity_id'):
++        return JSONResponse(status_code=404, content={'detail': 'route_disabled'})
++    length = request.headers.get('Content-Length')
++    if length and (not length.isdigit() or int(length) > 11 * 1024 * 1024):
++        return JSONResponse(status_code=413, content={'detail': 'file_size_limit'})
++    ids = []
++    if request.url.path == '/documents':
++        if request.method == 'DELETE':
++            ids = await request.json()
++        elif request.method == 'GET':
++            ids = request.query_params.getlist('ids')
++    elif request.url.path.startswith('/documents/'):
++        ids = [request.url.path.split('/')[2]]
++    if request.url.path == '/documents' and not ids:
++        return JSONResponse(status_code=400, content={'detail': 'file_ids_required'})
++    if ids:
++        if not isinstance(ids, list) or len(ids) > 5 or any(not isinstance(i, str) or len(i) > 128 for i in ids):
++            return JSONResponse(status_code=400, content={'detail': 'invalid_file_ids'})
++        documents = await vector_store.get_documents_by_ids(ids, executor=request.app.state.thread_pool)
++        if not documents or any(d.metadata.get('user_id') != user['id'] for d in documents):
++            return JSONResponse(status_code=404, content={'detail': 'files_not_found'})
++    return await call_next(request)
+--- a/app/routes/document_routes.py
++++ b/app/routes/document_routes.py
+@@ -12,6 +12,7 @@
+ from shutil import copyfileobj
+ from typing import List, Iterable, Optional, Union, TYPE_CHECKING
+ from concurrent.futures import ThreadPoolExecutor
++from fastapi.responses import JSONResponse
+ from fastapi import (
+     APIRouter,
+     Request,
+@@ -190,11 +191,11 @@
+ 
+ 
+ def get_user_id(request: Request, entity_id: str = None) -> str:
+-    """Extract user ID from request or entity_id."""
++    if entity_id:
++        raise HTTPException(400, "entity_override_disabled")
+     if not hasattr(request.state, "user"):
+-        return entity_id if entity_id else "public"
+-    else:
+-        return entity_id if entity_id else request.state.user.get("id")
++        raise HTTPException(401, "authentication_required")
++    return request.state.user["id"]
+ 
+ 
+ def get_process_memory_details() -> str:
+@@ -269,23 +270,29 @@
+ 
+ 
+ async def save_upload_file_async(file: UploadFile, temp_file_path: str) -> None:
+-    """Save uploaded file asynchronously."""
+-    try:
++    extension = Path(file.filename or "").suffix.lower()
++    head = await file.read(1024)
++    await file.seek(0)
++    if extension == ".pdf":
++        if not head.startswith(b"%PDF-") or file.content_type != "application/pdf":
++            raise HTTPException(415, "invalid_pdf")
++    elif extension == ".txt":
++        if b"\x00" in head or file.content_type not in {"text/plain", "application/octet-stream"}:
++            raise HTTPException(415, "invalid_text")
++    else:
++        raise HTTPException(415, "supported_formats_pdf_txt")
++    try:
++        total = 0
+         async with aiofiles.open(temp_file_path, "wb") as temp_file:
+-            chunk_size = 64 * 1024  # 64 KB
+-            while content := await file.read(chunk_size):
++            while content := await file.read(65536):
++                total += len(content)
++                if total > 10 * 1024 * 1024:
++                    raise HTTPException(413, "file_size_limit")
+                 await temp_file.write(content)
+-    except Exception as e:
+-        logger.error(
+-            "Failed to save uploaded file | Path: %s | Error: %s | Traceback: %s",
+-            temp_file_path,
+-            str(e),
+-            traceback.format_exc(),
+-        )
+-        raise HTTPException(
+-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+-            detail=f"Failed to save the uploaded file. Error: {str(e)}",
+-        )
++    except HTTPException:
++        raise
++    except Exception:
++        raise HTTPException(500, "upload_failed")
+ 
+ 
+ def save_upload_file_sync(file: UploadFile, temp_file_path: str) -> None:
+@@ -353,6 +360,10 @@
+         )
+         loop = asyncio.get_running_loop()
+         data = await loop.run_in_executor(executor, lambda: list(loader.lazy_load()))
++        if len(data) > 200:
++            raise HTTPException(413, "document_page_limit")
++        if not any(d.page_content.strip() for d in data):
++            raise HTTPException(422, "no_extractable_text_scan_ocr_not_available")
+         return data, known_type, file_ext
+     finally:
+         # Clean up temporary UTF-8 file if it was created for encoding conversion
+@@ -411,7 +422,7 @@
+             str(e),
+             traceback.format_exc(),
+         )
+-        raise HTTPException(status_code=500, detail=str(e))
++        raise HTTPException(status_code=500, detail="ingestion_failed")
+ 
+ 
+ @router.get("/health")
+@@ -421,14 +432,14 @@
+             return {"status": "UP"}
+         else:
+             logger.error("Health check failed")
+-            return {"status": "DOWN"}, 503
++            return JSONResponse(status_code=503, content={"status": "DOWN"})
+     except Exception as e:
+         logger.error(
+             "Error during health check | Error: %s | Traceback: %s",
+             str(e),
+             traceback.format_exc(),
+         )
+-        return {"status": "DOWN", "error": str(e)}, 503
++        return JSONResponse(status_code=503, content={"status": "DOWN"})
+ 
+ 
+ @router.get("/documents", response_model=list[DocumentResponse])
+@@ -470,7 +481,7 @@
+             str(e),
+             traceback.format_exc(),
+         )
+-        raise HTTPException(status_code=500, detail=str(e))
++        raise HTTPException(status_code=500, detail="ingestion_failed")
+ 
+ 
+ @router.delete("/documents")
+@@ -508,7 +519,7 @@
+             str(e),
+             traceback.format_exc(),
+         )
+-        raise HTTPException(status_code=500, detail=str(e))
++        raise HTTPException(status_code=500, detail="ingestion_failed")
+ 
+ 
+ # Cache the embedding function with LRU cache
+@@ -522,12 +533,7 @@
+     body: QueryRequestBody,
+     request: Request,
+ ):
+-    if not hasattr(request.state, "user"):
+-        user_authorized = body.entity_id if body.entity_id else "public"
+-    else:
+-        user_authorized = (
+-            body.entity_id if body.entity_id else request.state.user.get("id")
+-        )
++    user_authorized = get_user_id(request, body.entity_id)
+ 
+     authorized_documents = []
+ 
+@@ -538,12 +544,12 @@
+             documents = await vector_store.asimilarity_search_with_score_by_vector(
+                 embedding,
+                 k=body.k,
+-                filter={"file_id": {"$eq": body.file_id}},
++                filter={"$and": [{"file_id": {"$eq": body.file_id}}, {"user_id": {"$eq": user_authorized}}]},
+                 executor=request.app.state.thread_pool,
+             )
+         else:
+             documents = vector_store.similarity_search_with_score_by_vector(
+-                embedding, k=body.k, filter={"file_id": {"$eq": body.file_id}}
++                embedding, k=body.k, filter={"$and": [{"file_id": {"$eq": body.file_id}}, {"user_id": {"$eq": user_authorized}}]}
+             )
+ 
+         documents = _apply_distance_threshold(documents)
+@@ -555,7 +561,7 @@
+         doc_metadata = document.metadata
+         doc_user_id = doc_metadata.get("user_id")
+ 
+-        if doc_user_id is None or doc_user_id == user_authorized:
++        if doc_user_id == user_authorized:
+             authorized_documents = documents
+         else:
+             # If using entity_id and access denied, try again with user's actual ID
+@@ -594,7 +600,7 @@
+             str(e),
+             traceback.format_exc(),
+         )
+-        raise HTTPException(status_code=500, detail=str(e))
++        raise HTTPException(status_code=500, detail="ingestion_failed")
+ 
+ 
+ async def _process_documents_async_pipeline(
+@@ -1091,7 +1097,7 @@
+             str(e),
+             traceback.format_exc(),
+         )
+-        return {"message": "An error occurred while adding documents.", "error": str(e)}
++        raise HTTPException(502, "document_indexing_failed")
+ 
+ 
+ @router.post("/local/embed")
+@@ -1304,7 +1310,7 @@
+         )
+         raise HTTPException(
+             status_code=status.HTTP_400_BAD_REQUEST,
+-            detail=f"Error during file processing: {str(e)}",
++            detail="ingestion_failed",
+         )
+     finally:
+         await cleanup_temp_file_async(validated_file_path)
+@@ -1448,7 +1454,7 @@
+         )
+         raise HTTPException(
+             status_code=status.HTTP_400_BAD_REQUEST,
+-            detail=f"Error during file processing: {str(e)}",
++            detail="ingestion_failed",
+         )
+     finally:
+         await cleanup_temp_file_async(validated_temp_file_path)
+@@ -1473,12 +1479,12 @@
+             documents = await vector_store.asimilarity_search_with_score_by_vector(
+                 embedding,
+                 k=body.k,
+-                filter={"file_id": {"$in": body.file_ids}},
++                filter={"$and": [{"file_id": {"$in": body.file_ids}}, {"user_id": {"$eq": get_user_id(request)}}]},
+                 executor=request.app.state.thread_pool,
+             )
+         else:
+             documents = vector_store.similarity_search_with_score_by_vector(
+-                embedding, k=body.k, filter={"file_id": {"$in": body.file_ids}}
++                embedding, k=body.k, filter={"$and": [{"file_id": {"$in": body.file_ids}}, {"user_id": {"$eq": get_user_id(request)}}]}
+             )
+ 
+         documents = _apply_distance_threshold(documents)
+@@ -1505,7 +1511,7 @@
+             str(e),
+             traceback.format_exc(),
+         )
+-        raise HTTPException(status_code=500, detail=str(e))
++        raise HTTPException(status_code=500, detail="ingestion_failed")
+ 
+ 
+ @router.post("/text")
+@@ -1572,7 +1578,7 @@
+         else:
+             raise HTTPException(
+                 status_code=status.HTTP_400_BAD_REQUEST,
+-                detail=f"Error during text extraction: {str(e)}",
++                detail="text_extraction_failed",
+             )
+     finally:
+         await cleanup_temp_file_async(validated_temp_file_path)
+--- a/app/services/database.py
++++ b/app/services/database.py
+@@ -19,7 +19,7 @@
+     @classmethod
+     async def get_pool(cls):
+         if cls.pool is None:
+-            pool_args = {"dsn": DSN}
++            pool_args = {"dsn": DSN, "min_size": 1, "max_size": 3}
+             if POSTGRES_SCHEMA:
+                 schemas = _parse_schemas(POSTGRES_SCHEMA)
+                 if schemas:
+--- a/app/services/vector_store/extended_pg_vector.py
++++ b/app/services/vector_store/extended_pg_vector.py
+@@ -16,6 +16,19 @@
+ 
+ class ExtendedPgVector(PGVector):
+     _query_logging_setup = False
++
++    def create_tables_if_not_exists(self) -> None:
++        # Schema is installed by our checksum-controlled migration, never create_all.
++        from sqlalchemy import text
++        with self._bind.connect() as connection:
++            connection.execute(text("SELECT uuid FROM langchain_pg_embedding LIMIT 0"))
++
++    def create_collection(self) -> None:
++        from sqlalchemy import text
++        with self._bind.connect() as connection:
++            found = connection.execute(text("SELECT 1 FROM langchain_pg_collection WHERE name=:name"), {"name": self.collection_name}).first()
++            if not found:
++                raise RuntimeError("collection_migration_required")
+ 
+     def __init__(self, *args, **kwargs):
+         super().__init__(*args, **kwargs)
+--- a/app/services/vector_store/factory.py
++++ b/app/services/vector_store/factory.py
+@@ -142,7 +142,7 @@
+     """
+     global _mongo_client
+ 
+-    engine_args: dict = {"pool_pre_ping": pool_pre_ping}
++    engine_args: dict = {"pool_pre_ping": pool_pre_ping, "pool_size": 2, "max_overflow": 1}
+     if pool_recycle > 0:
+         engine_args["pool_recycle"] = pool_recycle
+     if schema:
+--- a/requirements.lite.txt
++++ b/requirements.lite.txt
+@@ -2,7 +2,6 @@
+ langchain-community==0.4.2
+ langchain-openai==1.3.2
+ langchain-core==1.4.8
+-langchain-google-genai==4.2.5
+ sqlalchemy==2.0.41
+ python-dotenv==1.2.2
+ fastapi==0.115.12
+@@ -10,28 +9,14 @@
+ pgvector==0.2.5
+ uvicorn==0.28.0
+ pypdf==6.14.2
+-unstructured==0.18.32
+-markdown==3.8.2
+-networkx==3.2.1
+-pandas==2.2.1
+-openpyxl==3.1.5
+-docx2txt==0.9
+-pypandoc==1.15
+ PyJWT==2.13.0
+ asyncpg==0.29.0
+ python-multipart==0.0.32
+ aiofiles==24.1.0
+-rapidocr-onnxruntime==1.4.4
+-opencv-python-headless==4.9.0.80
+ pymongo>=4.12.0,<5
+ langchain-mongodb==0.11.0
+ cryptography==48.0.1
+ python-magic==0.4.27
+-python-pptx==1.0.2
+-xlrd==2.0.2
+-langchain-aws==1.6.0
+ boto3>=1.42.42,<2
+ chardet==5.2.0
+-langchain-ollama==1.1.0
+ tenacity>=9.0.0
+-msoffcrypto-tool>=6.0.0,<7

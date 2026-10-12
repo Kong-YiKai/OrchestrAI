@@ -1,0 +1,32 @@
+model_list:
+  - model_name: deepseek-flash
+    litellm_params:
+      model: deepseek/deepseek-flash
+      api_key: os.environ/DEEPSEEK_API_KEY
+      api_base: https://api.deepseek.com
+      max_tokens: 2048
+      timeout: 60
+      max_retries: 0
+      max_parallel_requests: 2
+      thinking: {type: disabled}
+  - model_name: text-embedding-v4
+    litellm_params:
+      model: openai/text-embedding-v4
+      api_key: os.environ/EMBEDDING_API_KEY
+      api_base: os.environ/EMBEDDING_BASE_URL
+      dimensions: 1024
+      timeout: 45
+      max_retries: 0
+      max_parallel_requests: 1
+router_settings:
+  num_retries: 0
+  timeout: 60
+general_settings:
+  master_key: os.environ/GATEWAY_KEY
+  disable_spend_logs: true
+litellm_settings:
+  callbacks: [budget.proxy_handler_instance]
+  drop_params: true
+  telemetry: false
+  set_verbose: false
+  turn_off_message_logging: true
