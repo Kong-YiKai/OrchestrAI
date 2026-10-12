@@ -149,6 +149,11 @@ jobs:
           PY
           python scripts/configure-product.py --providers .artifacts/product-inputs/providers.json --model-env .artifacts/product-inputs/model.env
           python scripts/test-product.py --start --project orchestrai-r3-ci
+      - name: Release this ephemeral runner's unused build cache
+        run: |
+          [[ "$GITHUB_ACTIONS" == true && "$RUNNER_ENVIRONMENT" == github-hosted ]]
+          docker builder prune --all --force
+          df -h /
       - name: Product image security reports
         run: |
           mkdir -p .artifacts/product-scans
@@ -160,11 +165,12 @@ jobs:
           done
           exit "$status"
       - name: Preserve the exact tested product images
-        run: docker save orchestrai/chat:local orchestrai/ingestion:local orchestrai/gateway:local orchestrai/web:local orchestrai/mongo:local -o product-images.tar
+        run: docker save orchestrai/chat:local orchestrai/ingestion:local orchestrai/gateway:local orchestrai/web:local orchestrai/mongo:local | gzip -1 > product-images.tar.gz
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: product-${{ github.sha }}
-          path: product-images.tar
+          path: product-images.tar.gz
+          compression-level: 0
           retention-days: 7
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
@@ -199,7 +205,7 @@ jobs:
           printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           trap 'docker logout ghcr.io' EXIT
           docker load -i release-images.tar
-          docker load -i product-images.tar
+          docker load -i product-images.tar.gz
           for service in workflow postgres redis chat ingestion gateway web mongo; do
             image="ghcr.io/${REPOSITORY,,}/$service"
             docker tag "orchestrai/$service:local" "$image:$REVISION"

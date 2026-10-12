@@ -255,9 +255,9 @@ R2 本轮交付范围为独立 workflow 与交付基础；原规划中的 chat/i
 
 安全门禁升级直接/传递依赖及 RAG 运行版本，移除 chat 运行时 npm/npx、Mongo gosu/闲置 YAML loader/六个无用工具；保留原版 Mongo 服务及必要 dump/restore。braces 尚无发布修复，构建添加解析深度上限并验证深层输入被拒绝。原始 Trivy 与 SPDX 报告保留；`deploy/vulnerability-policy.json` 仅允许精确服务/漏洞/包/版本及不可达路径或已补丁评估，2026-11-12 到期，新发现/修复/服务边界变化阻断 CI，不使用全局忽略。Mongo 的 Go HTTP/TLS server 漏洞限仅两项本地 Mongo 协议 CLI，不能说镜像没有漏洞。完整许可证人工审核、容量/恢复/产品验收由用户执行，未宣称通过。
 
-[PR #33](https://github.com/Kong-YiKai/OrchestrAI/pull/33) 已推送并附加；第三轮 CI `38252116545` 产品构建、预算、认证/上传/委托通过，安全扫描失败，依赖/运行镜像与精确门禁已修复，待新 CI。其他 R2/仓库检查通过。发布 schema=2 清单包含八类已测试镜像，CI artifact 传递后按 digest 发布，不重建。控制器新增停写协调快照：workflow/ingestion dump、Mongo archive、附件/图片 tar、预算 SQLite 直接流入 age，各加密对象异地回读后最后写完成清单；Redis 可重建。当前控制器代码尚未安装服务器，完整快照/生产部署烟测尚未执行；现生产仍为 R2。
+[PR #33](https://github.com/Kong-YiKai/OrchestrAI/pull/33) 已推送并附加；第三轮 CI `38252116545` 产品构建、预算、认证/上传/委托通过，安全扫描失败，依赖/运行镜像与精确门禁已修复，第四轮 `38255927457` 构建/类型/预算/确定性烟测通过，扫描因 GitHub 临时运行器磁盘耗尽失败；已限定仅 github-hosted 作业清理闲置构建缓存，并流式 gzip 镜像归档，待重跑。其他 R2/仓库检查通过。发布 schema=2 清单包含八类已测试镜像，CI artifact 传递后按 digest 发布，不重建。控制器新增停写协调快照：workflow/ingestion dump、Mongo archive、附件/图片 tar、预算 SQLite 直接流入 age，各加密对象异地回读后最后写完成清单；Redis 可重建。服务器已安装 root 只读 schema=2 控制器及对应配置，原配置保存在 root 私有安装快照，四项 R2 现有密钥保留；22 项产品 env 私下扩充，回环 3088 已检查无冲突。完整栈快照/生产部署烟测尚未执行；现生产仍为 R2。
 
-旧 `frontend/`、`backend/` 从 Git 活跃树退出，根开发 Compose 删除，旧启动文档与 CI 退出；使用 `git rm --cached` 保留用户未提交的本机文件并忽略。源码（不含密钥/依赖/用户数据）保存于忽略的 `.artifacts/r3/source-baseline.zip`；R4/R5 可从 Git/快照取有效搜索用例与画布语义，不能重新启用旧产品。配置脚本读取 `deploy/private/model.env`/已填写 providers，保留私有 product.env 中凭据，不再依赖旧 backend env。最新模板 `deploy/.env.example`；公开注册默认关闭。无需额外 Key/充值。
+旧 `frontend/`、`backend/` 从 Git 活跃树退出，根开发 Compose 删除，旧启动文档与 CI 退出；使用 `git rm --cached` 保留用户未提交的本机文件并忽略。源码（不含密钥/依赖/用户数据）保存于忽略的 `.artifacts/r3/source-baseline.zip`；R4/R5 可从 Git/快照取有效搜索用例与画布语义，不能重新启用旧产品。配置脚本读取 `deploy/private/model.env`/已填写 providers，保留私有 product.env 中凭据，不再依赖旧 backend env。最新模板 `deploy/.env.example`；公开注册默认关闭。无需额外 Key/充值。本机另按精确 ID 移除四个已退出旧/试验容器及四个无引用旧镜像（旧 backend/frontend/PostgreSQL 与 workflow-test），所有数据卷保持原样。
 
 下一步仅做必要 CI、服务器配置接线和部署烟测，用户于本轮再次要求停止扩展验收和付费验证。R3 完整产品/故障恢复/混合容量留统一手动验收；公网 DNS/TLS/搜索在 R4，完整画布与 harness 在 R5。
 
@@ -349,7 +349,7 @@ R0 文档验证已完成：文档本地链接、UTF-8、格式和 `git diff --ch
 
 R1 本轮实际验证见 5.2：隔离产品构建、浏览器真实交互、真实模型/搜索/附件、两种持久 checkpointer 的崩溃恢复均有记录；不是正式仓库 CI 或生产验收。原工程全量前后端测试未复跑。153 文件基线比较仅本 overview 变化，其余业务源码与用户未提交修改均保留；此轮未删除业务代码。正式仓库只同步本文件，未迁入依赖、试验上游源码、数据库、环境文件或生成物。
 
-**下一步继续 R3，阶段结束后由用户集中手动验收**：先读本文件与规则，核查本轮工作树。CI/Rulesets、受限身份、加密存储与 main 自动首发均已接通；完整恢复/故障回滚/容量等由用户手动验收。R3 移入正式聊天/上传内核并同步删除旧调用链，服务镜像、预算原子预留及真实 embedding/图片接口已完成本机联调，继续页面上传/流/权限闭环、必要 CI 与部署烟测；不再等待用户提供 Key。完整聊天栈服务器容量、许可证/SPDX、安全报告和协调备份/生产接线仍未完成；原 Lighthouse 多轮门槛按用户后续简化验收要求不重复扩展，未通过记录保留。R5 优先验证现成 Deep Agents harness，避免重写通用执行框架；不得把官方文档能力写成 OrchestrAI 已交付。
+**下一步继续 R3 交付收尾，阶段结束后统一手动验收**：核心聊天/附件/图片/向量链路已通过，新控制器与私有配置已安装，继续必要 CI→不可变镜像发布→内部候选部署/协调快照烟测。无需新 Key/充值，不再付费调用或扩展 Lighthouse/容量/完整恢复验收。公网搜索/DNS/TLS 在 R4，画布与现成 harness 在 R5；阶段状态以 5.4 最新实际结果为准。
 
 ## 9. 选型依据（2026-10-11 核查）
 
