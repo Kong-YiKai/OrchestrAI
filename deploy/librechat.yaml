@@ -29,7 +29,6 @@ interface:
   artifacts: false
   webSearch: false
   fileSearch: true
-  customFooter: OrchestrAI · 联网研究与真实画布执行将在后续阶段接通
 endpoints:
   agents:
     capabilities: [file_search, context]

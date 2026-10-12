@@ -50,7 +50,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
-    mem_limit: 384m
+    mem_limit: 512m
     cpus: 0.5
     logging: {driver: json-file, options: {max-size: 10m, max-file: '3'}}
     networks: [internal, egress]
@@ -124,6 +124,7 @@ services:
       DOMAIN_SERVER: ${PRODUCT_URL:-http://localhost:3088}
       CONFIG_PATH: /app/librechat.yaml
       APP_TITLE: OrchestrAI
+      CUSTOM_FOOTER: OrchestrAI
       JWT_SECRET: ${CHAT_JWT_SECRET:?required}
       JWT_REFRESH_SECRET: ${CHAT_REFRESH_SECRET:?required}
       CREDS_KEY: ${CHAT_CREDS_KEY:?required}
@@ -180,9 +181,10 @@ services:
     mem_limit: 48m
     cpus: 0.25
     logging: {driver: json-file, options: {max-size: 10m, max-file: '3'}}
-    networks: [internal]
+    networks: [internal, ingress]
 networks:
   egress: {}
+  ingress: {}
 volumes:
   mongo: {}
   budget: {}

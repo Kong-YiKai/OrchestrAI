@@ -8,8 +8,8 @@ RUN --mount=type=cache,target=/root/.npm npm ci --no-audit
 RUN npm run frontend && cd client && npx tsc --noEmit
 # A fresh filtered installation excludes client/build dependencies. Pruning an
 # already-populated workspace retains other workspaces' production dependencies.
-RUN rm -rf node_modules api/node_modules packages/api/node_modules packages/data-schemas/node_modules packages/data-provider/node_modules && \
-    npm ci --omit=dev --include-workspace-root=false --workspace=api --workspace=packages/api --workspace=packages/data-schemas --workspace=packages/data-provider --no-audit
+RUN --mount=type=cache,target=/root/.npm rm -rf node_modules api/node_modules packages/api/node_modules packages/data-schemas/node_modules packages/data-provider/node_modules && \
+    npm ci --prefer-offline --omit=dev --include-workspace-root=false --workspace=api --workspace=packages/api --workspace=packages/data-schemas --workspace=packages/data-provider --no-audit
 
 FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS runtime
 WORKDIR /app

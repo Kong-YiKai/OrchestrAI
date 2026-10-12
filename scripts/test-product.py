@@ -53,7 +53,9 @@ def main():
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
     def request(path, method='GET', data=None, authenticated=True, content_type='application/json', headers=None):
-        headers = dict(headers or {}, **{'Content-Type': content_type})
+        headers = dict(headers or {}, **{'Content-Type': content_type,
+            'User-Agent': 'Mozilla/5.0 OrchestrAI-Candidate-Smoke Chrome/140.0.0.0',
+            'Accept': 'application/json'})
         if authenticated and token:
             headers['Authorization'] = 'Bearer ' + token
         if data is not None and not isinstance(data, bytes):
@@ -62,6 +64,9 @@ def main():
         try:
             with opener.open(req, timeout=30) as response:
                 body = response.read()
+                if body and 'application/json' not in response.headers.get('Content-Type', ''):
+                    raise RuntimeError(f'Unexpected smoke response: {response.status}, '
+                                       f'{response.headers.get("Content-Type")}, {response.url}')
                 return response.status, json.loads(body) if body else None
         except urllib.error.HTTPError as error:
             return error.code, None
