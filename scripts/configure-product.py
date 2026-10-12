@@ -24,7 +24,7 @@ def main():
     parser.add_argument('--output', type=pathlib.Path, default=ROOT / 'deploy/private/product.env')
     parser.add_argument('--base-env', type=pathlib.Path)
     parser.add_argument('--providers', type=pathlib.Path, default=ROOT / 'deploy/private/providers.json')
-    parser.add_argument('--model-env', type=pathlib.Path, default=ROOT / 'backend/.env')
+    parser.add_argument('--model-env', type=pathlib.Path, default=ROOT / 'deploy/private/model.env')
     args = parser.parse_args()
     output = args.output.resolve()
     if not output.is_relative_to((ROOT / 'deploy/private').resolve()):
@@ -39,7 +39,7 @@ def main():
         raise ValueError('embedding URL must be HTTPS compatible /v1')
     model = read_env(args.model_env)
     inputs = {'EMBEDDING_API_KEY': provider.get('embedding_api_key', ''),
-              'EMBEDDING_BASE_URL': url, 'DEEPSEEK_API_KEY': model.get('DEEPSEEK_API_KEY', '')}
+              'EMBEDDING_BASE_URL': url, 'DEEPSEEK_API_KEY': model.get('DEEPSEEK_API_KEY') or values.get('DEEPSEEK_API_KEY', '')}
     for key, value in inputs.items():
         if not value or '\n' in value or "'" in value:
             raise ValueError(f'{key}: missing or invalid private input')

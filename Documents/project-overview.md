@@ -4,7 +4,7 @@
 > **每次新对话、新任务或接手开发，AI 必须先读本文件，再读根目录 `AGENTS.md` 和相关目录规则。每次完成修改必须同步更新本文件。**
 > 改革进度：R0、R1 选型已完成（用户确认）；R2 代码与内部部署已完成，待用户统一手动验收。PR #31/#32 已合并，main 提交 e9309c5 的 CI、GHCR 发布与自动 CD 全部成功；受限部署身份、Secrets 与加密异地存储已接通。R3 采用全新数据，不迁移旧测试聊天/附件。
 
-> R3 已进入服务实现与本地联调，尚未交付候选版；用户的 R2/R3 手动验收集中在阶段完成后进行，不以先完成完整手动验收作为继续开发的门禁。百炼 `text-embedding-v4` 已经网关真实联调，1024 维索引与独立文档查询通过；产品端到端与交付仍未完成，见 5.4。
+> R3 本地候选版已启动，生产发布仍在接线；用户的 R2/R3 手动验收集中在阶段完成后进行，不以先完成完整手动验收作为继续开发的门禁。百炼 `text-embedding-v4` 已经网关真实联调，1024 维索引与独立文档查询通过；产品端到端与交付仍未完成，见 5.4。
 
 ## 1. 已确认的产品方向
 
@@ -247,7 +247,7 @@ R2 本轮交付范围为独立 workflow 与交付基础；原规划中的 chat/i
 
 ### 5.4 R3 附件与多模态最小闭环
 
-当前实际进度（2026-10-12）：R3 服务实现已进入本地联调，尚未完成候选版交付。新增 `services/chat`（LibreChat 受控源码的生产构建）、`services/ingestion`（RAG API 受控补丁与校验和迁移）、`services/gateway`（LiteLLM 1.105.0 与持久预算 callback）、`services/web`（同源 Nginx 入口），通过 `deploy/compose.product.yml` 扩展既有 R2 Compose；新服务独立进程/配置/healthcheck（web 提供编译后的静态资源与同源转发；HTML 仍沿用 chat 的 CSP/配置注入），不直接导入另一服务的业务实现。PostgreSQL 共用实例，新增 ingestion 独立数据库、迁移角色与仅 DML 的运行角色；Redis 按库隔离。MongoDB 8.0.20 保存唯一用户/会话/文件元数据，文件本体为独立持久卷。
+当前实际进度（2026-10-12）：R3 本地候选版已启动，生产候选交付尚未完成。新增 `services/chat`（LibreChat 受控源码的生产构建）、`services/ingestion`（RAG API 受控补丁与校验和迁移）、`services/gateway`（LiteLLM 1.105.0 与持久预算 callback）、`services/web`（同源 Nginx 入口），通过 `deploy/compose.product.yml` 扩展既有 R2 Compose；新服务独立进程/配置/healthcheck（web 提供编译后的静态资源与同源转发；HTML 仍沿用 chat 的 CSP/配置注入），不直接导入另一服务的业务实现。PostgreSQL 共用实例，新增 ingestion 独立数据库、迁移角色与仅 DML 的运行角色；Redis 按库隔离。MongoDB 8.0.20 保存唯一用户/会话/文件元数据，文件本体为独立持久卷。
 
 网关预算由单实例 SQLite 账本独占，避免在 4 GB 共享服务器引入另一 PostgreSQL/Prisma 进程。账本独立持久卷、显式 schema 初始化、`BEGIN IMMEDIATE` 原子预留，每日 ¥5/月 ¥100；失败/中断用量未知时保留预留，成功按真实返回 token 与保守价格/汇率上界结算，结算额不是 provider 实际账单。当前仅涵盖模型与向量；R4 搜索接入时必须统一预算，不另开无上限的调用通道。此实现只支持单网关实例；多副本前须迁移账本与事务协调。新产品账本/数据库/文件的协调加密备份与生产控制器接线仍待完成，不能称已生产化。
 
@@ -372,3 +372,11 @@ R1 本轮实际验证见 5.2：隔离产品构建、浏览器真实交互、真�
 - [百炼同步文本向量 API](https://help.aliyun.com/zh/model-studio/text-embedding-synchronous-api)：R3 用户选定 `text-embedding-v4`；控制台对应地域/工作空间的兼容地址与 Key 已填写，格式检查通过，真实检索待服务接入及联调。
 - [LiteLLM 用户预算](https://docs.litellm.ai/docs/proxy/users)、[Tavily 计费](https://docs.tavily.com/documentation/api-credits)：无数据库预算限制与搜索/提取费用边界；不能把本轮预留额写成实际账单。
 - [GitHub 部署管理](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/control-deployments)：环境、并发和部署记录。
+
+### R3 本轮继续实施记录
+
+本机 `http://localhost:3180` 候选版：真实登录、聊天流、刷新持久会话、PDF 上传→独立向量检索→回答内容码/文件名/页码通过，图片 API 识别通过。确定性 smoke 验证聊天真实身份委托→workflow 审批→真实产物，未调用付费模型。页面保留暖色三栏，移除模拟流程；画布标明尚未接通。私有验收账号位于 `deploy/private/candidate-account.json`，不输出密码。云端第二轮 CI 产品构建通过；预算 3 项通过，解析编译因非 root 无权写缓存失败，已改为 `/tmp` 缓存，待重跑；其他 R2/仓库检查通过。
+
+已从 Git 活跃树删除旧 `frontend/`、`backend/` 及根开发 Compose；本机使用 `git rm --cached` 保留原有未提交文件，目录明确忽略，不作为正式入口。改动前源码（不含环境、依赖、用户数据）保存于忽略的 `.artifacts/r3/source-baseline.zip`，可用于 R4 搜索安全用例和 R5 画布语义迁移；历史源码可从 Git 读取。旧启动文档/CI 退出，保留受保护 frontend/backend 检查名称并指向新产品实际验证。新配置脚本不再依赖旧 backend/.env；已有私有 product.env 中模型 Key 保留。
+
+发布控制器新增 schema=2，不可变清单涵盖八种镜像（workflow API/worker 共享）；CI 保存实际测试镜像，发布不重建。新增协调停写备份：workflow/ingestion dump、Mongo archive、附件/图片 tar 与 SQLite 一致性序列化各自直接流入 age；各加密对象异地回读后最后上传完成清单。Redis 为可从事实源重建的队列/缓存，不当作聊天事实源。每日失败也恢复服务，回滚只恢复应用镜像；6 项发布策略测试通过。当前为代码实现，尚未安装新服务器控制器、执行完整栈备份/发布及扫描，不能写已生产化。

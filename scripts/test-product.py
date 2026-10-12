@@ -19,7 +19,7 @@ def main():
     parser.add_argument('--start', action='store_true')
     parser.add_argument('--url', default='http://localhost:3088')
     args = parser.parse_args()
-    if not args.project.startswith('orchestrai-r3') or not args.env_file.exists():
+    if (not args.project.startswith('orchestrai-r3') and args.project != 'orchestrai-production') or not args.env_file.exists():
         raise ValueError('explicit R3 project and existing private env required')
     command = ['docker', 'compose', '--env-file', str(args.env_file), '-f', 'deploy/compose.yml',
                '-f', 'deploy/compose.product.yml', '-p', args.project]
