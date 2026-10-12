@@ -15,7 +15,7 @@ if id orchestrai-deploy >/dev/null 2>&1 || [ -e /opt/orchestrai ]; then
 fi
 install -d -m 755 /opt/orchestrai /opt/orchestrai/deploy /opt/orchestrai/scripts
 install -d -m 700 /opt/orchestrai/secrets /opt/orchestrai/state /opt/orchestrai/backups
-for file in compose.yml compose.product.yml postgres-init.sh ingestion-init.sh mongo-init.js librechat.yaml infrastructure.Dockerfile release.py; do
+for file in compose.yml compose.product.yml compose.research.yml postgres-init.sh ingestion-init.sh research-init.sh mongo-init.js librechat.yaml infrastructure.Dockerfile release.py; do
   install -m 644 "$source_dir/$file" "/opt/orchestrai/deploy/$file"
 done
 install -m 644 "$source_dir/../scripts/test-product.py" /opt/orchestrai/scripts/test-product.py

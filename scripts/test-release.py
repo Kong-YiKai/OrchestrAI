@@ -30,6 +30,10 @@ class PolicyTests(unittest.TestCase):
         release.validate(MANIFEST,POLICY,None,'c'*64)
         product=dict(MANIFEST,schema=2,**{service+'_image':'ghcr.io/kong-yikai/orchestrai/'+service+'@sha256:'+'d'*64 for service in ('chat','ingestion','gateway','web','mongo')})
         release.validate(product,POLICY,None,'c'*64)
+        research=dict(product,schema=3,research_image='ghcr.io/kong-yikai/orchestrai/research@sha256:'+'d'*64)
+        release.validate(research,POLICY,None,'c'*64)
+        with self.assertRaises(ValueError):
+            release.validate(dict(research,research_image='evil/research@sha256:'+'d'*64),POLICY,None,'c'*64)
 
     def test_rejects_untrusted_or_incompatible_release(self):
         for field,value in [('revision','main'),('image','evil/image@sha256:'+'b'*64),('sequence',True),('schema',2),('config_digest','d'*64)]:
@@ -64,6 +68,22 @@ class PolicyTests(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     deployment.release(MANIFEST,POLICY,None)
             self.assertFalse(any('migrate' in call.args for call in compose.call_args_list))
+
+    def test_research_failed_upgrade_stops_research_and_keeps_model_schema(self):
+        product=dict(MANIFEST,schema=2,sequence=1,**{service+'_image':'ghcr.io/kong-yikai/orchestrai/'+service+'@sha256:'+'d'*64 for service in ('chat','ingestion','gateway','web','mongo')})
+        candidate=dict(product,schema=3,sequence=2,research_image='ghcr.io/kong-yikai/orchestrai/research@sha256:'+'d'*64)
+        with tempfile.TemporaryDirectory() as directory:
+            root=pathlib.Path(directory); (root/'state').mkdir()
+            deployment=release.Deployment(root)
+            def activate(manifest):
+                if manifest['schema']==3: raise RuntimeError('candidate smoke failed')
+            with patch.object(deployment,'compose') as compose, patch.object(deployment,'backup',return_value={'object':'verified'}), patch.object(deployment,'activate',side_effect=activate) as activation, patch.object(release.subprocess,'check_output',return_value='a'*40):
+                with self.assertRaises(RuntimeError): deployment.release(candidate,POLICY,product)
+            self.assertEqual([c.args[0]['schema'] for c in activation.call_args_list],[3,2])
+            self.assertTrue(any(c.args[1:]==('stop','research') for c in compose.call_args_list))
+            self.assertEqual(sum('research-migrate' in c.args for c in compose.call_args_list),1)
+            self.assertFalse(any('downgrade' in c.args for c in compose.call_args_list))
+            self.assertIn('rolled_back',(root/'state/release-2.json').read_text())
 
     def test_daily_retention_preserves_release_and_unrelated_objects(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -140,7 +140,7 @@ LibreChat 主仓库 MIT；Open WebUI 当前许可证含品牌限制及例外；D
 | R1：选型验证与基线冻结 | 已完成（选型，用户确认；遗留发布门槛继续追踪） | 小型可运行对照、UI 移植、依赖/资源/许可清单、最终技术决定 | 固定版本 LibreChat、LangGraph JS、RAG API、LiteLLM；Docker、Playwright | 通过下述试验门槛；确定单一路线和每项旧资产退出点 |
 | R2：微服务与交付基础 | 已完成（代码与内部部署；待用户手动验收） | 独立服务最小链路、迁移/契约、自动 CI/CD、身份/配置边界 | Compose、Actions、GHCR、PostgreSQL、Redis/BullMQ、LangGraph | CI 同一提交产出镜像；隔离环境部署/回滚/恢复通过；具备发布前提 |
 | R3：成熟聊天与附件候选版 | 已完成（代码、CI/CD 与内部部署；待用户手动验收） | 原有风格的真实聊天、登录、历史、图片/PDF/TXT 上传、文档问答与新服务协调备份 | LibreChat chat/client、RAG API、pgvector、百炼 text-embedding-v4、DeepSeek 视觉、LiteLLM、持久存储；OCR 未接入 | 核心真实联调与权限烟测通过；可信 main 部署候选版、六份加密快照异地回读通过 |
-| R4：Web Research 重做与首发 | 未完成（重做） | 搜索→读取→重排→引用、可见过程、限额与拒答 | LibreChat 搜索实现候选；Tavily/Serper 对照、Firecrawl/Tavily Extract、Jina reranker 可选 | 固定研究质量集通过，单一入口，旧 bridge 退出；R3/R4 与部署资源门槛都通过后对外首发 |
+| R4：Web Research 重做与首发 | 进行中（2026-10-13 开始实施） | 搜索→读取→重排→引用、可见过程、限额与拒答 | 固定 LibreChat agents 搜索工具、Tavily 搜索/读取、BM25 初始重排；复用 PostgreSQL/Redis 与模型网关预算，新增独立 research 服务 | 必要 CI/部署烟测通过，单一入口；真实 provider 小样本与公网 DNS/TLS，完整质量/容量由用户手动验收 |
 | R5：真实工作流执行 | 未完成（重做） | 画布映射真实 graph、DAG、版本、审批、取消、重启恢复；自主任务复用成熟 harness | React Flow、LangGraph JS、Deep Agents JS 首选评估、Postgres checkpointer、BullMQ、MCP | 真实三节点任务成功；断线/崩溃/重复投递不重复副作用；mock 只留测试 |
 | R6：音视频理解与产物生成 | 未完成 | 分批交付转写、视频摘要、PPT/文档、图片生成 | 外部 ASR/VLM/生成 API；按需 FFmpeg、Docling、PptxGenJS/docx 库；独立 worker | 每种能力有真实可下载产物、预览、用量、失败/取消闭环；不拿一个入口代表全覆盖 |
 | R7：运行质量与维护 | 未完成 | 评测回归、成本看板、审计保留、依赖/上游升级机制 | OpenTelemetry、结构化日志、Langfuse 外部实例或兼容托管端、Renovate/Dependabot | 基础观测从 R2 就有；此阶段完善 SLO、升级演练与长期质量管理 |
@@ -272,6 +272,18 @@ R3 无剩余代码或服务器交付收尾项；用户统一手动验收完整�
 
 ### 5.5 R4 搜索质量门槛
 
+**状态：进行中，代码与本机必要验证通过；可信 main CI/CD 尚未执行。** 分支 `codex/r4-web-research`。修改现有客户端补丁、网关预算/配置、Compose、CI 与发布控制器；新增独立 research API/worker（同一容器）、数据库角色/校验和迁移、固定 fixture/队列测试和本站 TLS/续期资产。没有数据删除项；旧原型已退出活跃源码，chat 内置搜索保持禁用。本阶段新增一个研究镜像/常驻进程，完整 schema=3 为九种镜像、十个常驻进程，复用本项目 PostgreSQL 与 Redis，不增加重型本地抓取模型。
+
+直接复用 `@librechat/agents@4.0.1` 的 Tavily 搜索/批量提取，已有依赖 `okapibm25@1.4.1` 在本地重排；Chinese Intl.Segmenter + ASCII token 编码避免 BM25 的英文分词/正则输入问题。浏览器只有 chat 登录身份，chat 签发独立短期 research 委托；research 自有库是查询、任务、证据和结果事实源，不维护第二份聊天历史。BullMQ/Redis DB1 是可从 SQL 重建的队列；单实例串行执行、每用户最多一个活跃任务、全局排队最多二十个。引用须来自实际提取正文且为精确连续摘录，搜索摘要不能当作读取正文；这是引用校验，**不等于引用语义支持率已经达标**。
+
+任务支持查询/直接公开链接、阶段进度、来源展开、取消和已登录用户的持久记录/删除。默认一轮 basic search、最多五候选、提取前三项，45 秒目标预算；受限/读取失败明确 partial/failed，不自动重复未知费用的外部调用。取消不能撤销已到 provider 的请求；进程中断保存先前证据并标记中断，用户可明确新建任务，恢复不冒充成功。research 256 MiB 限额，单实例重启会隔离旧 running 任务，多副本前须增加 lease/事务协调；规模扩展留 R7。普通聊天仍走原聊天链路，研究是头部“联网研究”专用操作；R5 harness 再复用同一服务，不启用第二套搜索。
+
+Tavily 凭据只进现有 LiteLLM 网关，受限 transport hook 固定 provider URL，检查公开目标 DNS/IP、禁止私网/任意 provider/crawl/付费重试。模型与搜索共用 SQLite 原子人民币预留：每日 ¥5/月 ¥100；另限制 Tavily 每日 30/月 1,000 credits。即使免费额度也按保守 7 分/credit 归集；不是实际账单。receipt 缓存 35 天，原子保留 operation ID/请求摘要/结算；到期只清正文缓存，未知费用/重复调用围栏和账本保留。研究证据自身在 research 库保存，可由用户删除。R3 模型 schema 不变，附加 provider schema 支持 schema=3→2 的应用回滚，无自动数据库 downgrade；schema=3 日常协调快照增加 `research.dump`，共七份。
+
+本机实际通过：客户端构建/类型、预算 5 项、search transport 4 项、研究 engine 5 项、真实 SQL/队列权限/幂等/取消/崩溃围栏/证据保留、候选登录/附件/workflow/研究无付费烟测、桌面/390px 实际渲染及 Escape/关闭/失败态、发布 8 项契约和干净上游归档补丁应用。research npm audit 为 0，Trivy 高危/严重为 0（其他镜像仍以本轮 CI 为准）。本地真实 provider 保留失败：TUN/Fake-IP 将公共域名解析为 198.18.x.x，私网保护拒绝直接链接/批量提取；普通中文检索实际返回五个来源、消耗 1 credit，但没有正文/回答，未把该结果记为成功。真实服务器小样本尚待完成；30 条质量集、容量/恢复/许可证整体人工验收仍由用户执行。
+
+用户在腾讯云完成 DNS；服务器确认 `orchestrai.elysiumgrid.space` → `43.173.126.57`。独立共享入口配置已实际启用 HTTPS，复用已注册 ACME 账号及固定 Certbot digest，证书到期 2027-01-10；本站 systemd 续期 timer 使用既有跨站 flock，未修改 Tarot/BuddyUp 的配置或 timer。服务器本机 HTTPS `/login` 为 200；当前应用仍是 R3 main 901beb6，R4 不把证书上线当作研究部署完成。后续 CI/CD 通过后再核验公开登录、研究、协调异地快照及其他站点健康。现有 DeepSeek/Tavily/百炼凭据够用，无需新 Key/注册/充值。
+
 - 先做检索→抓取→重排→证据引用；是否引入查询改写/最多两轮补检由评测决定，不再简单堆 provider。
 - 30 条中文测试集建议分配：时效问题 6、公开网页 6、多来源比较 6、中文长尾 4、直接链接 4、登录/风控/429/超时 4。正向效果和正确失败分别计分。
 - 建议目标（待 R1 基线确认，未达成）：可访问样本任务成功率 ≥85%，抽样引用支持率 ≥95%，无证据编造正文为 0，受限链接明确说明为 100%；报告样本数，不能只报百分比。
@@ -352,7 +364,7 @@ R0 文档验证已完成：文档本地链接、UTF-8、格式和 `git diff --ch
 
 R1 本轮实际验证见 5.2：隔离产品构建、浏览器真实交互、真实模型/搜索/附件、两种持久 checkpointer 的崩溃恢复均有记录；不是正式仓库 CI 或生产验收。原工程全量前后端测试未复跑。153 文件基线比较仅本 overview 变化，其余业务源码与用户未提交修改均保留；此轮未删除业务代码。正式仓库只同步本文件，未迁入依赖、试验上游源码、数据库、环境文件或生成物。
 
-**下一步为用户统一手动验收与 R4 开发。** R3 核心聊天/附件/图片/向量链路、可信 main CI→镜像发布→内部部署、六份协调加密快照异地回读均已完成；状态和手动入口见 5.4。无需新 Key/充值，不再扩展 Lighthouse/容量/完整恢复验收。R4 接入唯一搜索入口、DNS/TLS 与公开首发；R5 接通画布和现成 harness。完成记录在本地 overview 同步，已部署代码仍为 main 901beb6，不为纯状态记录重建镜像。
+**当前正在实施 R4；用户统一手动验收范围不变。** R3 核心聊天/附件/图片/向量链路、可信 main CI→镜像发布→内部部署、六份协调加密快照异地回读均已完成；状态和手动入口见 5.4。无需新 Key/充值，不再扩展 Lighthouse/容量/完整恢复验收。R4 接入唯一搜索入口、DNS/TLS 与公开首发；R5 接通画布和现成 harness。完成记录在本地 overview 同步，已部署代码仍为 main 901beb6，不为纯状态记录重建镜像。
 
 ## 9. 选型依据（2026-10-11 核查）
 

@@ -47,7 +47,7 @@ jobs:
       - name: Validate workflow and shell scripts
         run: |
           docker run --rm -v "$PWD:/repo:ro" --workdir /repo rhysd/actionlint@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9
-          docker run --rm -v "$PWD:/repo:ro" --workdir /repo --entrypoint shellcheck rhysd/actionlint@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9 deploy/install-host.sh deploy/postgres-init.sh deploy/ingestion-init.sh scripts/docker-clean.sh
+          docker run --rm -v "$PWD:/repo:ro" --workdir /repo --entrypoint shellcheck rhysd/actionlint@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9 deploy/install-host.sh deploy/postgres-init.sh deploy/ingestion-init.sh deploy/research-init.sh deploy/renew-certificate.sh scripts/docker-clean.sh
       - name: Verify fixed upstream archives and OrchestrAI patch
         run: python scripts/prepare-upstreams.py
       - name: Scan tracked source for secrets
@@ -134,6 +134,8 @@ jobs:
       - name: Atomic budget, restart and SDK callback contract
         run: |
           docker run --rm -e LITELLM_LOCAL_MODEL_COST_MAP=true -v "$PWD/services/gateway/test_budget.py:/app/test_budget.py:ro" --entrypoint python orchestrai/gateway:local -m unittest test_budget -q
+          docker run --rm -e LITELLM_LOCAL_MODEL_COST_MAP=true -v "$PWD/services/gateway/test_search.py:/app/test_search.py:ro" --entrypoint python orchestrai/gateway:local -m unittest test_search -q
+          docker run --rm -v "$PWD/services/research/tests:/app/tests:ro" --entrypoint node orchestrai/research:local --test tests/*.test.mjs
           docker run --rm -e PYTHONPYCACHEPREFIX=/tmp/pycache --entrypoint python orchestrai/ingestion:local -m compileall -q /app/app /app/migrate.py
       - name: Candidate auth, upload and chat delegation with no paid calls
         run: |
@@ -148,7 +150,8 @@ jobs:
           (p/'model.env').write_text('DEEPSEEK_API_KEY=test-unused-provider-key\n')
           PY
           python scripts/configure-product.py --providers .artifacts/product-inputs/providers.json --model-env .artifacts/product-inputs/model.env
-          python scripts/test-product.py --start --project orchestrai-r3-ci
+          python scripts/test-product.py --start --research --project orchestrai-r3-ci
+          python scripts/test-research.py --project orchestrai-r3-ci
       - name: Release this ephemeral runner's unused build cache
         run: |
           [[ "$GITHUB_ACTIONS" == true && "$RUNNER_ENVIRONMENT" == github-hosted ]]
@@ -158,14 +161,14 @@ jobs:
         run: |
           mkdir -p .artifacts/product-scans
           status=0
-          for service in chat ingestion gateway web mongo; do
+          for service in chat ingestion gateway web mongo research; do
             docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v orchestrai-trivy-cache:/root/.cache -v "$PWD/.artifacts/product-scans:/reports" aquasec/trivy@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa image --scanners vuln --severity HIGH,CRITICAL --format json --output "/reports/$service.json" "orchestrai/$service:local" || status=1
             python scripts/check-image.py ".artifacts/product-scans/$service.json" --service "$service" || status=1
             docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v orchestrai-trivy-cache:/root/.cache -v "$PWD/.artifacts/product-scans:/reports" aquasec/trivy@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa image --format spdx-json --output "/reports/$service.spdx.json" "orchestrai/$service:local" || status=1
           done
           exit "$status"
       - name: Preserve the exact tested product images
-        run: docker save orchestrai/chat:local orchestrai/ingestion:local orchestrai/gateway:local orchestrai/web:local orchestrai/mongo:local | gzip -1 > product-images.tar.gz
+        run: docker save orchestrai/chat:local orchestrai/ingestion:local orchestrai/gateway:local orchestrai/web:local orchestrai/mongo:local orchestrai/research:local | gzip -1 > product-images.tar.gz
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: product-${{ github.sha }}
@@ -206,7 +209,7 @@ jobs:
           trap 'docker logout ghcr.io' EXIT
           docker load -i release-images.tar
           docker load -i product-images.tar.gz
-          for service in workflow postgres redis chat ingestion gateway web mongo; do
+          for service in workflow postgres redis chat ingestion gateway web mongo research; do
             image="ghcr.io/${REPOSITORY,,}/$service"
             docker tag "orchestrai/$service:local" "$image:$REVISION"
             docker push "$image:$REVISION"
@@ -216,8 +219,8 @@ jobs:
           import importlib.util,json,os,pathlib
           spec=importlib.util.spec_from_file_location('release','deploy/release.py')
           release=importlib.util.module_from_spec(spec); spec.loader.exec_module(release)
-          images={service:pathlib.Path(service+'.digest').read_text().strip() for service in ['workflow','postgres','redis','chat','ingestion','gateway','web','mongo']}
-          manifest=dict(revision=os.environ['REVISION'],image=images.pop('workflow'),sequence=int(os.environ['SEQUENCE']),schema=2,config_digest=release.config_digest(pathlib.Path('deploy'),2))
+          images={service:pathlib.Path(service+'.digest').read_text().strip() for service in ['workflow','postgres','redis','chat','ingestion','gateway','web','mongo','research']}
+          manifest=dict(revision=os.environ['REVISION'],image=images.pop('workflow'),sequence=int(os.environ['SEQUENCE']),schema=3,config_digest=release.config_digest(pathlib.Path('deploy'),3))
           manifest.update({service+'_image':image for service,image in images.items()})
           value=json.dumps(manifest,separators=(',',':'))
           pathlib.Path('release.json').write_text(value)

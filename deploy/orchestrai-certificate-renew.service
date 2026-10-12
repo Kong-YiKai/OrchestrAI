@@ -1,0 +1,8 @@
+[Unit]
+Description=Renew only the OrchestrAI public certificate
+After=docker.service network-online.target
+Wants=network-online.target
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/bin/bash /opt/orchestrai/deploy/renew-certificate.sh
