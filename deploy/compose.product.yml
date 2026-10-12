@@ -1,0 +1,192 @@
+# Product services extend compose.yml. R2 workflow volumes and credentials persist.
+services:
+  postgres:
+    environment:
+      INGESTION_DB_PASSWORD: ${INGESTION_DB_PASSWORD:?required}
+      INGESTION_MIGRATION_PASSWORD: ${INGESTION_MIGRATION_PASSWORD:?required}
+    volumes:
+      - ./ingestion-init.sh:/opt/ingestion-init.sh:ro
+  mongo:
+    image: ${MONGO_IMAGE:-orchestrai/mongo:local}
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ADMIN_PASSWORD:?required}
+      MONGO_CHAT_PASSWORD: ${MONGO_CHAT_PASSWORD:?required}
+    command: [mongod, --wiredTigerCacheSizeGB, '0.25', --bind_ip_all]
+    volumes:
+      - mongo:/data/db
+      - ./mongo-init.js:/docker-entrypoint-initdb.d/chat.js:ro
+    healthcheck:
+      test: [CMD, mongosh, --quiet, --eval, 'quit(db.adminCommand({ping:1}).ok ? 0 : 1)']
+      interval: 10s
+      timeout: 8s
+      retries: 12
+    mem_limit: 512m
+    cpus: 0.5
+    logging: {driver: json-file, options: {max-size: 10m, max-file: '3'}}
+    networks: [internal]
+  gateway:
+    image: ${GATEWAY_IMAGE:-orchestrai/gateway:local}
+    init: true
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp:size=32m]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment: &gateway-env
+      GATEWAY_KEY: ${GATEWAY_KEY:?required}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?required}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:?required}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:?required}
+      MODEL_DAILY_LIMIT_CNY: ${MODEL_DAILY_LIMIT_CNY:-5}
+      MODEL_MONTHLY_LIMIT_CNY: ${MODEL_MONTHLY_LIMIT_CNY:-100}
+      LITELLM_TELEMETRY: 'false'
+      LITELLM_LOCAL_MODEL_COST_MAP: 'true'
+      HOME: /tmp
+    volumes: [budget:/data]
+    healthcheck:
+      test: [CMD, python, -c, 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:4000/health/liveliness",timeout=4)']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    mem_limit: 512m
+    cpus: 0.5
+    logging: {driver: json-file, options: {max-size: 10m, max-file: '3'}}
+    networks: [internal, egress]
+  gateway-migrate:
+    image: ${GATEWAY_IMAGE:-orchestrai/gateway:local}
+    profiles: [tools]
+    environment: *gateway-env
+    command: [python, budget.py, --migrate]
+    volumes: [budget:/data]
+    networks: [internal]
+  ingestion:
+    image: ${INGESTION_IMAGE:-orchestrai/ingestion:local}
+    init: true
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp:size=32m, '/app/uploads:size=64m,uid=10001,gid=10001']
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      DB_HOST: postgres
+      POSTGRES_DB: ingestion
+      POSTGRES_USER: ingestion
+      POSTGRES_PASSWORD: ${INGESTION_DB_PASSWORD:?required}
+      PGVECTOR_CREATE_EXTENSION: 'false'
+      COLLECTION_NAME: orchestrai
+      JWT_SECRET: ${RAG_JWT_SECRET:?required}
+      RAG_OPENAI_API_KEY: ${GATEWAY_KEY:?required}
+      RAG_OPENAI_BASEURL: http://gateway:4000/v1
+      EMBEDDINGS_PROVIDER: openai
+      EMBEDDINGS_MODEL: text-embedding-v4
+      EMBEDDINGS_DIMENSIONS: '1024'
+      EMBEDDING_BATCH_SIZE: '10'
+      EMBEDDINGS_CHUNK_SIZE: '10'
+      RAG_CHECK_EMBEDDING_CTX_LENGTH: 'false'
+      EMBEDDING_MAX_QUEUE_SIZE: '1'
+      PARALLEL_EXECUTION: '1'
+      RAG_THREAD_POOL_SIZE: '1'
+      OPENAI_MAX_RETRIES: '0'
+      CHUNK_SIZE: '1500'
+      CHUNK_OVERLAP: '100'
+    depends_on:
+      postgres: {condition: service_healthy}
+      gateway: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, python, -c, 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8000/health",timeout=4)']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    mem_limit: 384m
+    cpus: 0.5
+    logging: {driver: json-file, options: {max-size: 10m, max-file: '3'}}
+    networks: [internal]
+  ingestion-migrate:
+    image: ${INGESTION_IMAGE:-orchestrai/ingestion:local}
+    profiles: [tools]
+    environment:
+      INGESTION_MIGRATION_PASSWORD: ${INGESTION_MIGRATION_PASSWORD:?required}
+    command: [python, migrate.py]
+    networks: [internal]
+  chat:
+    image: ${CHAT_IMAGE:-orchestrai/chat:local}
+    init: true
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp:size=64m, '/app/logs:size=16m,uid=1000,gid=1000', '/app/data:size=16m,uid=1000,gid=1000']
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      MONGO_URI: mongodb://chat:${MONGO_CHAT_PASSWORD:?required}@mongo:27017/orchestrai?authSource=orchestrai
+      DOMAIN_CLIENT: ${PRODUCT_URL:-http://localhost:3088}
+      DOMAIN_SERVER: ${PRODUCT_URL:-http://localhost:3088}
+      CONFIG_PATH: /app/librechat.yaml
+      APP_TITLE: OrchestrAI
+      CUSTOM_FOOTER: OrchestrAI
+      JWT_SECRET: ${CHAT_JWT_SECRET:?required}
+      JWT_REFRESH_SECRET: ${CHAT_REFRESH_SECRET:?required}
+      CREDS_KEY: ${CHAT_CREDS_KEY:?required}
+      CREDS_IV: ${CHAT_CREDS_IV:?required}
+      RAG_JWT_SECRET: ${RAG_JWT_SECRET:?required}
+      GATEWAY_KEY: ${GATEWAY_KEY:?required}
+      RAG_API_URL: http://ingestion:8000
+      RAG_USE_FULL_CONTEXT: 'false'
+      DELEGATION_SECRET: ${DELEGATION_SECRET:?required}
+      WORKFLOW_API_URL: http://workflow-api:8090
+      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-false}
+      ALLOW_SOCIAL_LOGIN: 'false'
+      ALLOW_EMAIL_LOGIN: 'true'
+      ALLOW_PASSWORD_RESET: 'false'
+      USE_REDIS: 'true'
+      REDIS_URI: redis://:${REDIS_PASSWORD:?required}@redis:6379/0
+      SEARCH: 'false'
+      OPENAI_API_KEY: ''
+      DEBUG_LOGGING: 'false'
+      DEBUG_CONSOLE: 'false'
+      NO_INDEX: 'true'
+    volumes:
+      - ./librechat.yaml:/app/librechat.yaml:ro
+      - attachments:/app/uploads
+      - images:/app/client/public/images
+    depends_on:
+      mongo: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      ingestion: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, node, -e, 'fetch("http://127.0.0.1:3080/readyz").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    mem_limit: 512m
+    cpus: 0.75
+    logging: {driver: json-file, options: {max-size: 10m, max-file: '3'}}
+    networks: [internal]
+  web:
+    image: ${WEB_IMAGE:-orchestrai/web:local}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp:size=16m]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    ports: ['127.0.0.1:${PRODUCT_PORT:-3088}:8080']
+    depends_on:
+      chat: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:8080/health]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+    mem_limit: 48m
+    cpus: 0.25
+    logging: {driver: json-file, options: {max-size: 10m, max-file: '3'}}
+    networks: [internal, ingress]
+networks:
+  egress: {}
+  ingress: {}
+volumes:
+  mongo: {}
+  budget: {}
+  attachments: {}
+  images: {}

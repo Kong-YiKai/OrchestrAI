@@ -13,11 +13,12 @@ printf '%s\n' "$public_key" | grep -Eq '^ssh-ed25519 [A-Za-z0-9+/=]+( [A-Za-z0-9
 if id orchestrai-deploy >/dev/null 2>&1 || [ -e /opt/orchestrai ]; then
   echo 'Existing installation requires explicit review; refusing overwrite.'; exit 2
 fi
-install -d -m 755 /opt/orchestrai /opt/orchestrai/deploy
+install -d -m 755 /opt/orchestrai /opt/orchestrai/deploy /opt/orchestrai/scripts
 install -d -m 700 /opt/orchestrai/secrets /opt/orchestrai/state /opt/orchestrai/backups
-for file in compose.yml postgres-init.sh infrastructure.Dockerfile release.py; do
+for file in compose.yml compose.product.yml postgres-init.sh ingestion-init.sh mongo-init.js librechat.yaml infrastructure.Dockerfile release.py; do
   install -m 644 "$source_dir/$file" "/opt/orchestrai/deploy/$file"
 done
+install -m 644 "$source_dir/../scripts/test-product.py" /opt/orchestrai/scripts/test-product.py
 install -m 600 "$source_dir/deployment.example.json" /opt/orchestrai/secrets/deployment.json
 python3 -I - <<'PY'
 import os,secrets

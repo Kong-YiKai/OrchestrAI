@@ -12,6 +12,7 @@
     "version": "v0.9.0",
     "commit": "4985b37b8b5d4519d68eceedfef1e63624012f9d",
     "sha256": "472934e8baad8a90b4a7292a99935b60cd2b24d03fd1c3f4038ffc598bd357ff",
-    "license": "MIT"
+    "license": "MIT",
+    "patch": "deploy/patches/rag.patch"
   }
 }

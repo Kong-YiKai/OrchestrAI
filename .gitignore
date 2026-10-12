@@ -43,3 +43,8 @@ CLAUDE.md
 deploy/private/
 deploy/.env.*
 !deploy/.env.example
+
+# Retired prototype: preserve local uncommitted work, exclude from active product.
+/frontend/
+/backend/
+/.playwright-mcp/
