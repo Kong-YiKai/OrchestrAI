@@ -9,17 +9,6 @@
      "swagger-ui-dist": "^5.32.15",
      "ua-parser-js": "^1.0.36",
      "undici": "^7.29.1",
---- a/api/server/index.js
-+++ b/api/server/index.js
-@@ -419,6 +419,8 @@
-   app.use('/api/api-keys', routes.apiKeys);
-   app.use('/api/user', routes.user);
-   app.use('/api/search', routes.search);
-+  app.use('/api/workflow', require('./middleware/requireJwtAuth'),
-+    require('@librechat/api').createOrchestraWorkflowRouter());
-   app.use('/api/messages', routes.messages);
-   app.use('/api/convos', routes.convos);
-   app.use('/api/traces', routes.traces);
 --- a/client/package.json
 +++ b/client/package.json
 @@ -61,6 +61,7 @@
@@ -79,68 +68,6 @@
 +  "com_orchestra_title": "Orchestra",
 +  "com_orchestra_trial": "OrchestrAI"
  }
---- a/client/src/routes/Root.tsx
-+++ b/client/src/routes/Root.tsx
-@@ -3,7 +3,6 @@
- import { Outlet } from 'react-router-dom';
- import { useMediaQuery } from '@librechat/client';
- import {
--  UnifiedSidebar,
-   SIDEBAR_TRANSITION,
-   MOBILE_DRAWER_WIDTH_VAR,
-   MOBILE_DRAWER_STRIP_WIDTH,
-@@ -28,6 +27,7 @@
-   useCatalogWarmup,
-   useAgentsMap,
-   useFileMap,
-+  useLocalize,
- } from '~/hooks';
- import KeyboardShortcutsDialog from '~/components/Nav/KeyboardShortcutsDialog';
- import KeyboardDeleteDialog from '~/components/Nav/KeyboardDeleteDialog';
-@@ -42,6 +42,8 @@
- import { useHealthCheck } from '~/data-provider';
- import { Banner } from '~/components/Banners';
- import store from '~/store';
-+import OrchestraContext from '~/components/Orchestra/Context';
-+import OrchestraSidebar from '~/components/Orchestra/Sidebar';
- 
- /** Isolates keyboard shortcut listeners so they only mount after auth. */
- function KeyboardShortcutsProvider() {
-@@ -55,6 +57,7 @@
- }
- 
- export default function Root() {
-+  const localize = useLocalize();
-   const [showTerms, setShowTerms] = useState(false);
-   const [bannerHeight, setBannerHeight] = useState(0);
-   /** Shared with the drawer so the two agree on the breakpoint-transition frame. */
-@@ -167,7 +170,7 @@
-                     {/* The drawer stops being painted once it is closed and
-                         settled, so it needs the same travel window the scrim and
-                         the pane's `inert` read. */}
--                    <UnifiedSidebar isSliding={isSliding} />
-+                    <OrchestraSidebar isSliding={isSliding} />
-                     <div
-                       ref={paneRef}
-                       /** Focus target of last resort when the drawer closes on a
-@@ -186,8 +189,17 @@
-                        *  too late and drops too early. */
-                       inert={isSmallScreen && (sidebarExpanded || isSliding) ? '' : undefined}
-                     >
-+                      <div className="flex shrink-0 items-center justify-between border-b border-border-light bg-surface-primary-alt px-6 py-4">
-+                        <span className="text-sm font-semibold tracking-wide text-text-primary">
-+                          {localize('com_orchestra_title')}
-+                        </span>
-+                        <span className="rounded-full bg-surface-active px-3 py-1 text-xs text-accent-primary">
-+                          {localize('com_orchestra_trial')}
-+                        </span>
-+                      </div>
-                       <Outlet />
-                     </div>
-+                    <OrchestraContext />
-                     {/* Without the strip the scrim exists only for the travel:
-                       through a close that began while the strip was still on
-                       (disabling it unmounts the scrim at once, but the drawer
 --- a/client/src/routes/index.tsx
 +++ b/client/src/routes/index.tsx
 @@ -136,6 +136,10 @@
@@ -1601,14 +1528,6 @@
    const path = resolveUploadLLMDeliveryPath({
      toolResource: metadata.tool_resource,
      mimeType: file.mimetype,
---- a/packages/api/src/index.ts
-+++ b/packages/api/src/index.ts
-@@ -130,3 +130,5 @@
- export type * from './mcp/types';
- export type * from './flow/types';
- export type * from './types';
-+
-+export { createOrchestraWorkflowRouter } from './orchestra/workflow';
 --- /dev/null
 +++ b/client/src/components/Orchestra/theme.ts
 @@ -0,0 +1,56 @@
@@ -1854,6 +1773,245 @@
 +    } catch {
 +      res.status(502).json({ error: 'workflow_unavailable' });
 +    }
++  });
++  return router;
++}
+--- a/api/server/index.js
++++ b/api/server/index.js
+@@ -419,6 +419,10 @@
+   app.use('/api/api-keys', routes.apiKeys);
+   app.use('/api/user', routes.user);
+   app.use('/api/search', routes.search);
++  app.use('/api/workflow', require('./middleware/requireJwtAuth'),
++    require('@librechat/api').createOrchestraWorkflowRouter());
++  app.use('/api/research', require('./middleware/requireJwtAuth'),
++    require('@librechat/api').createOrchestraResearchRouter());
+   app.use('/api/messages', routes.messages);
+   app.use('/api/convos', routes.convos);
+   app.use('/api/traces', routes.traces);
+--- a/client/src/routes/Root.tsx
++++ b/client/src/routes/Root.tsx
+@@ -3,7 +3,6 @@
+ import { Outlet } from 'react-router-dom';
+ import { useMediaQuery } from '@librechat/client';
+ import {
+-  UnifiedSidebar,
+   SIDEBAR_TRANSITION,
+   MOBILE_DRAWER_WIDTH_VAR,
+   MOBILE_DRAWER_STRIP_WIDTH,
+@@ -28,6 +27,7 @@
+   useCatalogWarmup,
+   useAgentsMap,
+   useFileMap,
++  useLocalize,
+ } from '~/hooks';
+ import KeyboardShortcutsDialog from '~/components/Nav/KeyboardShortcutsDialog';
+ import KeyboardDeleteDialog from '~/components/Nav/KeyboardDeleteDialog';
+@@ -42,6 +42,9 @@
+ import { useHealthCheck } from '~/data-provider';
+ import { Banner } from '~/components/Banners';
+ import store from '~/store';
++import OrchestraContext from '~/components/Orchestra/Context';
++import OrchestraResearch from '~/components/Orchestra/Research';
++import OrchestraSidebar from '~/components/Orchestra/Sidebar';
+ 
+ /** Isolates keyboard shortcut listeners so they only mount after auth. */
+ function KeyboardShortcutsProvider() {
+@@ -55,6 +58,7 @@
+ }
+ 
+ export default function Root() {
++  const localize = useLocalize();
+   const [showTerms, setShowTerms] = useState(false);
+   const [bannerHeight, setBannerHeight] = useState(0);
+   /** Shared with the drawer so the two agree on the breakpoint-transition frame. */
+@@ -167,7 +171,7 @@
+                     {/* The drawer stops being painted once it is closed and
+                         settled, so it needs the same travel window the scrim and
+                         the pane's `inert` read. */}
+-                    <UnifiedSidebar isSliding={isSliding} />
++                    <OrchestraSidebar isSliding={isSliding} />
+                     <div
+                       ref={paneRef}
+                       /** Focus target of last resort when the drawer closes on a
+@@ -186,8 +190,15 @@
+                        *  too late and drops too early. */
+                       inert={isSmallScreen && (sidebarExpanded || isSliding) ? '' : undefined}
+                     >
++                      <div className="flex shrink-0 items-center justify-between border-b border-border-light bg-surface-primary-alt px-6 py-4">
++                        <span className="text-sm font-semibold tracking-wide text-text-primary">
++                          {localize('com_orchestra_title')}
++                        </span>
++                        <OrchestraResearch />
++                      </div>
+                       <Outlet />
+                     </div>
++                    <OrchestraContext />
+                     {/* Without the strip the scrim exists only for the travel:
+                       through a close that began while the strip was still on
+                       (disabling it unmounts the scrim at once, but the drawer
+--- a/packages/api/src/index.ts
++++ b/packages/api/src/index.ts
+@@ -130,3 +130,6 @@
+ export type * from './mcp/types';
+ export type * from './flow/types';
+ export type * from './types';
++
++export { createOrchestraWorkflowRouter } from './orchestra/workflow';
++export { createOrchestraResearchRouter } from './orchestra/research';
+--- /dev/null
++++ b/client/src/components/Orchestra/Research.tsx
+@@ -0,0 +1,115 @@
++import { useCallback, useEffect, useRef, useState } from 'react';
++import { Globe, X } from 'lucide-react';
++import { Button } from '@librechat/client';
++import { useAuthContext } from '~/hooks';
++
++type Source = { id: string; title: string; url: string; state: string; evidence: string; fetched_at: string };
++type Claim = { text: string; source_id: string; quote: string };
++type Query = { id: string; query: string; status: string; phase: string; error?: string;
++  result?: { sources?: Source[]; claims?: Claim[]; elapsed_ms?: number } };
++const active = (query?: Query) => !!query && ['queued', 'running'].includes(query.status);
++const phases: Record<string, string> = { queued: '等待开始', searching: '检索公开来源', reading: '读取网页',
++  ranking: '筛选相关证据', answering: '整理有出处的回答', finished: '研究结束', cancelled: '已取消', interrupted: '任务中断' };
++
++/** Server evidence is the fact source; this component owns only selection/form state. */
++export default function Research() {
++  const { token } = useAuthContext();
++  const dialog = useRef<HTMLDialogElement>(null);
++  const [open, setOpen] = useState(false);
++  const [input, setInput] = useState('');
++  const [queries, setQueries] = useState<Query[]>([]);
++  const [selected, setSelected] = useState<string>();
++  const [error, setError] = useState('');
++  const [submitting, setSubmitting] = useState(false);
++  const current = queries.find(q => q.id === selected) ?? queries[0];
++  const call = useCallback(async (path: string, method = 'GET', body?: unknown) => {
++    const response = await fetch(`/api/research${path}`, { method, headers: {
++      Authorization: `Bearer ${token}`, 'Content-Type': 'application/json',
++      ...(method === 'POST' && path === '/queries' ? { 'Idempotency-Key': crypto.randomUUID() } : {}),
++    }, ...(body ? { body: JSON.stringify(body) } : {}) });
++    if (!response.ok) throw new Error(response.status === 401 ? '登录已过期，请重新登录。'
++      : response.status === 429 ? '当前任务或调用额度已满，请稍后再试。' : '研究服务暂时不可用，请稍后再试。');
++    return response.json();
++  }, [token]);
++  const refresh = useCallback(async () => {
++    try { const value = await call('/queries'); setQueries(value.queries); setError(''); }
++    catch (failure) { setError((failure as Error).message); }
++  }, [call]);
++  useEffect(() => {
++    if (open) { dialog.current?.showModal(); void refresh(); }
++    else { dialog.current?.close(); }
++  }, [open, refresh]);
++  useEffect(() => {
++    if (!open || !queries.some(active)) return;
++    const timer = window.setInterval(() => { void refresh(); }, 1500);
++    return () => window.clearInterval(timer);
++  }, [open, queries, refresh]);
++  return <>
++    <Button variant="outline" onClick={() => setOpen(true)}><Globe className="mr-2 h-4 w-4" />联网研究</Button>
++    <dialog ref={dialog} onClose={() => setOpen(false)}
++      aria-labelledby="research-title"
++      className="max-h-[90dvh] w-[min(920px,94vw)] overflow-y-auto rounded-2xl border border-border-light bg-surface-primary p-0 text-text-primary backdrop:bg-black/30">
++      <header className="flex items-center justify-between border-b border-border-light px-6 py-4">
++        <div><h2 id="research-title" className="font-semibold">联网研究</h2>
++          <p className="mt-1 text-sm text-text-secondary">从公开网页获取证据，让每个答案有出处。</p></div>
++        <Button variant="ghost" aria-label="关闭联网研究" onClick={() => setOpen(false)}><X className="h-5 w-5" /></Button>
++      </header>
++      <div className="p-6">
++        <form onSubmit={async event => {
++          event.preventDefault(); setSubmitting(true); setError('');
++          try { const query = await call('/queries', 'POST', { query: input }); setSelected(query.id);
++            setQueries(old => [query, ...old.filter(q => q.id !== query.id)]); await refresh(); }
++          catch (failure) { setError((failure as Error).message); }
++          finally { setSubmitting(false); }
++        }}>
++          <label htmlFor="research-query" className="mb-2 block text-sm font-medium">问题或公开网页链接</label>
++          <textarea id="research-query" value={input} onChange={e => setInput(e.target.value)} maxLength={1000}
++            required rows={3} className="w-full resize-y rounded-xl border border-border-light bg-surface-secondary p-3"
++            placeholder="例如：比较两个方案，或粘贴你想阅读的网页链接" />
++          <div className="mt-3 flex items-center gap-3">
++            <Button type="submit" disabled={submitting || queries.some(active)}>{submitting ? '正在提交…' : '开始研究'}</Button>
++            {active(current) && <Button variant="outline" type="button" onClick={async () => {
++              try { await call(`/queries/${current.id}/cancel`, 'POST', {}); await refresh(); }
++              catch (failure) { setError((failure as Error).message); }
++            }}>取消</Button>}
++            <span className="text-xs text-text-tertiary">登录、风控或超时页面会明确显示未读取。</span>
++          </div>
++        </form>
++        {error && <p role="alert" className="mt-4 text-sm text-red-600">{error}</p>}
++        {queries.length > 0 && <div className="mt-5 flex flex-wrap gap-2" aria-label="研究记录">
++          {queries.map(q => <button key={q.id} type="button" onClick={() => setSelected(q.id)}
++            aria-pressed={q.id === current?.id}
++            className="max-w-56 truncate rounded-full border border-border-light bg-surface-secondary px-3 py-1 text-sm">
++            {q.query}
++          </button>)}
++        </div>}
++        {current && <section className="mt-5 rounded-xl border border-border-light bg-surface-secondary p-5" aria-label="研究结果">
++          <div className="flex items-start justify-between gap-3"><h3 className="break-words font-medium">{current.query}</h3>
++            <p role="status" aria-live="polite" className="shrink-0 text-sm text-accent-primary">{phases[current.phase] ?? current.phase}</p></div>
++          {['partial', 'failed'].includes(current.status) && <p className="mt-3 text-sm text-text-secondary">
++            {current.result?.claims?.length ? '以下是已取得证据支持的部分结果。' : '证据不足或调用失败，暂时无法给出有依据的答案。'}
++          </p>}
++          <div className="mt-4 space-y-4">{current.result?.claims?.map((claim, index) => {
++            const source = current.result?.sources?.find(s => s.id === claim.source_id);
++            return <div key={index}><p className="whitespace-pre-wrap text-sm leading-7">{claim.text}{' '}
++              {source && <a href={source.url} target="_blank" rel="noopener noreferrer" className="text-accent-primary underline">[{claim.source_id}]</a>}</p>
++              <blockquote className="mt-2 border-l-2 border-border-light pl-3 text-xs text-text-secondary">{claim.quote}</blockquote></div>;
++          })}</div>
++          <div className="mt-5 space-y-3">{current.result?.sources?.map(source => <details key={source.id}
++            className="rounded-lg border border-border-light bg-surface-primary p-3">
++            <summary className="cursor-pointer text-sm">{source.id} · {source.title} · {source.state === 'read' ? '已读取' : '未读取'}</summary>
++            <a href={source.url} target="_blank" rel="noopener noreferrer" className="mt-2 block break-all text-xs text-accent-primary underline">{source.url}</a>
++            <p className="mt-2 text-xs text-text-tertiary">获取时间：{new Date(source.fetched_at).toLocaleString()}</p>
++            <p className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs leading-6 text-text-secondary">
++              {source.state === 'read' ? source.evidence : '没有取得网页正文，可能需要登录、被站点限制或服务调用失败。搜索摘要不会冒充已读取的正文。'}
++            </p>
++          </details>)}</div>
++          {!active(current) && <Button className="mt-4" variant="ghost" onClick={async () => {
++            try { await call(`/queries/${current.id}`, 'DELETE'); setSelected(undefined); await refresh(); }
++            catch (failure) { setError((failure as Error).message); }
++          }}>删除这条研究记录</Button>}
++        </section>}
++      </div>
++    </dialog>
++  </>;
++}
+--- /dev/null
++++ b/packages/api/src/orchestra/research.ts
+@@ -0,0 +1,35 @@
++import { randomUUID } from 'node:crypto';
++import { Router } from 'express';
++import jwt from 'jsonwebtoken';
++import type { Request, Response } from 'express';
++
++/** Research owns evidence; only authenticated chat identity can delegate access. */
++export function createOrchestraResearchRouter(): Router {
++  const router = Router();
++  router.use(async (req: Request, res: Response) => {
++    const user = req.user as { id?: string; tenantId?: string } | undefined;
++    if (!user?.id) { res.status(401).json({ error: 'authentication_required' }); return; }
++    const secret = process.env.RESEARCH_DELEGATION_SECRET;
++    const base = process.env.RESEARCH_API_URL;
++    if (!secret || secret.length < 32 || !base) {
++      res.status(503).json({ error: 'research_not_configured' }); return;
++    }
++    const allowed = req.method === 'GET' ? /^\/queries(?:\/[0-9a-f-]{36})?$/
++      : req.method === 'POST' ? /^\/queries(?:\/[0-9a-f-]{36}\/cancel)?$/
++        : req.method === 'DELETE' ? /^\/queries\/[0-9a-f-]{36}$/ : undefined;
++    if (!allowed?.test(req.path)) { res.status(404).json({ error: 'route_not_found' }); return; }
++    const token = jwt.sign({ tenant: user.tenantId ?? 'default',
++      scopes: [req.method === 'GET' ? 'research:read' : 'research:write'] }, secret,
++    { algorithm: 'HS256', subject: user.id, issuer: 'orchestrai-chat', audience: 'orchestrai-research',
++      expiresIn: '60s', jwtid: randomUUID() });
++    const headers: Record<string, string> = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
++    const operation = req.get('Idempotency-Key');
++    if (operation && /^[A-Za-z0-9_-]{1,128}$/.test(operation)) { headers['Idempotency-Key'] = operation; }
++    try {
++      const upstream = await fetch(`${base}${req.path}`, { method: req.method, headers,
++        ...(req.method === 'POST' ? { body: JSON.stringify(req.body) } : {}), signal: AbortSignal.timeout(10000) });
++      res.set('Cache-Control', 'no-store').status(upstream.status).type('application/json').send(await upstream.text());
++    } catch { res.status(503).json({ error: 'research_unavailable' }); }
 +  });
 +  return router;
 +}

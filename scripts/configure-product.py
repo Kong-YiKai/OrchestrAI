@@ -47,16 +47,23 @@ def main():
     for key in ['POSTGRES_PASSWORD', 'WORKFLOW_DB_PASSWORD', 'REDIS_PASSWORD', 'DELEGATION_SECRET',
                 'MONGO_ADMIN_PASSWORD', 'MONGO_CHAT_PASSWORD', 'INGESTION_DB_PASSWORD',
                 'INGESTION_MIGRATION_PASSWORD', 'CHAT_JWT_SECRET', 'CHAT_REFRESH_SECRET',
-                'RAG_JWT_SECRET', 'GATEWAY_KEY', 'CHAT_CREDS_KEY']:
+                'RAG_JWT_SECRET', 'GATEWAY_KEY', 'CHAT_CREDS_KEY', 'RESEARCH_DELEGATION_SECRET',
+                'RESEARCH_GATEWAY_KEY', 'RESEARCH_DB_PASSWORD', 'RESEARCH_MIGRATION_PASSWORD']:
         values.setdefault(key, secrets.token_hex(32))
     values.setdefault('CHAT_CREDS_IV', secrets.token_hex(16))
     values.setdefault('MODEL_DAILY_LIMIT_CNY', '5')
     values.setdefault('MODEL_MONTHLY_LIMIT_CNY', '100')
+    values.setdefault('SEARCH_DAILY_CREDITS', '30')
+    values.setdefault('SEARCH_MONTHLY_CREDITS', '1000')
+    if model.get('TAVILY_API_KEY'):
+        values['TAVILY_API_KEY'] = model['TAVILY_API_KEY']
     values.setdefault('ALLOW_REGISTRATION', 'false')
     values.setdefault('PRODUCT_URL', 'http://localhost:3088')
     for key in values:
         if not re.fullmatch('[A-Z][A-Z0-9_]*', key):
             raise ValueError('invalid environment field')
+        if any(character in values[key] for character in ("'", '\n', '\r')):
+            raise ValueError(f'{key}: invalid private value')
     output.parent.mkdir(parents=True, exist_ok=True)
     # Single-quoted dotenv values prevent Compose interpolation of credential '$'.
     output.write_text('\n'.join(f"{k}='{v}'" for k, v in sorted(values.items())) + '\n', encoding='utf-8')

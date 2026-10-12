@@ -9,22 +9,24 @@ Read [project-overview](Documents/project-overview.md) and [development rules](A
 Requires Docker with Linux containers and Python 3.11+. No host Node/Python dependency installation is needed for product services.
 
 1. Copy [deploy/providers.example.json](deploy/providers.example.json) to ignored `deploy/private/providers.json` if it does not exist. Fill the Aliyun embedding key and regional compatible `/v1` URL; retain `text-embedding-v4`, 1024 dimensions.
-2. Put `DEEPSEEK_API_KEY` in ignored `deploy/private/model.env`. Existing `product.env` keys are retained when rebuilding configuration.
+2. Put `DEEPSEEK_API_KEY` and `TAVILY_API_KEY` in ignored `deploy/private/model.env`. Existing `product.env` keys are retained when rebuilding configuration. No keys belong in the browser.
 3. Run:
 
 ```bash
 python scripts/configure-product.py
 python scripts/build-product.py
-python scripts/test-product.py --start
+python scripts/test-product.py --start --research
 ```
 
 Open `http://localhost:3088`. Registration defaults closed; the smoke account is written to ignored `deploy/private/candidate-account.json`. For a custom loopback port set `PRODUCT_PORT` and `PRODUCT_URL` in private `product.env`, then pass the same URL to `test-product.py --url`.
 
-TXT, text-based PDF, PNG, JPEG and WebP are supported. File limits are 10 MiB each, five per message, 25 MiB total. PDF is limited to 200 pages; scanned documents without extractable text return a failure until OCR is added. Text chat, image understanding and embeddings pass through the single LiteLLM gateway, which atomically reserves the configured daily/monthly CNY budget. Search is not connected yet.
+TXT, text-based PDF, PNG, JPEG and WebP are supported. File limits are 10 MiB each, five per message, 25 MiB total. PDF is limited to 200 pages; scanned documents without extractable text return a failure until OCR is added. Text chat, image understanding, embeddings and Tavily calls share one gateway and atomic daily/monthly CNY budget. Tavily also has separate credit limits.
+
+The header's **联网研究** opens the independent research service. Questions use search, supplied public URLs use extraction; BM25 ranks retrieved text. Answers include source links and exact evidence quotes. Expand sources to see read/unread states. Tasks, cancellation and owned history persist; uncertain interrupted provider operations are never automatically repeated. Ordinary chat does not silently invoke a second search pipeline.
 
 ```bash
-docker compose --env-file deploy/private/product.env -f deploy/compose.yml -f deploy/compose.product.yml -p orchestrai-r3 logs -f
-docker compose --env-file deploy/private/product.env -f deploy/compose.yml -f deploy/compose.product.yml -p orchestrai-r3 stop
+docker compose --env-file deploy/private/product.env -f deploy/compose.yml -f deploy/compose.product.yml -f deploy/compose.research.yml -p orchestrai-r3 logs -f
+docker compose --env-file deploy/private/product.env -f deploy/compose.yml -f deploy/compose.product.yml -f deploy/compose.research.yml -p orchestrai-r3 stop
 ```
 
 ## Checks and deployment
@@ -32,6 +34,7 @@ docker compose --env-file deploy/private/product.env -f deploy/compose.yml -f de
 ```bash
 python scripts/test-services.py
 python scripts/test-release.py
+python scripts/test-research.py --project orchestrai-r3
 python scripts/check-repository.py
 git diff --check
 ```
@@ -42,4 +45,4 @@ CI builds fixed upstream sources plus tracked patches, checks client types, runs
 
 The legacy prototype has exited the active source tree and CI. Its Git history and local source snapshot retain the reference implementation; local uncommitted files were not overwritten. Source bundles, dependencies, build outputs and runtime data are separate from tracked product code.
 
-See [NOTICE](deploy/NOTICE.md) for upstream versions and license boundaries. Public DNS/TLS/search belongs to R4; connected canvas and general-purpose real tools belong to R5. Production and manual acceptance status is maintained only in the overview.
+See [NOTICE](deploy/NOTICE.md) for upstream versions and license boundaries. R4 adds search and the dedicated ingress at `orchestrai.elysiumgrid.space`; connected canvas and general-purpose real tools belong to R5. Production and manual acceptance status is maintained only in the overview.

@@ -26,25 +26,29 @@ def digest_stream(source):
 def config_digest(directory, schema=1):
     digest = hashlib.sha256()
     names = ['compose.yml', 'postgres-init.sh', 'infrastructure.Dockerfile', 'release.py']
-    if schema == 2:
+    if schema >= 2:
         names += ['compose.product.yml', 'ingestion-init.sh', 'mongo-init.js', 'librechat.yaml']
+    if schema == 3:
+        names += ['compose.research.yml', 'research-init.sh']
     for name in names:
         digest.update(name.encode() + b'\0' + (directory / name).read_bytes())
-    if schema == 2:
+    if schema >= 2:
         digest.update((directory.parent / 'scripts/test-product.py').read_bytes())
     return digest.hexdigest()
 
 def validate(manifest, policy, current, expected_config):
     fields = {'revision', 'image', 'postgres_image', 'redis_image', 'sequence', 'schema', 'config_digest'}
-    if manifest.get('schema') == 2:
+    if manifest.get('schema', 0) >= 2:
         fields |= {service+'_image' for service in ('chat','ingestion','gateway','web','mongo')}
+    if manifest.get('schema') == 3:
+        fields.add('research_image')
     if set(manifest) != fields:
         raise ValueError('unexpected release fields')
     if not re.fullmatch(r'[a-f0-9]{40}', manifest['revision']):
         raise ValueError('invalid revision')
     if not re.fullmatch(re.escape(policy['image_repository']) + r'@sha256:[a-f0-9]{64}', manifest['image']):
         raise ValueError('only the configured immutable image is allowed')
-    for service in ('postgres','redis') + (('chat','ingestion','gateway','web','mongo') if manifest['schema'] == 2 else ()):
+    for service in ('postgres','redis') + (('chat','ingestion','gateway','web','mongo') if manifest['schema'] >= 2 else ()) + (('research',) if manifest['schema'] == 3 else ()):
         repository = policy['image_repository'].rsplit('/',1)[0] + '/' + service
         if not re.fullmatch(re.escape(repository) + r'@sha256:[a-f0-9]{64}', manifest[service+'_image']):
             raise ValueError('invalid infrastructure image')
@@ -52,7 +56,7 @@ def validate(manifest, policy, current, expected_config):
         raise ValueError('invalid sequence')
     if current and manifest['sequence'] <= current['sequence']:
         raise ValueError('stale release refused')
-    if type(manifest['schema']) is not int or manifest['schema'] not in (1, 2) or manifest['config_digest'] != expected_config:
+    if type(manifest['schema']) is not int or manifest['schema'] not in (1, 2, 3) or manifest['config_digest'] != expected_config:
         raise ValueError('controller/config/schema update requires reviewed installation')
 
 class Deployment:
@@ -63,14 +67,18 @@ class Deployment:
     def command(self, manifest, *args):
         command = ['docker','compose','--env-file',str(self.root / 'secrets/production.env'),
             '-f',str(self.root / 'deploy/compose.yml')]
-        if manifest['schema'] == 2:
+        if manifest['schema'] >= 2:
             command += ['-f',str(self.root / 'deploy/compose.product.yml')]
+        if manifest['schema'] == 3:
+            command += ['-f',str(self.root / 'deploy/compose.research.yml')]
         return command + ['-p','orchestrai-production',*args]
 
     def compose_env(self, manifest):
         env = dict(self.env, WORKFLOW_IMAGE=manifest['image'], POSTGRES_IMAGE=manifest['postgres_image'], REDIS_IMAGE=manifest['redis_image'])
-        if manifest['schema'] == 2:
+        if manifest['schema'] >= 2:
             env.update({service.upper()+'_IMAGE':manifest[service+'_image'] for service in ('chat','ingestion','gateway','web','mongo')})
+        if manifest['schema'] == 3:
+            env['RESEARCH_IMAGE'] = manifest['research_image']
         return env
 
     def compose(self, manifest, *args, **kwargs):
@@ -79,10 +87,10 @@ class Deployment:
 
     @staticmethod
     def writers(manifest):
-        return (['web','chat','ingestion','gateway'] if manifest['schema'] == 2 else []) + ['workflow-api','workflow-worker']
+        return (['web','chat','ingestion','gateway'] if manifest['schema'] >= 2 else []) + (['research'] if manifest['schema'] == 3 else []) + ['workflow-api','workflow-worker']
 
     def backup(self, manifest, policy, name=None):
-        if manifest['schema'] == 2:
+        if manifest['schema'] >= 2:
             return self.product_backup(manifest,policy,name)
         backup = self.root / 'backups' / (name or f"{manifest['sequence']}-{manifest['revision']}.dump.age")
         backup.parent.mkdir(mode=0o700, exist_ok=True)
@@ -134,6 +142,8 @@ class Deployment:
             'budget.sqlite': ['run','--rm','--no-deps','--entrypoint','python','gateway','-c',
                 'import sqlite3,sys; db=sqlite3.connect("file:/data/budget.sqlite?mode=ro",uri=True); sys.stdout.buffer.write(db.serialize()); db.close()'],
         }
+        if manifest['schema'] == 3:
+            parts['research.dump'] = ['exec','-T','postgres','pg_dump','-U','postgres','-d','research','-Fc']
         results = {}
         directory = self.root / 'backups'
         directory.mkdir(mode=0o700,exist_ok=True)
@@ -203,22 +213,29 @@ class Deployment:
     def activate(self, manifest):
         self.compose(manifest,'up','-d','--no-deps','--wait','--wait-timeout','120',*reversed(self.writers(manifest)))
         self.compose(manifest,'run','--rm','smoke')
-        if manifest['schema'] == 2:
+        if manifest['schema'] >= 2:
             subprocess.run([sys.executable,str(self.root/'scripts/test-product.py'),
                 '--env-file',str(self.root/'secrets/production.env'),'--project','orchestrai-production',
-                '--url','http://127.0.0.1:3088'],cwd=self.root,check=True,timeout=120,env=self.compose_env(manifest))
+                '--url','http://127.0.0.1:3088'] + (['--research'] if manifest['schema']==3 else []),
+                cwd=self.root,check=True,timeout=120,env=self.compose_env(manifest))
+        if manifest['schema'] == 3:
+            status = subprocess.check_output(['curl','--silent','--show-error','--fail',
+                '--connect-timeout','5','--max-time','20','--output','/dev/null','--write-out','%{http_code}',
+                'https://orchestrai.elysiumgrid.space/login'],text=True,timeout=25,env=self.env).strip()
+            if status != '200':
+                raise RuntimeError('public_https_smoke_failed')
 
     def release(self, manifest, policy, current):
         record = dict(manifest, started_at=int(time.time()), previous=current, outcome='failed')
         stopped = False
         try:
-            services = ['workflow-api','postgres','redis'] + (['mongo','chat','ingestion','gateway','web'] if manifest['schema']==2 else [])
+            services = ['workflow-api','postgres','redis'] + (['mongo','chat','ingestion','gateway','web'] if manifest['schema']>=2 else []) + (['research'] if manifest['schema']==3 else [])
             self.compose(manifest,'pull',*services)
             label = subprocess.check_output(['docker','image','inspect',manifest['image'],'--format',
                 '{{index .Config.Labels "org.opencontainers.image.revision"}}'],env=self.env,text=True).strip()
             if label != manifest['revision']:
                 raise ValueError('image revision differs from tested revision')
-            for service in (('chat','ingestion','gateway','web','mongo') if manifest['schema']==2 else ()):
+            for service in (('chat','ingestion','gateway','web','mongo') if manifest['schema']>=2 else ()) + (('research',) if manifest['schema']==3 else ()):
                 label = subprocess.check_output(['docker','image','inspect',manifest[service+'_image'],'--format',
                     '{{index .Config.Labels "org.opencontainers.image.revision"}}'],env=self.env,text=True).strip()
                 if label != manifest['revision']:
@@ -236,11 +253,14 @@ class Deployment:
                 record['backup'] = self.backup(dict(manifest,schema=1),policy)
             self.compose(manifest,'up','-d','--wait','postgres','redis')
             self.compose(manifest,'run','--rm','migrate')
-            if manifest['schema'] == 2:
+            if manifest['schema'] >= 2:
                 self.compose(manifest,'up','-d','--wait','mongo')
                 self.compose(manifest,'exec','-T','postgres','bash','/opt/ingestion-init.sh')
                 for migration in ('ingestion-migrate','gateway-migrate'):
                     self.compose(manifest,'run','--rm',migration)
+            if manifest['schema'] == 3:
+                self.compose(manifest,'exec','-T','postgres','bash','/opt/research-init.sh')
+                self.compose(manifest,'run','--rm','research-migrate')
             self.activate(manifest)
             record['outcome'] = 'deployed'
             temporary = self.root / 'state/current.tmp'
@@ -251,7 +271,9 @@ class Deployment:
                 if current:
                     # Roll back applications only; storage images/schema remain upgraded.
                     try:
-                        if manifest['schema']==2 and current['schema']==1:
+                        if manifest['schema']==3 and current['schema']<3:
+                            self.compose(manifest,'stop','research')
+                        if manifest['schema']>=2 and current['schema']==1:
                             self.compose(manifest,'stop','web','chat','ingestion','gateway')
                         self.activate(current)
                         record['outcome'] = 'rolled_back'
