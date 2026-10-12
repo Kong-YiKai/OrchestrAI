@@ -27,6 +27,8 @@ async function wait(id,status,auth){for(let i=0;i<100;i++){const r=await request
 try {
   // Only this dedicated fixture DB/table and Redis namespace are reset.
   await client.query('DELETE FROM queries');await queue.obliterate({force:true});await start();
+  const contract=(await request('/openapi.json')).value;
+  assert.equal(contract.openapi,'3.1.0');assert.equal(contract.info.version,'0.1.0');
   const auth=await token();const foreign=await token('other');const wrongAudience=await token('owner','orchestrai-workflow');
   assert.equal((await request('/queries')).status,401);
   assert.equal((await request('/queries','GET',undefined,wrongAudience)).status,401);
@@ -35,6 +37,8 @@ try {
   assert.equal((await request('/queries','POST',{query:'deterministic'},auth,operation)).value.id,id);
   assert.equal((await request('/queries','POST',{query:'changed'},auth,operation)).status,409);
   await wait(id,['completed'],auth);
+  const completed=(await request('/queries/'+id,'GET',undefined,auth)).value;
+  for(const field of contract.components.schemas.Query.required)assert.ok(Object.hasOwn(completed,field));
   assert.equal((await request('/queries/'+id,'GET',undefined,foreign)).status,404);
   assert.equal((await request('/queries','GET',undefined,foreign)).value.queries.length,0);
   const cancel=(await request('/queries','POST',{query:'cancel'},auth)).value.id;

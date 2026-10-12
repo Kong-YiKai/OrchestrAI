@@ -274,7 +274,7 @@ R3 无剩余代码或服务器交付收尾项；用户统一手动验收完整�
 
 **状态：进行中，代码与本机必要验证通过；可信 main CI/CD 尚未执行。** 分支 `codex/r4-web-research`。修改现有客户端补丁、网关预算/配置、Compose、CI 与发布控制器；新增独立 research API/worker（同一容器）、数据库角色/校验和迁移、固定 fixture/队列测试和本站 TLS/续期资产。没有数据删除项；旧原型已退出活跃源码，chat 内置搜索保持禁用。本阶段新增一个研究镜像/常驻进程，完整 schema=3 为九种镜像、十个常驻进程，复用本项目 PostgreSQL 与 Redis，不增加重型本地抓取模型。
 
-直接复用 `@librechat/agents@4.0.1` 的 Tavily 搜索/批量提取，已有依赖 `okapibm25@1.4.1` 在本地重排；Chinese Intl.Segmenter + ASCII token 编码避免 BM25 的英文分词/正则输入问题。浏览器只有 chat 登录身份，chat 签发独立短期 research 委托；research 自有库是查询、任务、证据和结果事实源，不维护第二份聊天历史。BullMQ/Redis DB1 是可从 SQL 重建的队列；单实例串行执行、每用户最多一个活跃任务、全局排队最多二十个。引用须来自实际提取正文且为精确连续摘录，搜索摘要不能当作读取正文；这是引用校验，**不等于引用语义支持率已经达标**。
+直接复用 `@librechat/agents@4.0.1` 的 Tavily 搜索/批量提取，已有依赖 `okapibm25@1.4.1` 在本地重排；Chinese Intl.Segmenter + ASCII token 编码避免 BM25 的英文分词/正则输入问题。浏览器只有 chat 登录身份，chat 签发独立短期 research 委托；research 自有库是查询、任务、证据和结果事实源，不维护第二份聊天历史。`services/research/openapi.json` 是独立版本化契约，服务仅内网提供 `/openapi.json`，chat 不转发该路径；研究目录统一 LF，防止 Windows checkout 改变迁移校验和。BullMQ/Redis DB1 是可从 SQL 重建的队列；单实例串行执行、每用户最多一个活跃任务、全局排队最多二十个。引用须来自实际提取正文且为精确连续摘录，搜索摘要不能当作读取正文；这是引用校验，**不等于引用语义支持率已经达标**。
 
 任务支持查询/直接公开链接、阶段进度、来源展开、取消和已登录用户的持久记录/删除。默认一轮 basic search、最多五候选/批量提取，答案使用重排后的最多四项证据，45 秒目标预算；受限/读取失败明确 partial/failed，不自动重复未知费用的外部调用。取消不能撤销已到 provider 的请求；进程中断保存先前证据并标记中断，用户可明确新建任务，恢复不冒充成功。research 256 MiB 限额，单实例重启会隔离旧 running 任务，多副本前须增加 lease/事务协调；规模扩展留 R7。普通聊天仍走原聊天链路，研究是头部“联网研究”专用操作；R5 harness 再复用同一服务，不启用第二套搜索。
 

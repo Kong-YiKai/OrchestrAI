@@ -5,6 +5,7 @@ import pg from 'pg';
 import { jwtVerify } from 'jose';
 import { Queue, Worker } from 'bullmq';
 import { research } from './engine.mjs';
+import contract from '../openapi.json' with { type: 'json' };
 
 class HttpError extends Error { constructor(status,message) { super(message);this.status=status; } }
 const queueName='orchestrai-research';
@@ -70,6 +71,7 @@ export async function createService(settings, engine=research) {
     const send=(status,value)=>{res.writeHead(status);res.end(JSON.stringify(value));};
     try {
       const url=new URL(req.url,'http://research');
+      if(req.method==='GET' && url.pathname==='/openapi.json') return send(200,contract);
       if(req.method==='GET' && url.pathname==='/health/live') return send(200,{service:'research',status:'ok'});
       if(req.method==='GET' && url.pathname==='/health/ready') {
         const migration=await pool.query("SELECT sha256 FROM schema_migrations WHERE version='001_research.sql'");

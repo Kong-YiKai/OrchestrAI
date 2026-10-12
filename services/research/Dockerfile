@@ -10,6 +10,7 @@ LABEL org.opencontainers.image.revision=$BUILD_REVISION
 LABEL org.opencontainers.image.source="https://github.com/Kong-YiKai/OrchestrAI"
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --chown=node:node package.json ./
+COPY --chown=node:node openapi.json ./
 COPY --chown=node:node src ./src
 COPY --chown=node:node migrations ./migrations
 RUN rm -rf /usr/local/lib/node_modules/npm && rm -f /usr/local/bin/npm /usr/local/bin/npx
