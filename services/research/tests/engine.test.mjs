@@ -71,3 +71,27 @@ test('Provider failure/cancellation prevents subsequent model calls',async()=>{
   await assert.rejects(research({id:randomUUID(),query:'取消样本'},settings,async()=>{},async()=>true,dependencies),/cancelled/);
   assert.equal(called,0);
 });
+
+test('Known direct-page extraction failure can use one verified reader result',async()=>{
+  let readerCalls=0;
+  const result=await research({id:randomUUID(),query:'https://example.com/article'},settings,async()=>{},async()=>false,{
+    createTool:fixtureTool([{link:'https://example.com/article',title:'Article'}]),
+    fetcher:async(url,options)=>{
+      if(url.includes('/operations/'))return {ok:true,json:async()=>({credits:0,response:{results:[],failed_results:[{url:'https://example.com/article'}]}})};
+      if(url.includes('/jina/read')) {readerCalls++;assert.deepEqual(JSON.parse(options.body),{url:'https://example.com/article'});return {ok:true,json:async()=>({results:[{url:'https://example.com/article',title:'Cloud native',raw_content:'云原生采用容器、微服务与持续交付。'}]})};}
+      return {ok:true,json:async()=>({choices:[{message:{content:JSON.stringify({claims:[{text:'采用容器与微服务。',source_id:'S1',quote:'容器、微服务与持续交付'}]})}}]})};
+    },
+  });
+  assert.equal(readerCalls,1);assert.equal(result.status,'completed');assert.equal(result.sources[0].reader,'jina-anonymous');assert.equal(result.claims.length,1);
+});
+test('Unknown extraction does not start a reader; reader failure has no model or retry',async()=>{
+  for(const known of [false,true]) {
+    let readerCalls=0,modelCalls=0;
+    const result=await research({id:randomUUID(),query:'https://example.com/article'},settings,async()=>{},async()=>false,{
+      createTool:fixtureTool([{link:'https://example.com/article',title:'Article'}]),
+      fetcher:async url=>{if(url.includes('/operations/'))return {ok:known,json:async()=>({credits:0,response:{results:[]}})};
+        if(url.includes('/jina/read'))readerCalls++;else modelCalls++;return {ok:false};},
+    });
+    assert.equal(readerCalls,known?1:0);assert.equal(modelCalls,0);assert.equal(result.status,'partial');assert.equal(result.sources[0].evidence,'');
+  }
+});

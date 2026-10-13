@@ -29,7 +29,7 @@
         "created_at": {"type": "string", "format": "date-time"}, "updated_at": {"type": "string", "format": "date-time"},
         "result": {"type": ["object", "null"], "description": "Incremental evidence snapshot. Billing authority is the gateway ledger; missing usage never means an uncertain call was free.", "properties": {"sources": {"type": "array", "items": {"$ref": "#/components/schemas/Source"}}, "claims": {"type": "array", "items": {"$ref": "#/components/schemas/Claim"}}, "elapsed_ms": {"type": "number"}}}
       }},
-      "Source": {"type": "object", "required": ["id", "title", "url", "state", "evidence", "fetched_at"], "properties": {"id": {"type": "string"}, "title": {"type": "string"}, "url": {"type": "string", "format": "uri"}, "state": {"enum": ["read", "unavailable"]}, "evidence": {"type": "string"}, "fetched_at": {"type": "string", "format": "date-time"}}},
+      "Source": {"type": "object", "required": ["id", "title", "url", "state", "evidence", "fetched_at"], "properties": {"id": {"type": "string"}, "title": {"type": "string"}, "url": {"type": "string", "format": "uri"}, "state": {"enum": ["read", "unavailable"]}, "evidence": {"type": "string"}, "fetched_at": {"type": "string", "format": "date-time"}, "reader": {"type": "string", "enum": ["tavily", "jina-anonymous"], "description": "Optional retrieval provenance; legacy evidence may omit it."}}},
       "Claim": {"type": "object", "required": ["text", "source_id", "quote"], "properties": {"text": {"type": "string"}, "source_id": {"type": "string"}, "quote": {"type": "string", "description": "Exact continuous excerpt from a read source. This check does not prove semantic entailment."}}}
     }
   }
