@@ -27,11 +27,11 @@ interface:
   prompts: false
   multiConvo: false
   artifacts: false
-  webSearch: false
+  webSearch: true
   fileSearch: true
 endpoints:
   agents:
-    capabilities: [file_search, context]
+    capabilities: [file_search, web_search, context]
   custom:
     - name: DeepSeek
       apiKey: '${GATEWAY_KEY}'
