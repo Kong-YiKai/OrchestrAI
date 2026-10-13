@@ -37,7 +37,7 @@ test('chat uses owned delegation, stable operation keys, real evidence and upstr
       assert.equal(active, false, 'parallel model calls must be serialized'); active = true;
       operations.push(options.headers['Idempotency-Key']);
       const body = JSON.parse(options.body);
-      assert.match(body.query, /Asia\/Shanghai/); assert.deepEqual(Object.keys(body), ['query']);
+      assert.equal(body.query, call.args.query); assert.deepEqual(Object.keys(body), ['query']);
       return reply({ id, status: 'queued' }, 202);
     }
     assert.equal(url, `http://research:8091/queries/${id}`);
@@ -56,9 +56,10 @@ test('chat uses owned delegation, stable operation keys, real evidence and upstr
   assert.equal(payload(limit).error, 'research_turn_limit'); assert.equal(requests, 4);
 });
 test('unread pages never become evidence; budget/busy errors stay failures', async () => {
-  global.fetch = async () => reply({ id, status: 'partial', error: 'no_readable_sources', result: { sources: [{ ...source, state: 'unavailable', evidence: 'NOT BODY' }], claims: [] } }, 202);
+  global.fetch = async () => reply({ id, status: 'partial', error: 'no_readable_sources', result: { sources: [{ ...source, state: 'unavailable', evidence: 'NOT BODY', snippet: 'UNREAD SUMMARY MUST NOT REACH MODEL' }], claims: [] } }, 202);
   const result = await createOrchestraResearchTool(req).invoke(call, config);
   assert.equal(payload(result).sources[0].evidence, '');
+  assert.equal('snippet' in payload(result).sources[0], false);
   assert.equal(result.artifact.web_search.error, 'no_readable_sources');
   global.fetch = async () => reply({ error: 'research_busy' }, 429);
   const busy = await createOrchestraResearchTool(req).invoke(call, config);
@@ -74,6 +75,25 @@ test('stopping a chat cancels the exact remote run without replaying search', as
   const result = await createOrchestraResearchTool(req, controller.signal).invoke(call, config);
   assert.equal(payload(result).error, 'research_cancelled');
   assert.deepEqual(paths, ['http://research:8091/queries', `http://research:8091/queries/${id}/cancel`]);
+});
+test('the first URL read uses the exact user link even when the model strips its scheme', async () => {
+  let posted;
+  global.fetch = async (_url, options) => { posted=JSON.parse(options.body).query; return reply({ id, status: 'partial', result: { sources: [], claims: [] } },202); };
+  const url='https://zhuanlan.zhihu.com/p/150190166';
+  const request={ ...req, body: { ...req.body, text: url+' 总结这个链接下的内容' } };
+  await createOrchestraResearchTool(request).invoke({ ...call,args: { query:'zhuanlan.zhihu.com/p/150190166' } },config);
+  assert.equal(posted,url);
+  await createOrchestraResearchTool(request).invoke({ ...call,args: { query:'知乎文章总结' } },config);
+  assert.equal(posted,url);
+  const unicodeURL='https://example.com/明天';
+  await createOrchestraResearchTool({ ...req,body:{ ...req.body,text:unicodeURL+' 总结这个链接' } }).invoke({ ...call,args:{ query:'example.com/明天' } },config);
+  assert.equal(posted,unicodeURL);
+});
+test('relative dates become exact dates without polluting searches with clock/timezone keywords', async () => {
+  let posted;
+  global.fetch=async (_url,options)=>{posted=JSON.parse(options.body).query;return reply({ id,status:'partial',result:{sources:[],claims:[]} },202);};
+  await createOrchestraResearchTool(req).invoke({ ...call,args:{query:'杭州 明天 天气预报'} },config);
+  assert.match(posted,/杭州 \d{4}-\d{2}-\d{2} 天气预报/);assert.doesNotMatch(posted,/Asia|当前日期|明天/);
 });
 test('anonymous and disabled configuration cannot access the research transport', async () => {
   let count = 0; global.fetch = async () => { count++; throw new Error('must not call'); };
