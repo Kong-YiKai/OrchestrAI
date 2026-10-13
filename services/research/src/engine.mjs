@@ -48,7 +48,7 @@ export async function research(run, settings, progress, cancelled, dependencies=
   const checkpoint=async () => { if (await cancelled()) throw new Error('cancelled');
     if (remaining()<500) throw new Error('deadline_exceeded'); };
   let initial=[];
-  const direct=run.query.match(/https?:\/\/[^\s<>"）)]+/)?.[0];
+  const direct=run.query.match(/https?:\/\/[^\s<>"“”）)，。！？；、】》]+/)?.[0];
   await progress(direct ? 'reading' : 'searching', {});
   const createTool=dependencies.createTool ?? createSearchTool;
   const tool=createTool({

@@ -1,0 +1,94 @@
+const { test, after } = require('node:test');
+const assert = require('node:assert/strict');
+const { createRequire } = require('node:module');
+const requireApi = createRequire(process.env.ORCHESTRA_TEST_SOURCE || '/app/package.json');
+const jwt = requireApi('jsonwebtoken');
+const { createOrchestraResearchTool, loadEphemeralAgent } = requireApi('@librechat/api');
+const originalFetch = global.fetch;
+const originalSecret = process.env.RESEARCH_DELEGATION_SECRET;
+const originalURL = process.env.RESEARCH_API_URL;
+process.env.RESEARCH_DELEGATION_SECRET = 'fixture-only-delegation-secret-123456789';
+process.env.RESEARCH_API_URL = 'http://research:8091';
+after(() => {
+  global.fetch = originalFetch;
+  if (originalSecret == null) delete process.env.RESEARCH_DELEGATION_SECRET; else process.env.RESEARCH_DELEGATION_SECRET = originalSecret;
+  if (originalURL == null) delete process.env.RESEARCH_API_URL; else process.env.RESEARCH_API_URL = originalURL;
+});
+const id = '11111111-1111-4111-8111-111111111111';
+const req = { user: { id: 'alice', tenantId: 'tenant-a' }, body: { responseMessageId: 'turn-1' } };
+const call = { type: 'tool_call', name: 'web_search', id: 'call-1', args: { query: 'https://example.com/doc', user_id: 'bob' } };
+const config = { metadata: { run_id: 'turn-1', thread_id: 'convo-1', user_id: 'alice' }, toolCall: { id: 'call-1', name: 'web_search', turn: 0 } };
+const source = { id: 'S1', url: 'https://example.com/doc', title: 'Example', state: 'read', evidence: 'Only this actual fetched evidence.', fetched_at: '2026-10-13T00:00:00Z' };
+function reply(value, status = 200) { return new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } }); }
+function payload(message) { return JSON.parse(message.content.replace(/^Error processing tool: /, '')); }
+function inspect(options) {
+  const principal = jwt.verify(options.headers.Authorization.slice(7), process.env.RESEARCH_DELEGATION_SECRET, {
+    algorithms: ['HS256'], issuer: 'orchestrai-chat', audience: 'orchestrai-research',
+  });
+  assert.equal(principal.sub, 'alice'); assert.equal(principal.tenant, 'tenant-a');
+  assert.deepEqual(principal.scopes, [options.method === 'GET' ? 'research:read' : 'research:write']);
+  assert.ok(principal.exp - principal.iat <= 60);
+}
+test('chat uses owned delegation, stable operation keys, real evidence and upstream attachments', async () => {
+  const operations = []; let callbacks = 0; let requests = 0; let active = false;
+  global.fetch = async (url, options) => {
+    requests++; inspect(options);
+    if (options.method === 'POST') {
+      assert.equal(active, false, 'parallel model calls must be serialized'); active = true;
+      operations.push(options.headers['Idempotency-Key']);
+      const body = JSON.parse(options.body);
+      assert.match(body.query, /Asia\/Shanghai/); assert.deepEqual(Object.keys(body), ['query']);
+      return reply({ id, status: 'queued' }, 202);
+    }
+    assert.equal(url, `http://research:8091/queries/${id}`);
+    active = false;
+    return reply({ id, status: 'completed', result: { sources: [source], claims: [{ text: 'Evidence', source_id: 'S1', quote: 'actual fetched evidence' }] } });
+  };
+  const tool = createOrchestraResearchTool(req, undefined, (results) => { callbacks++; assert.equal(results.data.organic[0].link, source.url); });
+  const results = await Promise.all([0, 1].map(i => tool.invoke({ ...call, id: 'call-'+i }, { ...config, toolCall: { ...config.toolCall, id: 'call-'+i } })));
+  for (const result of results) {
+    const value = payload(result);
+    assert.equal(value.status, 'completed'); assert.equal(value.sources[0].evidence, source.evidence);
+    assert.equal(result.artifact.web_search.organic[0].link, source.url);
+  }
+  assert.equal(callbacks, 2); assert.equal(operations[0], operations[1]);
+  const limit = await tool.invoke(call, config);
+  assert.equal(payload(limit).error, 'research_turn_limit'); assert.equal(requests, 4);
+});
+test('unread pages never become evidence; budget/busy errors stay failures', async () => {
+  global.fetch = async () => reply({ id, status: 'partial', error: 'no_readable_sources', result: { sources: [{ ...source, state: 'unavailable', evidence: 'NOT BODY' }], claims: [] } }, 202);
+  const result = await createOrchestraResearchTool(req).invoke(call, config);
+  assert.equal(payload(result).sources[0].evidence, '');
+  assert.equal(result.artifact.web_search.error, 'no_readable_sources');
+  global.fetch = async () => reply({ error: 'research_busy' }, 429);
+  const busy = await createOrchestraResearchTool(req).invoke(call, config);
+  assert.equal(payload(busy).status, 'failed'); assert.equal(payload(busy).error, 'research_busy');
+});
+test('stopping a chat cancels the exact remote run without replaying search', async () => {
+  const controller = new AbortController(); const paths = [];
+  global.fetch = async (url, options) => {
+    paths.push(url); inspect(options);
+    if (url.endsWith('/cancel')) return reply({ id, status: 'cancelled' });
+    controller.abort(); return reply({ id, status: 'queued' }, 202);
+  };
+  const result = await createOrchestraResearchTool(req, controller.signal).invoke(call, config);
+  assert.equal(payload(result).error, 'research_cancelled');
+  assert.deepEqual(paths, ['http://research:8091/queries', `http://research:8091/queries/${id}/cancel`]);
+});
+test('anonymous and disabled configuration cannot access the research transport', async () => {
+  let count = 0; global.fetch = async () => { count++; throw new Error('must not call'); };
+  const anonymous = await createOrchestraResearchTool({ body: req.body }).invoke(call, config);
+  assert.equal(payload(anonymous).error, 'authentication_required');
+  delete process.env.RESEARCH_API_URL;
+  const missing = await createOrchestraResearchTool(req).invoke(call, config);
+  assert.equal(payload(missing).error, 'research_not_configured'); assert.equal(count, 0);
+  process.env.RESEARCH_API_URL = 'http://research:8091';
+});
+test('actual ephemeral chat loader respects the web switch and injects dated instructions only when enabled', async () => {
+  for (const enabled of [false, true]) {
+    const request = { user: req.user, body: { ephemeralAgent: { web_search: enabled } }, config: { endpoints: { custom: [{ name: 'DeepSeek', modelDisplayLabel: 'DeepSeek Flash' }] } } };
+    const agent = await loadEphemeralAgent({ req: request, endpoint: 'DeepSeek', model_parameters: { model: 'deepseek-flash' } }, {});
+    assert.equal(agent.tools.includes('web_search'), enabled);
+    assert.equal((agent.instructions || '').includes('Asia/Shanghai'), enabled);
+  }
+});

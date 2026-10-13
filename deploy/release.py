@@ -200,7 +200,7 @@ class Deployment:
         names = subprocess.check_output(['rclone','--config',str(self.root / 'secrets/rclone.conf'),
             'lsf',remote,'--files-only','--max-depth','1'],text=True,timeout=300,env=self.env).splitlines()
         for candidate in names:
-            if not re.fullmatch(r'daily-[0-9]{8}T[0-9]{6}Z\.dump\.age(?:\.(?:workflow\.dump|ingestion\.dump|chat\.archive|attachments\.tar\.gz|images\.tar\.gz|budget\.sqlite)\.age|\.snapshot\.json)?', candidate):
+            if not re.fullmatch(r'daily-[0-9]{8}T[0-9]{6}Z\.dump\.age(?:\.(?:workflow\.dump|ingestion\.dump|research\.dump|chat\.archive|attachments\.tar\.gz|images\.tar\.gz|budget\.sqlite)\.age|\.snapshot\.json)?', candidate):
                 continue
             from datetime import datetime, timezone
             created = datetime.strptime(candidate[:22], 'daily-%Y%m%dT%H%M%SZ').replace(tzinfo=timezone.utc).timestamp()
