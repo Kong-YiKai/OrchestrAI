@@ -5688,7 +5688,7 @@ b1r>>NT*r>YPl5sX2T4&@O{V;*McDrV)2Vh3
              src: 'assets/favicon-32x32.png',
 --- /dev/null
 +++ b/packages/api/src/orchestra/research.ts
-@@ -0,0 +1,263 @@
+@@ -0,0 +1,281 @@
 +import { randomUUID, createHash } from 'node:crypto';
 +import { setTimeout as pause } from 'node:timers/promises';
 +import { Router } from 'express';
@@ -5818,24 +5818,38 @@ b1r>>NT*r>YPl5sX2T4&@O{V;*McDrV)2Vh3
 +      try {
 +        if (abort?.aborted) throw new Error('research_cancelled');
 +        if (++calls > 2) throw new Error('research_turn_limit');
++        const suppliedUrls =
++          String(req.body?.text ?? '').match(/https?:\/\/[^\s<>"“”）)，。！？；、】》]+/g) ?? [];
++        // Models sometimes remove the scheme. Recover only URLs the user actually supplied.
++        const supplied =
++          suppliedUrls.find((url) => query.includes(url.replace(/^https?:\/\//, ''))) ??
++          (calls === 1 && suppliedUrls.length === 1 ? suppliedUrls[0] : undefined);
++        const effectiveQuery =
++          supplied && (calls === 1 || !/https?:\/\//.test(query)) ? supplied : query;
 +        const turn =
 +          runConfig?.metadata?.run_id ?? req.body?.responseMessageId ?? req.body?.messageId;
 +        if (!turn) throw new Error('research_missing_turn_context');
 +        const operation =
 +          'chat-' +
 +          createHash('sha256')
-+            .update(JSON.stringify([turn, query]))
++            .update(JSON.stringify([turn, effectiveQuery]))
 +            .digest('hex');
-+        const date = new Intl.DateTimeFormat('sv-SE', {
++        const dateFormat = new Intl.DateTimeFormat('sv-SE', {
 +          timeZone: 'Asia/Shanghai',
 +          dateStyle: 'short',
-+        }).format(new Date());
++        });
++        const datedQuery = /^https?:\/\//.test(effectiveQuery)
++          ? effectiveQuery
++          : effectiveQuery
++              .replaceAll('后天', dateFormat.format(new Date(Date.now() + 2 * 86400000)))
++              .replaceAll('明天', dateFormat.format(new Date(Date.now() + 86400000)))
++              .replaceAll('今天', dateFormat.format(new Date()));
 +        // Await bounded creation even when stopped, so a known task can be cancelled.
 +        let row: Query = await requestResearch(
 +          req,
 +          'POST',
 +          '/queries',
-+          { query: `当前日期 ${date}（Asia/Shanghai）。${query}` },
++          { query: datedQuery },
 +          operation,
 +        );
 +        if (!/^[0-9a-f-]{36}$/.test(row.id)) throw new Error('research_invalid_response');
@@ -5864,7 +5878,11 @@ b1r>>NT*r>YPl5sX2T4&@O{V;*McDrV)2Vh3
 +          error: issue,
 +          claims: row.result?.claims ?? [],
 +          sources: sources.map((s) => ({
-+            ...s,
++            id: s.id,
++            url: s.url,
++            title: s.state === 'read' ? s.title : new URL(s.url).hostname,
++            state: s.state,
++            fetched_at: s.fetched_at,
 +            evidence: s.state === 'read' ? s.evidence.slice(0, 3000) : '',
 +          })),
 +          instruction:
