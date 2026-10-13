@@ -92,12 +92,16 @@ class PolicyTests(unittest.TestCase):
             (root/'backups'/old).write_bytes(b'encrypted')
             deployment=release.Deployment(root)
             policy=dict(POLICY,backup_remote='backup:bucket/orchestrai/workflow')
-            names='\n'.join([old,'2-revision.dump.age','other-project.dump.age','daily-20990101T000000Z.dump.age'])
+            research_part=old+'.research.dump.age'
+            (root/'backups'/research_part).write_bytes(b'encrypted-research')
+            names='\n'.join([old,research_part,'2-revision.dump.age','other-project.dump.age','daily-20990101T000000Z.dump.age',
+                'daily-20990101T000000Z.dump.age.research.dump.age'])
             with patch.object(deployment,'compose'), patch.object(deployment,'backup',return_value={'object':'verified'}), patch.object(release.subprocess,'check_output',return_value=names), patch.object(release.subprocess,'run') as run:
                 deployment.daily_backup(MANIFEST,policy)
-            self.assertEqual(len(run.call_args_list),1)
-            self.assertEqual(run.call_args.args[0][-2:],['deletefile',policy['backup_remote']+'/'+old])
+            self.assertEqual(len(run.call_args_list),2)
+            self.assertEqual([c.args[0][-1] for c in run.call_args_list],[policy['backup_remote']+'/'+old,policy['backup_remote']+'/'+research_part])
             self.assertFalse((root/'backups'/old).exists())
+            self.assertFalse((root/'backups'/research_part).exists())
 
     def test_product_daily_failure_resumes_writers(self):
         with tempfile.TemporaryDirectory() as directory:

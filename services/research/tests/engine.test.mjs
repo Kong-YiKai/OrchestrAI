@@ -41,6 +41,15 @@ test('Unread/login-blocked sources never reach the model; direct links do not se
   assert.equal(result.sources[0].evidence,'');assert.deepEqual(result.claims,[]);assert.equal(modelCalls,0);
   assert.equal(phases[0],'reading');
 });
+
+test('Chinese instructions next to a URL are not sent as part of the address',async()=>{
+  let invoked;
+  await research({id:randomUUID(),query:'阅读 https://example.com/article，总结其中观点。'},settings,async()=>{},async()=>false,{
+    createTool:()=>({invoke:async input=>{invoked=input.args.query;return {artifact:{web_search:{}}};}}),
+    fetcher:async()=>{throw new Error('No sources should call no downstream provider');},
+  });
+  assert.equal(invoked,'https://example.com/article');
+});
 test('Partial extraction preserves sources and only answers from actual page text',async()=>{
   const phases=[];let modelCalls=0;
   const result=await research({id:randomUUID(),query:'如何防止预算超支'},settings,async phase=>phases.push(phase),async()=>false,{

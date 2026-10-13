@@ -48,3 +48,4 @@ deploy/.env.*
 /frontend/
 /backend/
 /.playwright-mcp/
+/logs/

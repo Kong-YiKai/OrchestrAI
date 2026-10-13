@@ -138,6 +138,7 @@ jobs:
         run: python scripts/build-product.py
       - name: Atomic budget, restart and SDK callback contract
         run: |
+          docker run --rm -v "$PWD/services/chat/test_research.cjs:/app/test_research.cjs:ro" --entrypoint node orchestrai/chat:local --test test_research.cjs
           docker run --rm -e LITELLM_LOCAL_MODEL_COST_MAP=true -v "$PWD/services/gateway/test_budget.py:/app/test_budget.py:ro" --entrypoint python orchestrai/gateway:local -m unittest test_budget -q
           docker run --rm -e LITELLM_LOCAL_MODEL_COST_MAP=true -v "$PWD/services/gateway/test_search.py:/app/test_search.py:ro" --entrypoint python orchestrai/gateway:local -m unittest test_search -q
           docker run --rm -v "$PWD/services/research/tests:/app/tests:ro" --entrypoint node orchestrai/research:local --test tests/*.test.mjs
