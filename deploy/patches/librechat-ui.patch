@@ -5688,7 +5688,7 @@ b1r>>NT*r>YPl5sX2T4&@O{V;*McDrV)2Vh3
              src: 'assets/favicon-32x32.png',
 --- /dev/null
 +++ b/packages/api/src/orchestra/research.ts
-@@ -0,0 +1,279 @@
+@@ -0,0 +1,281 @@
 +import { randomUUID, createHash } from 'node:crypto';
 +import { setTimeout as pause } from 'node:timers/promises';
 +import { Router } from 'express';
@@ -5838,10 +5838,12 @@ b1r>>NT*r>YPl5sX2T4&@O{V;*McDrV)2Vh3
 +          timeZone: 'Asia/Shanghai',
 +          dateStyle: 'short',
 +        });
-+        const datedQuery = effectiveQuery
-+          .replaceAll('后天', dateFormat.format(new Date(Date.now() + 2 * 86400000)))
-+          .replaceAll('明天', dateFormat.format(new Date(Date.now() + 86400000)))
-+          .replaceAll('今天', dateFormat.format(new Date()));
++        const datedQuery = /^https?:\/\//.test(effectiveQuery)
++          ? effectiveQuery
++          : effectiveQuery
++              .replaceAll('后天', dateFormat.format(new Date(Date.now() + 2 * 86400000)))
++              .replaceAll('明天', dateFormat.format(new Date(Date.now() + 86400000)))
++              .replaceAll('今天', dateFormat.format(new Date()));
 +        // Await bounded creation even when stopped, so a known task can be cancelled.
 +        let row: Query = await requestResearch(
 +          req,

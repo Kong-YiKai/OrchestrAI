@@ -85,6 +85,9 @@ test('the first URL read uses the exact user link even when the model strips its
   assert.equal(posted,url);
   await createOrchestraResearchTool(request).invoke({ ...call,args: { query:'知乎文章总结' } },config);
   assert.equal(posted,url);
+  const unicodeURL='https://example.com/明天';
+  await createOrchestraResearchTool({ ...req,body:{ ...req.body,text:unicodeURL+' 总结这个链接' } }).invoke({ ...call,args:{ query:'example.com/明天' } },config);
+  assert.equal(posted,unicodeURL);
 });
 test('relative dates become exact dates without polluting searches with clock/timezone keywords', async () => {
   let posted;
