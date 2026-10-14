@@ -4,7 +4,8 @@ on:
   pull_request:
     branches: [main, develop]
   push:
-    branches: [main, develop]
+    # develop is verified by its PR; re-running the full suite on the develop push duplicated work.
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -16,6 +17,29 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      docs_only: ${{ steps.scope.outputs.docs_only }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: {fetch-depth: 0}
+      - name: Classify the change set
+        id: scope
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BASE: ${{ github.event.before }}
+        run: |
+          base="${PR_BASE:-$PUSH_BASE}"
+          docs_only=false
+          if [[ -n "$base" && ! "$base" =~ ^0+$ ]] && git cat-file -e "$base^{commit}" 2>/dev/null; then
+            changed="$(git diff --name-only "$base...HEAD")"
+            printf '%s\n' "$changed"
+            if [[ -n "$changed" ]] && ! grep -qvE '\.md$' <<<"$changed"; then docs_only=true; fi
+          fi
+          echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
+          echo "docs_only=$docs_only"
+
   main-source-guard:
     runs-on: ubuntu-latest
     steps:
@@ -36,7 +60,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with: {fetch-depth: 0}
-      - name: Hygiene and mandatory overview update
+      - name: Repository hygiene
         env:
           PR_BASE: ${{ github.event.pull_request.base.sha }}
           PUSH_BASE: ${{ github.event.before }}
@@ -75,6 +99,8 @@ jobs:
       - run: echo 'Service contracts, migrations and integration passed in workflow/product jobs.'
 
   workflow:
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -120,22 +146,34 @@ jobs:
 
   ci-gate:
     if: always()
-    needs: [main-source-guard, repository, frontend, backend, workflow, product]
+    needs: [changes, main-source-guard, repository, frontend, backend, workflow, product]
     runs-on: ubuntu-latest
     steps:
       - env:
           RESULTS: ${{ toJSON(needs) }}
+          DOCS_ONLY: ${{ needs.changes.outputs.docs_only }}
+        # Build/test jobs may be skipped only for a documentation-only change set.
         run: |
-          python -c 'import os,json; assert all(j["result"] == "success" for j in json.loads(os.environ["RESULTS"]).values())'
+          python -c 'import os,json; r={k:v["result"] for k,v in json.loads(os.environ["RESULTS"]).items()}; ok={"success","skipped"} if os.environ["DOCS_ONLY"]=="true" else {"success"}; print(r); assert r["changes"]=="success" and all(v in ok for v in r.values())'
 
   product:
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - name: Build fixed product images and check client types
+      - name: Build changed product images; reuse images released from main for identical inputs
         env:
           BUILD_REVISION: ${{ github.sha }}
-        run: python scripts/build-product.py
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          python scripts/build-product.py --reuse "ghcr.io/${REPOSITORY,,}"
+          docker logout ghcr.io
       - name: Atomic budget, restart and SDK callback contract
         run: |
           docker run --rm -v "$PWD/services/chat/test_research.cjs:/app/test_research.cjs:ro" --entrypoint node orchestrai/chat:local --test test_research.cjs
@@ -189,8 +227,8 @@ jobs:
           retention-days: 30
 
   publish:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: ci-gate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.docs_only != 'true'
+    needs: [changes, ci-gate]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -220,6 +258,14 @@ jobs:
             docker tag "orchestrai/$service:local" "$image:$REVISION"
             docker push "$image:$REVISION"
             docker inspect --format '{{index .RepoDigests 0}}' "$image:$REVISION" > "$service.digest"
+          done
+          # Content-addressed tags let later CI runs reuse these tested images for unchanged inputs.
+          python scripts/build-product.py --hashes > input-hashes.json
+          for service in chat ingestion gateway web mongo research; do
+            key="$(python -c 'import json,sys; print(json.load(open("input-hashes.json"))[sys.argv[1]])' "$service")"
+            image="ghcr.io/${REPOSITORY,,}/$service"
+            docker tag "orchestrai/$service:local" "$image:inputs-$key"
+            docker push -q "$image:inputs-$key"
           done
           python - <<'PY'
           import importlib.util,json,os,pathlib

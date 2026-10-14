@@ -5,7 +5,29 @@
     "commit": "e8f3be08623663d4ad7f7241e693c94469b63bb0",
     "sha256": "54b650e13b75cc41fb1a4efb70f6e5f27ba43d956d12ca66f86b6623bb9fcf71",
     "license": "MIT (subpackages require separate audit)",
-    "patch": "deploy/patches/librechat-ui.patch"
+    "patches": [
+      "services/chat/patches/dependencies.patch",
+      "services/chat/patches/server.patch",
+      "services/chat/patches/client.patch"
+    ],
+    "overlay": "services/chat/overlay",
+    "replaces": {
+      "client/src/routes/Root.tsx": "515df252d32209d2f28fe5fa0544de0e8ef8fcbc5c6a2618769ba5a995ca2162",
+      "client/src/components/Chat/ChatView.tsx": "c464110e63296c4f64ccf429b8c1e9540ee0d7a01355d8ebacdbd150c9668150",
+      "client/src/components/Auth/AuthLayout.tsx": "edcede5d765849e24e077be56324d187b0bc99d8da9c94e3719f1b3cbc279f79",
+      "client/public/assets/apple-touch-icon-180x180.png": "80fd9c887f137e015f4ee0f8d7324aff65f4caadcb065196b9cb52351c8f1974",
+      "client/public/assets/favicon-16x16.png": "b187f0d9fce56e5245887adb8231a7c43273ededa7c2d73686dc48af55d8de17",
+      "client/public/assets/favicon-32x32.png": "eabc65588da24b722a86644f10e2808293590191e8f78b3c8ef009ef82a31311",
+      "client/public/assets/icon-192x192.png": "8c1542988875ee55075617e1b1895e5ba1728740d42202a2144f8ddcd73bc07a",
+      "client/public/assets/logo.svg": "6f22e946415022a4fb499d9da48eea61fead6e65eb449b53ec78d95b0f6e4f70",
+      "client/public/assets/maskable-icon.png": "fd6c0d7d5b8ecc8ebcb3278254b87087321f8c73929271492e1ff3f52a09d185"
+    },
+    "remove": [
+      "client/src/components/Chat/Header.tsx",
+      "client/src/components/Chat/Landing.tsx",
+      "client/src/components/Chat/__tests__/Header.stacking.spec.tsx",
+      "client/src/components/Chat/__tests__/Landing.agent-contact.spec.tsx"
+    ]
   },
   "rag": {
     "repository": "LibreChat-AI/rag-api",
@@ -13,6 +35,6 @@
     "commit": "4985b37b8b5d4519d68eceedfef1e63624012f9d",
     "sha256": "472934e8baad8a90b4a7292a99935b60cd2b24d03fd1c3f4038ffc598bd357ff",
     "license": "MIT",
-    "patch": "deploy/patches/rag.patch"
+    "patches": ["services/ingestion/upstream.patch"]
   }
 }

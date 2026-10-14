@@ -31,12 +31,15 @@ def main():
             if re.search(r'-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----', source):
                 errors.append(f'private key material: {name}')
     documents = sorted(p.name for p in (ROOT / 'Documents').iterdir() if p.is_file())
-    if documents != ['project-overview.md']:
-        errors.append('Documents must contain only project-overview.md')
+    if documents != ['phase-history-and-handoff.md', 'project-overview.md']:
+        errors.append('Documents must contain only project-overview.md and phase-history-and-handoff.md')
+    overview = ROOT / 'Documents/project-overview.md'
+    if overview.stat().st_size > 40 * 1024:
+        errors.append('project-overview.md exceeds 40 KiB: move history to phase-history-and-handoff.md')
     if args.base:
         changed = subprocess.check_output(['git', 'diff', '--name-only', f'{args.base}...HEAD'], cwd=ROOT).decode().splitlines()
-        if changed and 'Documents/project-overview.md' not in changed:
-            errors.append('Every change must update Documents/project-overview.md')
+        if any(n.startswith(('services/', 'deploy/')) for n in changed) and not any(n.startswith('Documents/') for n in changed):
+            print('note: service/deploy change without a Documents update; update docs if status or architecture changed')
     print(f'Non-ignored source bytes (tracked + pending): {total}; hygiene findings: {len(errors)}')
     for error in errors:
         print(error, file=sys.stderr)

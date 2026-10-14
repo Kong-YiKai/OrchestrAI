@@ -2,7 +2,7 @@
 
 OrchestrAI combines a custom warm three-column chat interface with independent AI services. LibreChat supplies authentication, conversations, streaming and attachment handling; LangGraph/BullMQ supplies persisted workflow execution. The React Flow canvas remains a preview until R5.
 
-Read [project-overview](Documents/project-overview.md) and [development rules](AGENTS.md) before changing the project. They record actual phase status, validation and limitations.
+Before changing the project, read the handoff section of [phase-history-and-handoff](Documents/phase-history-and-handoff.md), the [project overview](Documents/project-overview.md) and the [development rules](AGENTS.md). The rules include a change map listing which files own each feature: prefer editing or deleting existing code over adding patches on top.
 
 ## Product candidate
 
@@ -39,7 +39,7 @@ python scripts/check-repository.py
 git diff --check
 ```
 
-CI builds fixed upstream sources plus tracked patches, checks client types, runs real service/database smoke tests and scans runtime images. Tested images are preserved and published by digest from the same trusted main SHA. The root-owned controller validates the manifest, takes coordinated encrypted backups and performs forward migrations/readiness checks. Application rollback does not downgrade databases. Server first installation requires administrator configuration; ordinary main releases use the restricted deployment identity automatically.
+LibreChat customisation lives in `services/chat/overlay/` (owned source files, edited directly) plus small upstream patches in `services/chat/patches/`; `scripts/prepare-upstreams.py` assembles them into the generated `.build/` tree. CI rebuilds only images whose inputs changed (unchanged images are reused from main by content hash) and skips builds for documentation-only changes. It checks client types, runs real service/database smoke tests and scans runtime images. Tested images are preserved and published by digest from the same trusted main SHA. The root-owned controller validates the manifest, takes coordinated encrypted backups and performs forward migrations/readiness checks. Application rollback does not downgrade databases. Server first installation requires administrator configuration; ordinary main releases use the restricted deployment identity automatically.
 
 [deploy/.env.example](deploy/.env.example) is the current deployment template. Preserve existing infrastructure credentials when extending a production installation. Secrets belong only in ignored private files and root-owned server configuration, never in chat, Git or image layers.
 

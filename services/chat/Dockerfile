@@ -1,4 +1,4 @@
-# Build context: verified .build/librechat, with the tracked OrchestrAI UI patch.
+# Build context: .build/librechat = verified upstream + services/chat/patches + overlay (scripts/prepare-upstreams.py).
 FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS build
 WORKDIR /app
 ENV SCARF_ANALYTICS=false HUSKY=0
