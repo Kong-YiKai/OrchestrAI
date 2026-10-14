@@ -84,8 +84,11 @@ test('the first URL read uses the exact user link even when the model strips its
   const request={ ...req, body: { ...req.body, text: url+' 总结这个链接下的内容' } };
   await createOrchestraResearchTool(request).invoke({ ...call,args: { query:'zhuanlan.zhihu.com/p/150190166' } },config);
   assert.equal(posted,url);
-  await createOrchestraResearchTool(request).invoke({ ...call,args: { query:'知乎文章总结' } },config);
+  await createOrchestraResearchTool(request).invoke({ ...call,args: { query:'https://zhuanlan.zhihu.com/p/150190' } },config);
   assert.equal(posted,url);
+  // An unrelated search in the same message is not replaced by the supplied link.
+  await createOrchestraResearchTool(request).invoke({ ...call,args: { query:'杭州天气预报' } },config);
+  assert.equal(posted,'杭州天气预报');
   const unicodeURL='https://example.com/明天';
   await createOrchestraResearchTool({ ...req,body:{ ...req.body,text:unicodeURL+' 总结这个链接' } }).invoke({ ...call,args:{ query:'example.com/明天' } },config);
   assert.equal(posted,unicodeURL);
