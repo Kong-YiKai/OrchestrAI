@@ -145,12 +145,14 @@ export function createOrchestraResearchTool(
         if (abort?.aborted) throw new Error('research_cancelled');
         if (++calls > 2) throw new Error('research_turn_limit');
         const suppliedUrls = userUrls(req.body?.text);
-        // Models sometimes remove the scheme. Recover only URLs the user actually supplied.
-        const supplied =
-          suppliedUrls.find((url) => query.includes(url.replace(/^https?:\/\//, ''))) ??
-          (calls === 1 && suppliedUrls.length === 1 ? suppliedUrls[0] : undefined);
-        const effectiveQuery =
-          supplied && (calls === 1 || !/https?:\/\//.test(query)) ? supplied : query;
+        // Models sometimes strip the scheme or garble the link. Recover a URL the user actually
+        // supplied only when the query refers to it (its host); an unrelated query in the same
+        // message (e.g. weather next to a link) must stay a search.
+        const supplied = suppliedUrls.find((url) => {
+          const host = URL.canParse(url) ? new URL(url).hostname.replace(/^www\./, '') : '';
+          return host !== '' && query.includes(host);
+        });
+        const effectiveQuery = supplied ?? query;
         const turn =
           runConfig?.metadata?.run_id ?? req.body?.responseMessageId ?? req.body?.messageId;
         if (!turn) throw new Error('research_missing_turn_context');

@@ -25,6 +25,7 @@
 - 另外修复数值范围显示：`20~25℃` 这类范围成对出现时被渲染成删除线，改为范围波浪号使用 `∼` 显示。
 - `prepare-upstreams.py` 在生成目录中提交原始上游并打 `upstream` 标签，刷新补丁只需一条 `git diff upstream` 命令（见 AGENTS.md）。
 - 本地验证：chat 工具契约 9 项通过（新增 2 项），客户端 `tsc --noEmit` 通过，三份补丁能干净应用。
+- 部署后复测（main `3fef692`）发现：同一条消息里同时有天气问题和链接时，天气搜索被替换成了那个链接（“首轮绑定唯一链接”的规则过宽）。改为只有当查询里出现该链接的域名时才替换。复测 Python 文档总结正常，并正确说明了截断；小红书链接改为先调用工具，再用中文说明只取到了页面框架。
 
 ### 2026-10-14 工程结构调整与规则精简
 - 拆分 `deploy/patches/librechat-ui.patch`（334 KB）为 `services/chat/overlay/` 和三份小补丁（client、server、dependencies），外加 `remove` 删除列表；`rag.patch` 移到 `services/ingestion/upstream.patch`。等价验证：LibreChat 生成树 5624 个文件逐字节一致，RAG 树一致。
