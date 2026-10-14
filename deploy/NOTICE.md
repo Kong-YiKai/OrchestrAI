@@ -1,8 +1,10 @@
 # Reused software
 
-OrchestrAI builds fixed upstream archives with reviewable patches. Source archive
-hashes, full commits and patch paths are recorded in `upstreams.json`; generated
-checkouts remain outside Git. Images retain the upstream root license.
+OrchestrAI builds fixed upstream archives plus small reviewable patches and an owned
+overlay. Source archive hashes, commits, patch/overlay paths and the upstream hashes
+of replaced files are recorded in `upstreams.json`; generated checkouts remain
+outside Git. Images retain the upstream root license; `services/chat/LICENSE.librechat.txt`
+covers LibreChat-derived files in the overlay.
 
 | Component | Locked version | License / scope |
 | --- | --- | --- |
@@ -18,7 +20,7 @@ checkouts remain outside Git. Images retain the upstream root license.
 
 Open WebUI and Dify are product references only; neither codebase is copied or
 deployed. Python runtime dependencies are pinned in each service's requirements.
-LibreChat uses its pinned npm lock with the tracked UI/API patch. Product CI
+LibreChat uses its pinned npm lock with `services/chat/patches/dependencies.patch`. Product CI
 produces per-image SPDX and vulnerability reports; an SPDX file does not by itself
 confirm that every dependency license has been reviewed. Upstream overrides and
 incomplete license metadata require review during upgrades.
@@ -30,7 +32,7 @@ remain for encrypted snapshots. Chat runs Node directly without npm/npx; shell
 MCP via npx is not enabled in this product runtime. R5 execution belongs in its
 own restricted worker.
 
-The tracked LibreChat patch upgrades affected production dependencies. A bounded
+The tracked LibreChat dependency patch upgrades affected production dependencies. A bounded
 braces parser guard is applied and checked during image build pending an upstream
 release. Raw security reports retain all findings. Exact, expiring runtime
 assessments are in `vulnerability-policy.json`; changing execution boundaries or

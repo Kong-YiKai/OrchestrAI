@@ -1,0 +1,612 @@
+diff --git a/client/index.html b/client/index.html
+index 9fe3086..bf45929 100644
+--- a/client/index.html
++++ b/client/index.html
+@@ -3,15 +3,15 @@
+   <head>
+     <meta charset="utf-8" />
+     <base href="/" />
+-    <meta name="theme-color" content="#171717" />
++    <meta name="theme-color" content="#f5f1e8" />
+     <meta name="mobile-web-app-capable" content="yes" />
+     <meta name="apple-mobile-web-app-capable" content="yes" />
+     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+     <meta
+       name="description"
+-      content="LibreChat - An open source chat application with support for multiple AI models"
++      content="OrchestrAI · 对话、资料与研究，让工作逐步展开"
+     />
+-    <title>LibreChat</title>
++    <title>OrchestrAI</title>
+     <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png" />
+     <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png" />
+     <link rel="apple-touch-icon" href="assets/apple-touch-icon-180x180.png" />
+diff --git a/client/src/App.jsx b/client/src/App.jsx
+index c210b47..2c87955 100644
+--- a/client/src/App.jsx
++++ b/client/src/App.jsx
+@@ -14,6 +14,8 @@ import { getThemeFromEnv } from './utils/getThemeFromEnv';
+ import { initializeFontSize } from '~/store/fontSize';
+ import { LiveAnnouncer } from '~/a11y';
+ import { router } from './routes';
++import { orchestraTheme } from './components/Orchestra/theme';
++import './components/Orchestra/workbench.css';
+ 
+ const App = () => {
+   const { setError } = useApiErrorBoundary();
+@@ -55,6 +57,8 @@ const App = () => {
+             // Only pass initialTheme and themeRGB if environment theme exists
+             // This allows localStorage values to persist when no env theme is set
+             {...(envTheme && { initialTheme: 'system', themeRGB: envTheme })}
++            themeDefinition={orchestraTheme}
++            initialTheme={localStorage.getItem('theme') || 'light'}
+           >
+             {/* The ThemeProvider will automatically:
+                 1. Apply dark/light mode classes
+diff --git a/client/src/components/Auth/LoginForm.tsx b/client/src/components/Auth/LoginForm.tsx
+index 0c42724..3737654 100644
+--- a/client/src/components/Auth/LoginForm.tsx
++++ b/client/src/components/Auth/LoginForm.tsx
+@@ -32,10 +32,9 @@ const LoginForm: React.FC<TLoginFormProps> = ({ onSubmit, startupConfig, error,
+   const validTheme = isDark(theme) ? 'dark' : 'light';
+   const requireCaptcha = Boolean(startupConfig.turnstile?.siteKey);
+   const authInputClassName =
+-    'webkit-dark-styles transition-color peer h-auto w-full rounded-2xl border border-border-light bg-surface-primary px-3.5 pb-2.5 pt-3 text-text-primary duration-200 hover:border-border-light focus:border-accent-primary focus:outline-none focus-visible:border-accent-primary';
++    'webkit-dark-styles transition-color peer h-auto w-full rounded-xl border border-border-light bg-surface-primary-alt px-3.5 py-3 text-text-primary duration-200 focus:border-accent-primary focus:outline-none focus-visible:border-accent-primary';
+   const authSecretInputClassName = `${authInputClassName} pr-12`;
+-  const authLabelClassName =
+-    'absolute start-3 top-1.5 z-10 origin-[0] -translate-y-4 scale-75 transform bg-surface-primary px-2 text-sm text-text-secondary-alt duration-200 peer-placeholder-shown:top-1/2 peer-placeholder-shown:-translate-y-1/2 peer-placeholder-shown:scale-100 peer-focus:top-1.5 peer-focus:-translate-y-4 peer-focus:scale-75 peer-focus:px-2 peer-focus:text-accent-primary rtl:peer-focus:left-auto rtl:peer-focus:translate-x-1/4';
++  const authLabelClassName = 'absolute start-0 -top-6 text-xs text-text-secondary';
+   const authSecretButtonClassName =
+     'size-9 rounded-xl text-text-secondary-alt hover:bg-transparent hover:text-text-primary';
+ 
+@@ -94,7 +93,7 @@ const LoginForm: React.FC<TLoginFormProps> = ({ onSubmit, startupConfig, error,
+         method="POST"
+         onSubmit={handleSubmit((data) => onSubmit(data))}
+       >
+-        <div className="mb-4">
++        <div className="mb-10 mt-10">
+           <div className="relative">
+             <Input
+               type="text"
+@@ -110,7 +109,7 @@ const LoginForm: React.FC<TLoginFormProps> = ({ onSubmit, startupConfig, error,
+               })}
+               aria-invalid={!!errors.email}
+               className={authInputClassName}
+-              placeholder=" "
++              placeholder="name@example.com"
+             />
+             <label htmlFor="email" className={authLabelClassName}>
+               {useUsernameLogin
+@@ -136,7 +135,7 @@ const LoginForm: React.FC<TLoginFormProps> = ({ onSubmit, startupConfig, error,
+               })}
+               aria-invalid={!!errors.password}
+               className={authSecretInputClassName}
+-              placeholder=" "
++              placeholder="输入你的密码"
+               label={localize('com_auth_password')}
+               labelClassName={authLabelClassName}
+               controlsClassName="right-2"
+@@ -176,9 +175,9 @@ const LoginForm: React.FC<TLoginFormProps> = ({ onSubmit, startupConfig, error,
+             type="submit"
+             disabled={(requireCaptcha && !turnstileToken) || isSubmitting}
+             variant="submit"
+-            className="h-12 w-full rounded-2xl"
++            className="h-12 w-full rounded-xl"
+           >
+-            {isSubmitting ? <Spinner /> : localize('com_auth_continue')}
++            {isSubmitting ? <Spinner /> : '进入工作台'}
+           </Button>
+         </div>
+       </form>
+diff --git a/client/src/components/Chat/Input/ChatForm.tsx b/client/src/components/Chat/Input/ChatForm.tsx
+index 17fc2c9..d25a26a 100644
+--- a/client/src/components/Chat/Input/ChatForm.tsx
++++ b/client/src/components/Chat/Input/ChatForm.tsx
+@@ -1,7 +1,15 @@
+ import { memo, useRef, useMemo, useEffect, useState, useCallback } from 'react';
+ import { useWatch } from 'react-hook-form';
+ import { useRecoilState, useRecoilValue, useRecoilCallback } from 'recoil';
+-import { Constants, isAssistantsEndpoint, isAgentsEndpoint } from 'librechat-data-provider';
++import {
++  Constants,
++  LocalStorageKeys,
++  PermissionTypes,
++  Permissions,
++  isAssistantsEndpoint,
++  isAgentsEndpoint,
++} from 'librechat-data-provider';
++import { Globe } from 'lucide-react';
+ import { composerSurfaceClasses, composerSurfaceShadow, TextareaAutosize } from '@librechat/client';
+ import type { TChatProject, TMessage, TConversation } from 'librechat-data-provider';
+ import type { SetterOrUpdater } from 'recoil';
+@@ -22,6 +30,7 @@ import {
+   useTextarea,
+   useAutoSave,
+   useLocalize,
++  useHasAccess,
+   useRequiresKey,
+   useHandleKeyUp,
+   useQueryParams,
+@@ -71,7 +80,7 @@ import SendButton from './SendButton';
+ import EditBadges from './EditBadges';
+ import BadgeRow from './BadgeRow';
+ import Mention from './Mention';
+-import store from '~/store';
++import store, { ephemeralAgentByConvoId } from '~/store';
+ 
+ export function toRestoredComposerFile(
+   file: NonNullable<TMessage['files']>[number],
+@@ -204,6 +213,37 @@ const ChatForm = memo(function ChatForm({
+     [conversation?.conversationId],
+   );
+   const isNewConversation = conversationId === '' || conversationId === Constants.NEW_CONVO;
++  const [searchOptions, setSearchOptions] = useRecoilState(ephemeralAgentByConvoId(conversationId));
++  const searchEnabled = searchOptions?.web_search === true;
++  const canUseWebSearch = useHasAccess({
++    permissionType: PermissionTypes.WEB_SEARCH,
++    permission: Permissions.USE,
++  });
++  useEffect(() => {
++    if (
++      !canUseWebSearch ||
++      !startupConfig?.interface?.webSearch ||
++      searchOptions?.web_search !== undefined
++    )
++      return;
++    const stored = localStorage.getItem(
++      `${LocalStorageKeys.LAST_WEB_SEARCH_TOGGLE_}${conversationId}`,
++    );
++    setSearchOptions((previous) =>
++      previous?.web_search !== undefined
++        ? previous
++        : {
++            ...previous,
++            web_search: stored === null ? true : stored === 'true',
++          },
++    );
++  }, [
++    conversationId,
++    canUseWebSearch,
++    startupConfig?.interface?.webSearch,
++    searchOptions?.web_search,
++    setSearchOptions,
++  ]);
+   /**
+    * The quote feature merges excerpts server-side in `BaseClient.sendMessage`,
+    * which the Assistants endpoints bypass — so hide the UI there rather than
+@@ -656,7 +696,7 @@ const ChatForm = memo(function ChatForm({
+            composer overrides both with its own `transition-all`, and a reader who
+            asked for less motion gets the new position outright — this one is a
+            slide across the page rather than decoration. */
+-        'mx-auto flex w-full flex-row gap-3 transition-[max-width,margin-bottom] duration-300 motion-reduce:transition-none sm:px-2',
++        'orchestra-composer mx-auto flex w-full flex-row gap-3 transition-[max-width,margin-bottom] duration-300 motion-reduce:transition-none sm:px-2',
+         maximizeChatSpace ? 'max-w-full' : 'md:max-w-3xl xl:max-w-4xl',
+         bottomClearance,
+       )}
+@@ -734,7 +774,7 @@ const ChatForm = memo(function ChatForm({
+                    squared off at the bottom (`rounded-t-3xl`) and no disclaimer
+                    follows it — so the action row is the last thing in it, with no
+                    band of padding under the buttons. */
+-                'relative flex w-full flex-grow flex-col overflow-hidden rounded-t-3xl sm:rounded-3xl',
++                'orchestra-composer-surface relative flex w-full flex-grow flex-col overflow-hidden rounded-t-3xl sm:rounded-3xl',
+                 composerSurfaceClasses(),
+                 isTextAreaFocused ? composerSurfaceShadow.focused : composerSurfaceShadow.blurred,
+                 /* Temporary-chat accent is a ChatForm-only override, not part of
+@@ -876,6 +916,32 @@ const ChatForm = memo(function ChatForm({
+                     Array.isArray(conversation?.messages) && conversation.messages.length >= 1
+                   }
+                 />
++                {canUseWebSearch &&
++                  startupConfig?.interface?.webSearch &&
++                  !isAssistantsEndpoint(endpoint) && (
++                    <button
++                      type="button"
++                      aria-label={localize('com_orchestra_search_toggle')}
++                      aria-pressed={searchEnabled}
++                      disabled={disableInputs || isSubmitting}
++                      title={localize('com_orchestra_search_toggle_hint')}
++                      className="orchestra-secondary orchestra-search-toggle inline-flex items-center gap-1.5"
++                      onClick={() => {
++                        const value = !searchEnabled;
++                        setSearchOptions((previous) => ({ ...previous, web_search: value }));
++                        localStorage.setItem(
++                          `${LocalStorageKeys.LAST_WEB_SEARCH_TOGGLE_}${conversationId}`,
++                          JSON.stringify(value),
++                        );
++                      }}
++                    >
++                      <Globe size={15} />
++                      {localize('com_orchestra_search_toggle')} ·{' '}
++                      {localize(
++                        searchEnabled ? 'com_orchestra_search_on' : 'com_orchestra_search_off',
++                      )}
++                    </button>
++                  )}
+                 <CodeApprovalMenu
+                   conversation={conversation}
+                   addedConversation={addedConvo}
+@@ -886,6 +952,9 @@ const ChatForm = memo(function ChatForm({
+                   <PendingToolApprovalButton conversationId={conversationId} />
+                 )}
+                 <div className="grow" />
++                <span className="orchestra-composer-note hidden sm:block">
++                  {localize('com_orchestra_composer_hint')}
++                </span>
+                 <TokenUsage index={index} conversation={conversation} isSubmitting={isSubmitting} />
+                 {SpeechToText && (
+                   <AudioRecorder
+diff --git a/client/src/components/Chat/Input/SendButton.tsx b/client/src/components/Chat/Input/SendButton.tsx
+index 5f28684..835e6a4 100644
+--- a/client/src/components/Chat/Input/SendButton.tsx
++++ b/client/src/components/Chat/Input/SendButton.tsx
+@@ -1,6 +1,7 @@
+ import React, { forwardRef } from 'react';
+ import { useWatch } from 'react-hook-form';
+-import { composerSubmitClasses, SendIcon, TooltipAnchor } from '@librechat/client';
++import { composerSubmitClasses, TooltipAnchor } from '@librechat/client';
++import { ArrowUp } from 'lucide-react';
+ import type { Control } from 'react-hook-form';
+ import { isSubmittableMessage } from '~/utils';
+ import { useLocalize } from '~/hooks';
+@@ -29,7 +30,7 @@ const SubmitButton = React.memo(
+             type="submit"
+           >
+             <span className="" data-state="closed">
+-              <SendIcon size={24} />
++              <ArrowUp size={22} strokeWidth={1.7} aria-hidden="true" />
+             </span>
+           </button>
+         }
+diff --git a/client/src/components/Chat/Messages/Content/WebSearch.tsx b/client/src/components/Chat/Messages/Content/WebSearch.tsx
+index 9cec40d..de8ad49 100644
+--- a/client/src/components/Chat/Messages/Content/WebSearch.tsx
++++ b/client/src/components/Chat/Messages/Content/WebSearch.tsx
+@@ -87,6 +87,9 @@ export default function WebSearch({
+    *  persists as the settled label like the other tool cards. */
+   const intent = useToolCallIntent(args);
+   const { searchResults } = useSearchContext();
++  const researchIssue = attachments?.find(
++    (att) => att.type === Tools.web_search && att[Tools.web_search]?.error,
++  )?.[Tools.web_search]?.error;
+   const error = (typeof output === 'string' && isError(output)) || runStepStatus === 'failed';
+   const legacyError =
+     !error && typeof output === 'string' && output.toLowerCase().includes('error processing');
+@@ -223,7 +226,7 @@ export default function WebSearch({
+     });
+   };
+ 
+-  if (error && runStepStatus !== 'cancelled') {
++  if (error && !researchIssue && runStepStatus !== 'cancelled') {
+     return (
+       <ToolCall
+         name={Tools.web_search}
+@@ -246,7 +249,12 @@ export default function WebSearch({
+ 
+   if (complete) {
+     const hasSourceData = sourceCount > 0;
+-    const completedText = intent ?? localize('com_ui_web_searched');
++    let completedText = intent ?? localize('com_ui_web_searched');
++    if (researchIssue) {
++      completedText = localize('com_orchestra_search_failed');
++      if (allSources.some((source) => source.processed))
++        completedText = localize('com_orchestra_search_partial');
++    }
+     const query = parseJsonField(args, 'query');
+     const hasDetails = !!query || !!answerBox;
+ 
+@@ -255,6 +263,11 @@ export default function WebSearch({
+         <span className="sr-only" aria-live="polite" aria-atomic="true">
+           {completedText}
+         </span>
++        {researchIssue && (
++          <p role="status" className="mb-2 text-xs text-text-secondary">
++            {localize('com_orchestra_search_issue')}
++          </p>
++        )}
+         <div className="relative flex h-5 items-center gap-1.5">
+           <Button
+             variant="ghost"
+diff --git a/client/src/components/Chat/Messages/ui/MessageRender.tsx b/client/src/components/Chat/Messages/ui/MessageRender.tsx
+index 35f98a2..de92b8e 100644
+--- a/client/src/components/Chat/Messages/ui/MessageRender.tsx
++++ b/client/src/components/Chat/Messages/ui/MessageRender.tsx
+@@ -19,6 +19,7 @@ import SiblingSwitch from '~/components/Chat/Messages/SiblingSwitch';
+ import HoverButtons from '~/components/Chat/Messages/HoverButtons';
+ import MessageRow from '~/components/Chat/Messages/ui/MessageRow';
+ import MessageIcon from '~/components/Chat/Messages/MessageIcon';
++import Brand from '~/components/Orchestra/Brand';
+ import Wakeup from '~/components/Chat/Messages/Content/Wakeup';
+ import SubRow from '~/components/Chat/Messages/SubRow';
+ import { MessageContext } from '~/Providers';
+@@ -161,8 +162,14 @@ const MessageRender = memo(function MessageRender({
+   return (
+     <MessageRow
+       id={msg.messageId}
+-      icon={<MessageIcon iconData={iconData} assistant={assistant} agent={agent} />}
+-      label={messageLabel ?? ''}
++      icon={
++        msg.isCreatedByUser ? (
++          <MessageIcon iconData={iconData} assistant={assistant} agent={agent} />
++        ) : (
++          <Brand compact />
++        )
++      }
++      label={msg.isCreatedByUser ? (messageLabel ?? '') : 'OrchestrAI'}
+       hoverLabel={getHeaderHoverLabel(
+         hasConfiguredSender,
+         agent?.model,
+diff --git a/client/src/components/Conversations/Convo.tsx b/client/src/components/Conversations/Convo.tsx
+index 40dd746..7573664 100644
+--- a/client/src/components/Conversations/Convo.tsx
++++ b/client/src/components/Conversations/Convo.tsx
+@@ -1,6 +1,6 @@
+ import React, { memo, useState, useEffect, useRef, useMemo, useCallback } from 'react';
+ import { useDrag } from 'react-dnd';
+-import { Link2 } from 'lucide-react';
++import { Link2, MessageSquare } from 'lucide-react';
+ import { useRecoilValue } from 'recoil';
+ import { useParams } from 'react-router-dom';
+ import { Constants } from 'librechat-data-provider';
+@@ -13,7 +13,6 @@ import {
+   useUpdateConversationMutation,
+ } from '~/data-provider';
+ import { useNavigateToConvo, useLocalize, useShiftKey } from '~/hooks';
+-import ConversationEndpointIcon from './ConversationEndpointIcon';
+ import { focusableInRow, resolveRowBeside } from './focus';
+ import { areConversationRenderPropsEqual } from './utils';
+ import { cn, logger, setDocumentTitle } from '~/utils';
+@@ -357,7 +356,12 @@ function Conversation({
+           localize={localize}
+           keyShortcuts={keyShortcuts}
+         >
+-          <ConversationEndpointIcon conversation={conversation} size={20} context="menu-item" />
++          <MessageSquare
++            size={16}
++            strokeWidth={1.5}
++            className="text-text-tertiary"
++            aria-hidden="true"
++          />
+         </ConvoLink>
+       )}
+       {isSharedBadgeVisible && (
+diff --git a/client/src/components/UnifiedSidebar/UnifiedSidebar.tsx b/client/src/components/UnifiedSidebar/UnifiedSidebar.tsx
+index 22b6f70..c7f3f92 100644
+--- a/client/src/components/UnifiedSidebar/UnifiedSidebar.tsx
++++ b/client/src/components/UnifiedSidebar/UnifiedSidebar.tsx
+@@ -36,7 +36,7 @@ function getInitialWidth(): number {
+  * and the active panel — not the sidebar shell, resize logic, or icon strip.
+  * This works because Recoil subscriptions don't propagate to parent components.
+  */
+-function SidebarChatProvider({ children }: { children: ReactNode }) {
++export function SidebarChatProvider({ children }: { children: ReactNode }) {
+   const chatHelpers = useChatHelpers(0);
+   const sidebarFormMethods = useForm<ChatFormValues>({ defaultValues: { text: '' } });
+   return (
+diff --git a/client/src/locales/en/translation.json b/client/src/locales/en/translation.json
+index 2d81936..0a79dfa 100644
+--- a/client/src/locales/en/translation.json
++++ b/client/src/locales/en/translation.json
+@@ -1,4 +1,11 @@
+ {
++  "com_orchestra_search_failed": "Web research did not complete",
++  "com_orchestra_search_partial": "Web research partially completed",
++  "com_orchestra_search_issue": "Web research was not fully completed. Check the explanation and sources below; unread pages are not evidence.",
++  "com_orchestra_search_toggle": "Web search",
++  "com_orchestra_search_toggle_hint": "When on, search public sources as needed. When off, no search requests are made.",
++  "com_orchestra_search_on": "On",
++  "com_orchestra_search_off": "Off",
+   "com_ui_background_tasks": "Background tasks",
+   "com_ui_background_tasks_cancel_disabled": "Stopping background tools is not enabled on this server",
+   "com_ui_background_tasks_checked": "Checked background tasks",
+@@ -3057,5 +3064,83 @@
+   "com_insights_invalid_date_range": "Choose an end date after the start date, within {{days}} days.",
+   "com_insights_sparkline_accessibility": "{{label}} over time",
+   "com_nav_mobile_drawer_strip": "Show chat beside the sidebar on mobile",
+-  "com_nav_mobile_drawer_strip_info": "The sidebar stops short of the edge so a strip of the conversation stays visible. Tapping it closes the sidebar."
++  "com_nav_mobile_drawer_strip_info": "The sidebar stops short of the edge so a strip of the conversation stays visible. Tapping it closes the sidebar.",
++  "com_orchestra_context": "工作上下文",
++  "com_orchestra_hint": "OrchestrAI · 对话与工作流，保持同一份上下文。",
++  "com_orchestra_session": "当前会话",
++  "com_orchestra_files": "我的文件",
++  "com_orchestra_empty": "还没有上传文件",
++  "com_orchestra_canvas": "打开 / 收起工作流画布",
++  "com_orchestra_canvas_hint": "画布执行尚未接通；当前可进行聊天与文件问答。",
++  "com_orchestra_badge": "预览",
++  "com_orchestra_brand": "OrchestrAI",
++  "com_orchestra_title": "Orchestra",
++  "com_orchestra_trial": "OrchestrAI",
++  "com_orchestra_task_context": "Task context",
++  "com_orchestra_context_eyebrow": "CONTEXT",
++  "com_orchestra_context_intro": "Give every step a clear basis.",
++  "com_orchestra_context_hint": "Keep this conversation’s goals and materials in view.",
++  "com_orchestra_current_goal": "Starting point",
++  "com_orchestra_goal_hint": "Describe your goal and refine it as you go.",
++  "com_orchestra_context_error": "Could not load the context.",
++  "com_orchestra_retry": "Retry",
++  "com_orchestra_work_status": "Work status",
++  "com_orchestra_workflow_status_hint": "Plan and execution status will appear when workflows are connected",
++  "com_orchestra_view_canvas": "View workflow canvas",
++  "com_orchestra_reference_files": "Reference materials",
++  "com_orchestra_no_files": "No materials added yet",
++  "com_orchestra_upload_hint": "Upload files from the conversation composer",
++  "com_orchestra_file_types": "PDF / TXT / PNG / JPG / WebP",
++  "com_orchestra_file_limits": "10 MB per file · Up to 5 files · 25 MB total",
++  "com_orchestra_public_sources": "Public sources",
++  "com_orchestra_research_context_hint": "Research has separate records. You can add results to your conversation.",
++  "com_orchestra_open_research": "Open web research",
++  "com_orchestra_task_header_hint": "Move your work forward through conversation, materials and research",
++  "com_orchestra_landing_eyebrow": "ORCHESTRA / YOUR WORKBENCH",
++  "com_orchestra_landing_title_first": "Turn ideas",
++  "com_orchestra_landing_title_last": "into outcomes.",
++  "com_orchestra_landing_description": "Start with a question, a document, or a piece of work to move forward.",
++  "com_orchestra_choose_start": "Choose a starting point",
++  "com_orchestra_try_label": "Try this",
++  "com_orchestra_try_example": "“Use this brief to research opportunities for a new product and suggest next steps.”",
++  "com_orchestra_research_eyebrow": "RESEARCH / PUBLIC SOURCES",
++  "com_orchestra_research_title": "Find the evidence. Then form a view.",
++  "com_orchestra_research_intro": "Search, read and cite in one workbench.",
++  "com_orchestra_research_prompt": "What would you like to research?",
++  "com_orchestra_research_failure_hint": "Restricted pages are marked unread. No evidence means no conclusion.",
++  "com_orchestra_research_draft_hint": "Research records are saved separately. Added results become a draft for you to review.",
++  "com_orchestra_reload": "Reload",
++  "com_orchestra_loading_research": "Loading research records…",
++  "com_orchestra_research_empty_title": "Start with a specific question",
++  "com_orchestra_research_empty_hint": "Your research process, results and sources will be saved here.",
++  "com_orchestra_research_record": "Research record",
++  "com_orchestra_cancel_research": "Cancel research",
++  "com_orchestra_research_cancel_hint": "Research was cancelled. Requests already sent to the provider may still incur charges.",
++  "com_orchestra_sources_evidence": "Sources and evidence",
++  "com_orchestra_fetched_at": "Retrieved:",
++  "com_orchestra_import_draft": "Add to current conversation",
++  "com_orchestra_delete_research_prompt": "Delete this research record?",
++  "com_orchestra_confirm_delete": "Delete",
++  "com_orchestra_keep": "Keep",
++  "com_orchestra_new_task": "New task",
++  "com_orchestra_workspace": "Workspace",
++  "com_orchestra_updating": "Updating",
++  "com_orchestra_loading_tasks": "Loading tasks…",
++  "com_orchestra_tasks_error": "Could not load tasks.",
++  "com_orchestra_personal_workspace": "Personal workspace",
++  "com_orchestra_not_connected": "Not connected yet",
++  "com_orchestra_return_chat": "Return to conversation",
++  "com_orchestra_auth_title_first": "Turn one person’s ideas",
++  "com_orchestra_auth_title_last": "into a clear sequence of actions.",
++  "com_orchestra_auth_description_first": "Conversation, materials, workflows and outcomes,",
++  "com_orchestra_auth_description_last": "brought together in one workbench.",
++  "com_orchestra_ideas": "Ideas",
++  "com_orchestra_materials": "Materials",
++  "com_orchestra_actions": "Actions",
++  "com_orchestra_auth_hint": "Continue the work you started.",
++  "com_orchestra_connecting": "Connecting to your workbench…",
++  "com_orchestra_composer_hint": "Send your materials and goal together",
++  "com_orchestra_goal_origin": "From your first message in this conversation",
++  "com_orchestra_filter_task_titles": "Filter task titles",
++  "com_orchestra_filter_scope": "Filters loaded titles only. Load more to include older tasks."
+ }
+diff --git a/client/src/locales/zh-Hans/translation.json b/client/src/locales/zh-Hans/translation.json
+index 6e8b80d..831b849 100644
+--- a/client/src/locales/zh-Hans/translation.json
++++ b/client/src/locales/zh-Hans/translation.json
+@@ -1,4 +1,11 @@
+ {
++  "com_orchestra_search_failed": "联网研究未完成",
++  "com_orchestra_search_partial": "联网研究部分完成",
++  "com_orchestra_search_issue": "联网研究未完整完成，请查看下方原因和来源；未读取网页不会作为正文证据。",
++  "com_orchestra_search_toggle": "联网搜索",
++  "com_orchestra_search_toggle_hint": "开启后按需搜索公开信息；关闭后不调用搜索。",
++  "com_orchestra_search_on": "开启",
++  "com_orchestra_search_off": "关闭",
+   "chat_direction_left_to_right": "从左到右",
+   "chat_direction_right_to_left": "从右到左",
+   "com_a11y_ai_composing": "AI 仍在撰写中。",
+@@ -1444,5 +1451,73 @@
+   "com_ui_zoom_in": "放大",
+   "com_ui_zoom_level": "缩放级别",
+   "com_ui_zoom_out": "缩小",
+-  "com_user_message": "您"
++  "com_user_message": "您",
++  "com_orchestra_brand": "OrchestrAI",
++  "com_orchestra_task_context": "任务上下文",
++  "com_orchestra_context_eyebrow": "CONTEXT",
++  "com_orchestra_context_intro": "让每一步都有依据。",
++  "com_orchestra_context_hint": "当前对话的目标与资料，在这里保持清晰。",
++  "com_orchestra_current_goal": "任务起点",
++  "com_orchestra_goal_hint": "描述目标，逐步完善信息。",
++  "com_orchestra_context_error": "上下文读取失败。",
++  "com_orchestra_retry": "重试",
++  "com_orchestra_work_status": "工作状态",
++  "com_orchestra_workflow_status_hint": "计划与执行状态将在工作流接通后显示",
++  "com_orchestra_view_canvas": "查看工作流画布",
++  "com_orchestra_reference_files": "参考资料",
++  "com_orchestra_no_files": "还没有添加资料",
++  "com_orchestra_upload_hint": "通过对话输入区上传文件",
++  "com_orchestra_file_types": "PDF / TXT / PNG / JPG / WebP",
++  "com_orchestra_file_limits": "单个 10 MB · 每条最多 5 个 · 合计 25 MB",
++  "com_orchestra_public_sources": "公开来源",
++  "com_orchestra_research_context_hint": "联网研究保留独立记录，结果可手动带入对话。",
++  "com_orchestra_open_research": "打开联网研究",
++  "com_orchestra_task_header_hint": "对话、资料与研究，让工作逐步展开",
++  "com_orchestra_landing_eyebrow": "ORCHESTRA / 你的工作台",
++  "com_orchestra_landing_title_first": "把想法，",
++  "com_orchestra_landing_title_last": "编排成成果。",
++  "com_orchestra_landing_description": "从一个问题、一份资料，或一项需要协作完成的工作开始。",
++  "com_orchestra_choose_start": "选择一个起点",
++  "com_orchestra_try_label": "试试看",
++  "com_orchestra_try_example": "“结合这份简报，帮我调研新品的机会，并给出行动建议。”",
++  "com_orchestra_research_eyebrow": "RESEARCH / 公开资料",
++  "com_orchestra_research_title": "先找到依据，再形成判断。",
++  "com_orchestra_research_intro": "检索、读取与引用，在一个工作台里展开。",
++  "com_orchestra_research_prompt": "你想研究什么？",
++  "com_orchestra_research_failure_hint": "受限网页会显示未读取；缺少证据时不会生成结论。",
++  "com_orchestra_research_draft_hint": "研究记录独立保存。带入对话后，内容会作为待发送草稿供你检查。",
++  "com_orchestra_reload": "重新读取",
++  "com_orchestra_loading_research": "正在读取研究记录…",
++  "com_orchestra_research_empty_title": "从一个具体的问题开始",
++  "com_orchestra_research_empty_hint": "你的研究过程、结果与来源会保存在这里。",
++  "com_orchestra_research_record": "研究记录",
++  "com_orchestra_cancel_research": "取消研究",
++  "com_orchestra_research_cancel_hint": "研究已取消。已发送到服务商的请求可能仍计费用。",
++  "com_orchestra_sources_evidence": "来源与证据",
++  "com_orchestra_fetched_at": "获取时间：",
++  "com_orchestra_import_draft": "带入当前对话",
++  "com_orchestra_delete_research_prompt": "删除这条研究记录？",
++  "com_orchestra_confirm_delete": "确认删除",
++  "com_orchestra_keep": "保留",
++  "com_orchestra_new_task": "新建任务",
++  "com_orchestra_workspace": "工作空间",
++  "com_orchestra_updating": "更新中",
++  "com_orchestra_loading_tasks": "正在读取任务…",
++  "com_orchestra_tasks_error": "任务读取失败。",
++  "com_orchestra_personal_workspace": "个人工作空间",
++  "com_orchestra_not_connected": "尚未接入",
++  "com_orchestra_return_chat": "返回对话工作台",
++  "com_orchestra_auth_title_first": "把一个人的想法，",
++  "com_orchestra_auth_title_last": "变成一组有序的行动。",
++  "com_orchestra_auth_description_first": "对话、资料、工作流与成果，",
++  "com_orchestra_auth_description_last": "在同一个工作台里逐步展开。",
++  "com_orchestra_ideas": "想法",
++  "com_orchestra_materials": "资料",
++  "com_orchestra_actions": "行动",
++  "com_orchestra_auth_hint": "继续推进你正在做的工作。",
++  "com_orchestra_connecting": "正在连接工作台…",
++  "com_orchestra_composer_hint": "资料与目标，可以一起发送",
++  "com_orchestra_goal_origin": "来自当前对话的第一条消息",
++  "com_orchestra_filter_task_titles": "筛选任务标题",
++  "com_orchestra_filter_scope": "仅筛选已加载的标题，可查看更多任务。"
+ }
+diff --git a/client/src/routes/index.tsx b/client/src/routes/index.tsx
+index 78f2e98..d85aa19 100644
+--- a/client/src/routes/index.tsx
++++ b/client/src/routes/index.tsx
+@@ -135,6 +135,10 @@ export const router = createBrowserRouter(
+               path: 'c/:conversationId?',
+               element: <ChatRoute />,
+             },
++            {
++              path: 'orchestra',
++              element: <Navigate to="/c/new" replace />,
++            },
+             {
+               path: 'search',
+               element: <Search />,
+diff --git a/client/vite.config.ts b/client/vite.config.ts
+index 5a279a9..4e73e1d 100644
+--- a/client/vite.config.ts
++++ b/client/vite.config.ts
+@@ -151,11 +151,11 @@ export default defineConfig(({ command }) => ({
+       },
+       includeAssets: [],
+       manifest: {
+-        name: 'LibreChat',
+-        short_name: 'LibreChat',
++        name: 'OrchestrAI',
++        short_name: 'OrchestrAI',
+         display: 'standalone',
+-        background_color: '#000000',
+-        theme_color: '#009688',
++        background_color: '#f5f1e8',
++        theme_color: '#f5f1e8',
+         icons: [
+           {
+             src: 'assets/favicon-32x32.png',
