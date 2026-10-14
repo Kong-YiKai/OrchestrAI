@@ -2,7 +2,8 @@
 
 Each image is keyed by a hash of its build inputs. With --reuse REGISTRY, an image
 already built and released from main for the same inputs is pulled instead of rebuilt
-(tag `inputs-<hash>`), so a change to one service only rebuilds that service.
+(tag `inputs-<hash>`) and relabeled with the current revision, so a change to one service
+only rebuilds that service.
 """
 import argparse
 import hashlib
@@ -70,7 +71,12 @@ def main():
         if args.reuse:
             image = f'{args.reuse}/{service}:inputs-{hashes[service]}'
             if run('docker', 'pull', '-q', image, check=False, quiet=True) == 0:
-                run('docker', 'tag', image, f'orchestrai/{service}:local')
+                # deploy/release.py requires every image to carry the revision it was tested at.
+                # Relabeling adds only a new config; all layers stay identical to the reused image.
+                subprocess.run(['docker', 'build', '-q', '--label',
+                                'org.opencontainers.image.revision=' + os.getenv('BUILD_REVISION', 'local'),
+                                '-t', f'orchestrai/{service}:local', '-'],
+                               input=f'FROM {image}\n'.encode(), cwd=ROOT, check=True)
                 report[service] = 'reused ' + hashes[service]
                 continue
         build(service)
