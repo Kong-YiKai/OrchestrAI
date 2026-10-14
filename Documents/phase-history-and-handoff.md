@@ -15,6 +15,17 @@
 
 ## 历史（倒序）
 
+### 2026-10-15 R4 生产实测与聊天联网修复
+- PR #42 → develop、PR #43 → main（`4e46bbd`）：Reader 回退上线，CI、发布、部署全部成功。
+- 生产实测（普通聊天）：天气查询真实调用研究并给出具体日期和来源；知乎专栏经 Reader 读取成功；关闭联网后的追问不重新搜索。
+- 实测发现三个问题，本次一并修复（只改 overlay 的 `research.ts`、`client.patch` 中的 `tilde.ts`、`server.patch` 中的一行调用，以及测试）：
+  1. 模型偶尔把 `\n` 当字面文字输出，导致 Markdown 失效。原因是证据以转义 JSON 传入；改为 JSON 头加纯文本正文块，并在指令中要求正常换行。
+  2. 聊天工具把每个来源的正文截断到 3000 字，模型误报“抓取中断”。改为单来源 12000 字、多来源共享 12000 字，并带 `truncated` 标记。
+  3. 用户发小红书链接时，模型没有调用工具就用英文拒答。改为：消息中有链接时，指令明确要求先用该完整链接调用 web_search，并用用户的语言回答。
+- 另外修复数值范围显示：`20~25℃` 这类范围成对出现时被渲染成删除线，改为范围波浪号使用 `∼` 显示。
+- `prepare-upstreams.py` 在生成目录中提交原始上游并打 `upstream` 标签，刷新补丁只需一条 `git diff upstream` 命令（见 AGENTS.md）。
+- 本地验证：chat 工具契约 9 项通过（新增 2 项），客户端 `tsc --noEmit` 通过，三份补丁能干净应用。
+
 ### 2026-10-14 工程结构调整与规则精简
 - 拆分 `deploy/patches/librechat-ui.patch`（334 KB）为 `services/chat/overlay/` 和三份小补丁（client、server、dependencies），外加 `remove` 删除列表；`rag.patch` 移到 `services/ingestion/upstream.patch`。等价验证：LibreChat 生成树 5624 个文件逐字节一致，RAG 树一致。
 - `prepare-upstreams.py`：生成目录在输入变化后自动重建；overlay 替换上游文件时必须声明上游哈希。

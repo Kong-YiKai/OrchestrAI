@@ -590,6 +590,26 @@ index 78f2e98..d85aa19 100644
              {
                path: 'search',
                element: <Search />,
+diff --git a/client/src/utils/tilde.ts b/client/src/utils/tilde.ts
+index e2b4384..299372b 100644
+--- a/client/src/utils/tilde.ts
++++ b/client/src/utils/tilde.ts
+@@ -46,9 +46,14 @@ const TILDE_OPERATOR = '∼';
+  * A backslash escape cannot help — markdown decodes `\~` back to `~` before supersub runs —
+  * so the glyph itself must change.
+  */
++// OrchestrAI: numeric ranges such as `20~25℃` or `5~10%` are common in Chinese prose and web
++// evidence. Two of them in one paragraph were paired into strikethrough/subscript. A tilde
++// between a number (optionally followed by a unit sign) and another number is a range.
++const RANGE_TILDE_REGEX = /(?<=\d[°℃℉%]?)~(?=[ \t]?[-−+]?\d)/g;
++
+ export function normalizeApproxTildes(value: string): string {
+   if (value.indexOf('~') === -1) return value;
+-  return value.replace(APPROX_TILDE_REGEX, TILDE_OPERATOR);
++  return value.replace(APPROX_TILDE_REGEX, TILDE_OPERATOR).replace(RANGE_TILDE_REGEX, TILDE_OPERATOR);
+ }
+ 
+ function normalizeTextNodes(node: Node, parent?: Node): void {
 diff --git a/client/vite.config.ts b/client/vite.config.ts
 index 5a279a9..4e73e1d 100644
 --- a/client/vite.config.ts

@@ -20,7 +20,8 @@ const call = { type: 'tool_call', name: 'web_search', id: 'call-1', args: { quer
 const config = { metadata: { run_id: 'turn-1', thread_id: 'convo-1', user_id: 'alice' }, toolCall: { id: 'call-1', name: 'web_search', turn: 0 } };
 const source = { id: 'S1', url: 'https://example.com/doc', title: 'Example', state: 'read', evidence: 'Only this actual fetched evidence.', fetched_at: '2026-10-13T00:00:00Z' };
 function reply(value, status = 200) { return new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } }); }
-function payload(message) { return JSON.parse(message.content.replace(/^Error processing tool: /, '')); }
+function payload(message) { return JSON.parse(message.content.replace(/^Error processing tool: /, '').split('\n\n<source')[0]); }
+function evidence(message, sourceId) { const m = message.content.match(new RegExp(`<source id="${sourceId}"[^>]*>\\n([\\s\\S]*?)\\n</source>`)); return m ? m[1] : null; }
 function inspect(options) {
   const principal = jwt.verify(options.headers.Authorization.slice(7), process.env.RESEARCH_DELEGATION_SECRET, {
     algorithms: ['HS256'], issuer: 'orchestrai-chat', audience: 'orchestrai-research',
@@ -48,7 +49,7 @@ test('chat uses owned delegation, stable operation keys, real evidence and upstr
   const results = await Promise.all([0, 1].map(i => tool.invoke({ ...call, id: 'call-'+i }, { ...config, toolCall: { ...config.toolCall, id: 'call-'+i } })));
   for (const result of results) {
     const value = payload(result);
-    assert.equal(value.status, 'completed'); assert.equal(value.sources[0].evidence, source.evidence);
+    assert.equal(value.status, 'completed'); assert.equal(evidence(result, 'S1'), source.evidence); assert.equal(value.sources[0].truncated, false);
     assert.equal(result.artifact.web_search.organic[0].link, source.url);
   }
   assert.equal(callbacks, 2); assert.equal(operations[0], operations[1]);
@@ -58,7 +59,7 @@ test('chat uses owned delegation, stable operation keys, real evidence and upstr
 test('unread pages never become evidence; budget/busy errors stay failures', async () => {
   global.fetch = async () => reply({ id, status: 'partial', error: 'no_readable_sources', result: { sources: [{ ...source, state: 'unavailable', evidence: 'NOT BODY', snippet: 'UNREAD SUMMARY MUST NOT REACH MODEL' }], claims: [] } }, 202);
   const result = await createOrchestraResearchTool(req).invoke(call, config);
-  assert.equal(payload(result).sources[0].evidence, '');
+  assert.equal(evidence(result, 'S1'), null); assert.doesNotMatch(result.content, /NOT BODY|UNREAD SUMMARY/);
   assert.equal('snippet' in payload(result).sources[0], false);
   assert.equal(result.artifact.web_search.error, 'no_readable_sources');
   global.fetch = async () => reply({ error: 'research_busy' }, 429);
@@ -111,4 +112,19 @@ test('actual ephemeral chat loader respects the web switch and injects dated ins
     assert.equal(agent.tools.includes('web_search'), enabled);
     assert.equal((agent.instructions || '').includes('Asia/Shanghai'), enabled);
   }
+});
+test('a single long page reaches the model as readable text with an explicit truncation flag', async () => {
+  const long = '第一行\n' + '云原生'.repeat(5000);
+  global.fetch = async (_url, options) => options.method === 'POST' ? reply({ id, status: 'queued' }, 202)
+    : reply({ id, status: 'completed', result: { sources: [{ ...source, evidence: long }], claims: [{ text: 'x', source_id: 'S1', quote: '第一行' }] } });
+  const result = await createOrchestraResearchTool(req).invoke(call, config);
+  const body = evidence(result, 'S1');
+  assert.equal(body.length, 12000); assert.ok(body.startsWith('第一行\n'));
+  assert.equal(payload(result).sources[0].truncated, true); assert.equal(payload(result).sources[0].evidence_chars, 12000);
+});
+test('a user-supplied link makes the first web_search call mandatory', async () => {
+  const request = { user: req.user, body: { text: '总结 https://zhuanlan.zhihu.com/p/150190166。', ephemeralAgent: { web_search: true } }, config: { endpoints: { custom: [{ name: 'DeepSeek' }] } } };
+  const agent = await loadEphemeralAgent({ req: request, endpoint: 'DeepSeek', model_parameters: { model: 'deepseek-flash' } }, {});
+  assert.match(agent.instructions, /必须先调用 web_search，query 填写该完整链接/);
+  assert.match(agent.instructions, /提供了链接：https:\/\/zhuanlan\.zhihu\.com\/p\/150190166。回答前/);
 });
