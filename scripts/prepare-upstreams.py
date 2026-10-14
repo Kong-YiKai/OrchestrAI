@@ -51,8 +51,15 @@ def extract(archive, destination):
 
 
 def customize(spec, destination):
-    # Separate Git context avoids silently ignoring paths relative to the parent repo.
+    # Separate Git context avoids silently ignoring paths relative to the parent repo. The
+    # pristine upstream is committed and tagged `upstream`, so after editing an upstream file
+    # in .build a patch is refreshed with `git diff upstream -- <paths>` (see AGENTS.md).
+    git = ['git', '-c', 'user.name=prepare-upstreams', '-c', 'user.email=prepare@orchestrai.invalid',
+           '-c', 'core.autocrlf=false', '-C', str(destination)]
     subprocess.run(['git', 'init', '--quiet', str(destination)], check=True)
+    subprocess.run(git + ['add', '-A'], check=True)
+    subprocess.run(git + ['commit', '--quiet', '--no-verify', '-m', 'upstream'], check=True)
+    subprocess.run(git + ['tag', 'upstream'], check=True)
     for patch in spec.get('patches', []):
         subprocess.run(['git', 'apply', '--check', str(ROOT / patch)], cwd=destination, check=True)
         subprocess.run(['git', 'apply', str(ROOT / patch)], cwd=destination, check=True)

@@ -36,7 +36,11 @@
 | 工作流服务 | `services/workflow/**` | 该服务 npm `check` + `scripts/test-services.py` |
 | 文档解析/RAG | `services/ingestion/upstream.patch`、`migrations/` | `--service ingestion` 构建 |
 
-改 overlay 中替换上游文件的那几个文件（`deploy/upstreams.json` 的 `replaces` 列表）不需要改哈希；只有升级 LibreChat 版本时才需要重新核对。`.build/` 是生成目录，`scripts/prepare-upstreams.py` 会在补丁或 overlay 变化后自动重建，不要手动修改 `.build/` 里的文件。
+**改上游文件（刷新补丁）的方法：** 先运行 `python scripts/prepare-upstreams.py`，生成的 `.build/librechat` 中已提交原始上游并打了 `upstream` 标签。在 `.build/librechat` 中直接修改上游文件，再执行：
+`git diff upstream -- $(grep '^+++ b/' ../../services/chat/patches/client.patch | cut -c7-) [新增的路径] > ../../services/chat/patches/client.patch`
+（server、dependencies 同理），然后重新运行 prepare，确认补丁能干净应用。
+
+改 overlay 中替换上游文件的那几个文件（`deploy/upstreams.json` 的 `replaces` 列表）不需要改哈希；只有升级 LibreChat 版本时才需要重新核对。`.build/` 是生成目录，补丁或 overlay 变化后 prepare 会自动重建并覆盖它。除上面刷新补丁的临时修改外，不要把 `.build/` 当作源码；所有改动都必须落到 overlay 或补丁里。
 
 **需要服务器管理员同步的文件。** 以下文件参与生产配置摘要（`deploy/release.py` 的 `config_digest`），改动后服务器 `/opt/orchestrai/deploy` 必须由管理员同步，否则自动部署会拒绝：`deploy/compose*.yml`、`postgres-init.sh`、`ingestion-init.sh`、`research-init.sh`、`mongo-init.js`、`infrastructure.Dockerfile`、`librechat.yaml`、`release.py`、`scripts/test-product.py`。除非任务本身就是改部署配置，否则不要碰这些文件；确实要改时，单独开 PR，并告诉用户需要做的手动操作。
 

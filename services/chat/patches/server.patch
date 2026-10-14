@@ -142,7 +142,7 @@ index 8477c3b..566b271 100644
    app.use('/api/convos', routes.convos);
    app.use('/api/traces', routes.traces);
 diff --git a/packages/api/src/agents/load.ts b/packages/api/src/agents/load.ts
-index 7ae1633..6c81def 100644
+index 7ae1633..6a2fe61 100644
 --- a/packages/api/src/agents/load.ts
 +++ b/packages/api/src/agents/load.ts
 @@ -1,4 +1,5 @@
@@ -151,17 +151,13 @@ index 7ae1633..6c81def 100644
  import {
    Tools,
    Constants,
-@@ -181,7 +182,13 @@ export async function loadEphemeralAgent(
+@@ -181,7 +182,9 @@ export async function loadEphemeralAgent(
  
    const result: Partial<Agent> = {
      id: ephemeralId,
 -    instructions,
 +    instructions: process.env.RESEARCH_API_URL
-+      ? `${instructions ?? ''}\n${
-+          ephemeralAgent?.web_search === true
-+            ? orchestraResearchContext()
-+            : '本轮联网搜索已关闭，不得声称进行了新的搜索或网页读取。可使用已有会话证据，但不能称为刚刚查询的实时结果。'
-+        }`
++      ? `${instructions ?? ''}\n${orchestraResearchContext(req.body?.text, ephemeralAgent?.web_search === true)}`
 +      : instructions,
      provider: endpoint,
      model_parameters: safeModelParameters as AgentModelParameters,
