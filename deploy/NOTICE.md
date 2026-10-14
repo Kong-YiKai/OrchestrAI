@@ -35,3 +35,7 @@ braces parser guard is applied and checked during image build pending an upstrea
 release. Raw security reports retain all findings. Exact, expiring runtime
 assessments are in `vulnerability-policy.json`; changing execution boundaries or
 upgrading versions requires reassessment. This is not a zero-vulnerability claim.
+
+## External reader API
+
+Jina Reader is used through its fixed anonymous HTTPS API after a known direct-page Tavily extraction failure. API contract verified 2026-10-14 against [official Reader documentation](https://jina.ai/reader/) and [reader repository](https://github.com/jina-ai/reader). The open source repository is Apache-2.0; its code is not bundled or self-hosted here. API availability/rate limits and service terms remain separate from the software license. No paid Reader key is sent or configured.

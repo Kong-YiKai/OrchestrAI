@@ -69,7 +69,7 @@ def reserve(model, amount, request_id=None, credits=0, request_hash=None):
         # Transport receipts are a short-lived replay cache. Durable research
         # evidence lives in the research DB; accounting/uncertain-call fences
         # remain after receipts expire, so expiry never authorizes a paid retry.
-        if credits:
+        if request_hash is not None:
             cutoff = (now - timedelta(days=35)).isoformat()
             db.execute('UPDATE provider_calls SET response=NULL WHERE response IS NOT NULL '
                        'AND id IN (SELECT id FROM calls WHERE created_at<?)', (cutoff,))
@@ -93,7 +93,7 @@ def reserve(model, amount, request_id=None, credits=0, request_hash=None):
                 db.execute('UPDATE credit_periods SET credits=credits+? WHERE period=?', (credits, period))
         db.execute('INSERT INTO calls VALUES (?,?,?,?,NULL,?,?,?)',
                    (request_id, day, month, amount, model, 'reserved', now.isoformat()))
-        if credits:
+        if request_hash is not None:
             db.execute('INSERT INTO provider_calls VALUES (?,?,?,NULL,NULL)', (request_id, request_hash, credits))
         db.commit()
         return request_id
