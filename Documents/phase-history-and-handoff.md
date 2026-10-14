@@ -4,18 +4,19 @@
 
 ## 交接（随每次交付更新）
 
-- **当前阶段：** R4 收尾。剩余工作见 overview 第 4 节“R4 剩余工作”。
-- **Git：** 生产版本为 main `0c4f93e`；Reader 回退在分支 `codex/r4-reader-fallback`（PR #42）。
+- **当前阶段：** R4 已完成（待用户手动验收），下一阶段 R5（画布接真实 graph、Deep Agents JS 评估、成果库）。
+- **Git：** 生产版本为 main `a51fe84`；develop 与 main 内容一致。分支均已合并，旧 `codex/*` 分支可删除。
 - **服务器：** 腾讯云 Ubuntu 22.04，2 核 / 4 GB，与 Tarot、BuddyUp、共享 Nginx（`/opt/shared-ingress`）同机。部署目录 `/opt/orchestrai`，Compose 项目 `orchestrai-production`，只绑定回环端口 `127.0.0.1:3088`。SSH 别名 `tarot-tencent` 在用户本机。
 - **本机：** Windows + Docker Desktop（context 为 `desktop-linux`）。候选环境 `http://localhost:3180`，Compose 项目 `orchestrai-r3`，账号在 `deploy/private/candidate-account.json`。本机 TUN/Fake-IP 会把公网域名解析成 198.18.x.x，research 的私网保护会拒绝这些地址，所以本机真实联网测试不可靠，联网验收以服务器为准。
 - **私有文件（Git 忽略，绝不提交或发到聊天里）：** `deploy/private/`，包括 `product.env`、`model.env`、`providers.json`、账号文件和 `age-recovery.key`。
 - **Key：** DeepSeek、Tavily、百炼都已配置，目前不需要新增 Key 或充值。
 - **改 chat 的方式：** 直接编辑 `services/chat/overlay/` 下的源码；只有上游文件的接入点才改 `services/chat/patches/*.patch`。`.build/` 会自动重建，不要手动编辑。
-- **CI 耗时参考（调整前）：** product job 15–21 分钟、publish 约 6.5 分钟、deploy 约 4 分钟。调整后，只改一个非 chat 服务时，chat 和 web 镜像直接复用。
+- **CI 耗时：** 调整前 main 全流程约 32 分钟。调整后只改 chat 时约 16 分钟（PR CI 约 10–13 分钟），未改动的服务直接复用 main 发布的 `inputs-<hash>` 镜像；纯文档改动不构建、不发布。
 
 ## 历史（倒序）
 
 ### 2026-10-15 R4 生产实测与聊天联网修复
+- 最终发布：PR #48/#50 → main `a51fe84`，部署成功。复测同一消息中混问天气和链接：两次工具调用分别取得天气来源（日期正确为 10-16）和文档正文，`21∼24℃` 显示正常；但天气段落的来源角标指向了 Python 文档，原因是两次调用的来源编号冲突，已记为下一个待修项。
 - 首次使用镜像复用的发布（release 66，main `d0b14dd`）被发布控制器拒绝：复用的镜像带的是原构建提交的 revision 标签，而 `release.py` 要求所有镜像的标签都等于本次发布的提交。拒绝发生在停机和备份之前，生产仍停留在 `3fef692`，没有受影响。修复：复用镜像时只重打 revision 标签（各层不变），`release.py` 不需要改，也不需要服务器同步。
 - PR #42 → develop、PR #43 → main（`4e46bbd`）：Reader 回退上线，CI、发布、部署全部成功。
 - 生产实测（普通聊天）：天气查询真实调用研究并给出具体日期和来源；知乎专栏经 Reader 读取成功；关闭联网后的追问不重新搜索。
