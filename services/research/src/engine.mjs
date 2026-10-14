@@ -18,6 +18,7 @@ export function readablePage(url, text) {
   const parsed=new URL(url);
   if (/\/(?:website-login\/error|captcha|challenge)(?:\/|$)/i.test(parsed.pathname)) return false;
   if (/^(?:access denied|403 forbidden|verify you are human|checking your browser)/i.test(text.trim()) ||
+      /^(?:just a moment|安全验证|访问受限|请完成安全验证)(?:\s|$|[：:])/i.test(text.trim()) ||
       /enable javascript and cookies to continue/i.test(text.slice(0,600))) return false;
   // Observed Tavily regression: Xiaohongshu returns a repeated legal footer and
   // login navigation even though the requested feed/note was not obtained.
@@ -72,17 +73,32 @@ export async function research(run, settings, progress, cancelled, dependencies=
   await progress('reading', { candidates:initial.length });
   // The upstream formatter removes highlights from its artifact. Read the
   // gateway's verified extraction receipt instead of treating snippets as pages.
-  let extracted={results:[]},credits=direct ? 0 : 1;
+  let extracted={results:[]},credits=direct ? 0 : 1,extractionKnown=false,reader='tavily';
   try {
     const response=await fetcher(`${settings.gateway}/providers/tavily/operations/${run.id}-extract`, {
       headers:{ Authorization:`Bearer ${settings.transportKey}` },signal:AbortSignal.timeout(Math.min(remaining(),5000)) });
-    if (response.ok) { const receipt=await response.json(); extracted=receipt.response; credits+=receipt.credits; }
+    if (response.ok) { const receipt=await response.json(); extracted=receipt.response; credits+=receipt.credits;
+      extractionKnown=Array.isArray(extracted.results); }
   } catch { /* Unknown extraction is explicitly unavailable below. */ }
+  // One anonymous Reader attempt only after a known terminal extraction result.
+  // Never turn an uncertain/blocked transport into an automatic provider retry.
+  if(direct && extractionKnown && !extracted.results.some(p=>key(p.url)===key(direct) &&
+      typeof p.raw_content==='string' && readablePage(direct,p.raw_content))) {
+    await checkpoint();
+    try {
+      const response=await fetcher(`${settings.gateway}/providers/jina/read?operation_id=${run.id}-reader`, {
+        method:'POST',headers:{Authorization:`Bearer ${settings.transportKey}`,'Content-Type':'application/json'},
+        signal:AbortSignal.timeout(Math.min(remaining(),18000)),body:JSON.stringify({url:direct}) });
+      if(response.ok) { const value=await response.json();if(Array.isArray(value.results)) {
+        extracted=value;reader='jina-anonymous'; } }
+    } catch { /* Preserve the original unavailable evidence, without retrying. */ }
+  }
   const sources=initial.filter(s => publicLink(s.url)).map((source,index) => {
     const page=extracted.results?.find(p => key(p.url)===key(source.url));
     const raw=typeof page?.raw_content==='string' ? page.raw_content.trim() : '';
     const evidence=raw && readablePage(source.url,raw) ? raw.slice(0,12000) : '';
-    return { ...source,id:`S${index+1}`,state:evidence ? 'read' : 'unavailable',
+    return { ...source,title:typeof page?.title==='string' ? page.title.slice(0,240) : source.title,
+      id:`S${index+1}`,state:evidence ? 'read' : 'unavailable',reader,
       evidence,error:evidence ? null : 'page_not_read_login_blocked_or_provider_failed',fetched_at:new Date().toISOString() };
   });
   await progress('ranking', { sources,ranking:'BM25' });

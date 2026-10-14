@@ -1,4 +1,4 @@
-"""Restricted Tavily transport; owns credentials, CNY/credit accounting and replay.
+"""Restricted search/reader transports; credentials, accounting and replay.
 
 Installed via LiteLLM's worker-startup hook in the existing gateway process.
 No arbitrary target URL, provider override, crawl or automatic paid retry.
@@ -36,6 +36,27 @@ async def public_url(value):
         return value
     except Exception:
         raise HTTPException(400, 'public_http_url_required')
+
+
+async def cached_provider(identity, signature, model, reserve_fen, credits, invoke):
+    """One receipt/fence for paid Tavily and the fixed anonymous reader."""
+    try:
+        with budget.connect() as db:
+            old = db.execute('SELECT request_hash,response FROM provider_calls WHERE id=?', (identity,)).fetchone()
+        if old:
+            if old[0] != signature:
+                raise HTTPException(409, 'operation_content_changed')
+            if old[1] is None:
+                raise HTTPException(409, 'uncertain_provider_operation_no_retry')
+            return JSONResponse(json.loads(old[1]))
+        budget.reserve(model, reserve_fen, identity, credits=credits, request_hash=signature)
+        value, charged, amount = await invoke()
+        budget.settle(identity, amount, credits=charged, response=value)
+        return JSONResponse(value)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(503, 'search_transport_or_budget_unavailable_reservation_retained')
 
 
 async def proxy(request: Request):
@@ -87,19 +108,7 @@ async def proxy(request: Request):
     if not provider_key:
         raise HTTPException(503, 'search_provider_not_configured')
     signature = hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
-    identity = 'tavily:'+operation
-    try:
-        with budget.connect() as db:
-            old = db.execute('SELECT request_hash,response FROM provider_calls WHERE id=?', (identity,)).fetchone()
-        if old:
-            if old[0] != signature:
-                raise HTTPException(409, 'operation_content_changed')
-            if old[1] is None:
-                raise HTTPException(409, 'uncertain_provider_operation_no_retry')
-            return JSONResponse(json.loads(old[1]))
-        # $0.008/credit at FX ceiling 8, rounded upward to 7 fen. Even free
-        # credits consume this conservative total budget; this is not an invoice.
-        budget.reserve('tavily-'+action, 7, identity, credits=1, request_hash=signature)
+    async def invoke():
         async with httpx.AsyncClient(timeout=12, follow_redirects=False, trust_env=False) as client:
             upstream = await client.post('https://api.tavily.com/'+action, json=data,
                                          headers={'Authorization':'Bearer '+provider_key})
@@ -112,12 +121,53 @@ async def proxy(request: Request):
         usage = value.get('usage', {})
         if isinstance(usage, dict) and isinstance(usage.get('credits'), (int, float)):
             charged = max(charged, math.ceil(usage['credits']))
-        budget.settle(identity, charged * 7, credits=charged, response=value)
-        return JSONResponse(value)
-    except HTTPException:
-        raise
-    except Exception:
-        raise HTTPException(503, 'search_transport_or_budget_unavailable_reservation_retained')
+        return value, charged, charged * 7
+    # $0.008/credit at FX ceiling 8, rounded upward to 7 fen, including free credits.
+    return await cached_provider('tavily:'+operation, signature, 'tavily-'+action, 7, 1, invoke)
+
+
+async def reader(request: Request):
+    key = os.getenv('RESEARCH_GATEWAY_KEY', '')
+    if len(key) < 32 or not hmac.compare_digest(request.headers.get('authorization', ''), 'Bearer '+key):
+        raise HTTPException(401, 'research_service_authentication_required')
+    operation = request.query_params.get('operation_id', '')
+    if not re.fullmatch(r'[0-9a-f-]{36}-reader', operation) or set(request.query_params) != {'operation_id'}:
+        raise HTTPException(400, 'invalid_operation')
+    raw = await request.body()
+    if len(raw) > 8192:
+        raise HTTPException(413, 'request_too_large')
+    try:
+        data = json.loads(raw)
+        if not isinstance(data, dict) or set(data) != {'url'} or not isinstance(data['url'], str):
+            raise ValueError()
+    except ValueError:
+        raise HTTPException(400, 'single_reader_url_required')
+    url = await public_url(data['url'])
+    signature = hashlib.sha256(url.encode()).hexdigest()
+
+    async def invoke():
+        # Fixed anonymous API. Never forward delegation/provider keys, cookies or caller headers.
+        async with httpx.AsyncClient(timeout=15, follow_redirects=False, trust_env=False) as client:
+            async with client.stream('GET', 'https://r.jina.ai/'+url,
+                                     headers={'Accept':'text/plain'}) as response:
+                if response.status_code != 200:
+                    raise HTTPException(502, 'reader_provider_failed_reservation_retained')
+                content = bytearray()
+                async for chunk in response.aiter_bytes():
+                    content.extend(chunk)
+                    if len(content) > 256 * 1024:
+                        raise HTTPException(502, 'reader_response_too_large')
+        text = content.decode('utf-8', errors='strict')
+        title = re.search(r'^Title: (.+)$', text, re.M)
+        source = re.search(r'^URL Source: (.+)$', text, re.M)
+        marker = '\nMarkdown Content:\n'
+        if not title or not source or source[1].strip() != url or marker not in text:
+            raise HTTPException(502, 'reader_response_not_verified')
+        value = {'results':[{'url':url,'title':title[1][:240],'raw_content':text.split(marker,1)[1]}],
+                 'reader':'jina-anonymous'}
+        return value, 0, 0
+    # Anonymous reads have no account charge. Reserve one fen conservatively until a verified reply.
+    return await cached_provider('jina:'+operation, signature, 'jina-read', 1, 0, invoke)
 
 
 async def receipt(request: Request):
@@ -125,10 +175,12 @@ async def receipt(request: Request):
     if len(key) < 32 or not hmac.compare_digest(request.headers.get('authorization', ''), 'Bearer '+key):
         raise HTTPException(401, 'research_service_authentication_required')
     operation = request.path_params['operation']
-    if not re.fullmatch(r'[0-9a-f-]{36}-(search|extract)', operation):
+    provider = request.path_params.get('provider', 'tavily')
+    pattern = r'[0-9a-f-]{36}-reader' if provider == 'jina' else r'[0-9a-f-]{36}-(search|extract)'
+    if provider not in ('tavily', 'jina') or not re.fullmatch(pattern, operation):
         raise HTTPException(400, 'invalid_operation')
     with budget.connect() as db:
-        row = db.execute('SELECT response,charged_credits FROM provider_calls WHERE id=?', ('tavily:'+operation,)).fetchone()
+        row = db.execute('SELECT response,charged_credits FROM provider_calls WHERE id=?', (provider+':'+operation,)).fetchone()
     if not row or row[0] is None:
         raise HTTPException(409, 'provider_receipt_unavailable')
     return JSONResponse({'response': json.loads(row[0]), 'credits': row[1]})
@@ -137,4 +189,5 @@ async def receipt(request: Request):
 def install():
     from litellm.proxy.proxy_server import app
     app.add_api_route('/providers/tavily/{action}', proxy, methods=['POST'], include_in_schema=False)
-    app.add_api_route('/providers/tavily/operations/{operation}', receipt, methods=['GET'], include_in_schema=False)
+    app.add_api_route('/providers/jina/read', reader, methods=['POST'], include_in_schema=False)
+    app.add_api_route('/providers/{provider}/operations/{operation}', receipt, methods=['GET'], include_in_schema=False)

@@ -291,7 +291,9 @@ R3 无剩余代码或服务器交付收尾项；用户统一手动验收完整�
 
 **首轮发布已完成，链接补修仍在交付（2026-10-14）：** PR #37/#38/#39 已合并；可信 main `104834050f5b3e9c8ec43ae5aecced8af4ea169c` 的 [Actions #38435774930](https://github.com/Kong-YiKai/OrchestrAI/actions/runs/38435774930) 检查、九镜像发布及自动 deploy 均 success。current/schema=3/outcome=deployed，配置摘要 `7d74ecdbf0d1561d2a5120b960fc5005c8e3ed0ad97dc2ae71240930d377ce8c`，root 控制器已更新并保留配置恢复副本，生产 env/凭据未改变。发布前七份加密快照异地回读成功；十个常驻进程运行、九个 healthcheck 通过，worker 由发布中的真实任务烟测验证；本站/Tarot/BuddyUp HTTPS 都为 200。当前生产已含自有前端和首轮搜索接线，但尚不含用户手测发现的丢协议补修。补修 PR #40 只改变工具参数/证据白名单，URL 路径内的“明天”等文字也保持原样；待其 CI/CD 与服务器普通聊天实测后才完成 R4。
 
-用户于 2026-10-14 在本机 3180 手动复测后发现链接仍失败。实际研究 query 为缺少协议的 `zhuanlan.zhihu.com/p/150190166`，触发了普通检索；此前把“当前日期/Asia/Shanghai”塞入查询还引入了时间网站噪声。补修：首轮读取绑定用户提供的单个完整 URL，后续仅从用户已提供的链接恢复丢失协议；相对日期转换为具体日期，不再添加时间查询前缀；发给聊天模型的来源严格白名单，不传未读取来源的摘要/标题正文信息。7 项工具契约新增丢协议与相对日期回归。用户所称天气可读，本机 SQL 实际为 partial/no_readable_sources，不能当作正文证据验收通过。本机 Fake-IP 仍使提取在付费前被公开 IP 校验拒绝；用户选择保留系统 DNS，以服务器正常网络验收，不增加 DoH/provider/服务或关闭私网保护。此补修云端交付仍进行中，不能因首轮 main 已进入发布就标记 R4 整体完成。
+用户于 2026-10-14 在本机 3180 手动复测后发现链接仍失败。实际研究 query 为缺少协议的 `zhuanlan.zhihu.com/p/150190166`，触发了普通检索；此前把“当前日期/Asia/Shanghai”塞入查询还引入了时间网站噪声。补修：首轮读取绑定用户提供的单个完整 URL，后续仅从用户已提供的链接恢复丢失协议；相对日期转换为具体日期，不再添加时间查询前缀；发给聊天模型的来源严格白名单，不传未读取来源的摘要/标题正文信息。7 项工具契约新增丢协议与相对日期回归。用户所称天气可读，本机 SQL 实际为 partial/no_readable_sources，不能当作正文证据验收通过。本机 Fake-IP 仍使提取在付费前被公开 IP 校验拒绝；用户选择保留系统 DNS，以服务器正常网络验收，不增加 DoH/自托管服务或关闭私网保护；已验证的匿名 Reader 回退见下文。此补修云端交付仍进行中，不能因首轮 main 已进入发布就标记 R4 整体完成。
+
+**具体知乎链接的读取回退（实施中）：** 服务器正常网络的 Tavily 直接读取返回 `Failed to fetch url`，正文/引用为空、实际返回 0 credits；不能归因于本机 DNS，也不能断言具体登录/风控原因。另一项服务器匿名 Jina Reader 诊断实际返回 HTTP 200、原始 URL 与文章《什么是云原生？这回终于有人讲明白了》，约 2.4 万字符。此诊断不是应用验收。已据此在既有 gateway/research 原位加入固定匿名 Reader API，只有直接 URL 的 Tavily 终态提取结果确认不可读时才尝试一次；未知/私网被拒绝的请求不触发回退。复用原账本/receipt/幂等围栏，支持 0-credit receipt，35 天缓存及长期 operation 围栏仍在；匿名读取保守预留 1 分直到验证回复后结算为 0，未知失败保留预留。URL 元数据须与原链接一致，响应上限 256 KiB、读取超时 15 秒，挑战/登录壳不作正文。研究 API Source 增加可选 reader 来源字段，旧数据可不含此字段；无数据库迁移。API 协议核查于 2026-10-14，Reader 开源仓库 Apache-2.0，本项目仅调用匿名服务，不自托管或复制源码。无新增依赖/容器/Key/环境变量，生产凭据、系统 DNS 和私网保护保持原样。当前网关预算/transport 12 项、engine 9 项必要回归已通过；云端 CI/CD 与普通聊天真读取仍待完成。
 
 直接复用 `@librechat/agents@4.0.1` 的 Tavily 搜索/批量提取，已有依赖 `okapibm25@1.4.1` 在本地重排；Chinese Intl.Segmenter + ASCII token 编码避免 BM25 的英文分词/正则输入问题。浏览器只有 chat 登录身份，chat 签发独立短期 research 委托；research 自有库是查询、任务、证据和结果事实源，不维护第二份聊天历史。`services/research/openapi.json` 是独立版本化契约，服务仅内网提供 `/openapi.json`，chat 不转发该路径；研究目录统一 LF，防止 Windows checkout 改变迁移校验和。BullMQ/Redis DB1 是可从 SQL 重建的队列；单实例串行执行、每用户最多一个活跃任务、全局排队最多二十个。引用须来自实际提取正文且为精确连续摘录，搜索摘要不能当作读取正文；这是引用校验，**不等于引用语义支持率已经达标**。
 
@@ -456,3 +458,5 @@ R1 本轮实际验证见 5.2：隔离产品构建、浏览器真实交互、真�
 - [百炼同步文本向量 API](https://help.aliyun.com/zh/model-studio/text-embedding-synchronous-api)：R3 用户选定 `text-embedding-v4`；控制台对应地域/工作空间的兼容地址与 Key 已填写，格式检查通过，真实 1024 维检索已通过。
 - [LiteLLM 用户预算](https://docs.litellm.ai/docs/proxy/users)、[Tavily 计费](https://docs.tavily.com/documentation/api-credits)：无数据库预算限制与搜索/提取费用边界；不能把本轮预留额写成实际账单。
 - [GitHub 部署管理](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/control-deployments)：环境、并发和部署记录。
+
+本轮发现的交付效率问题：普通聊天端到端验收遗漏、模型参数缺少约束、本机 Fake-IP 与服务器环境差异、产品 CI 缺少受影响服务构建/未变镜像复用及跨 runner 缓存。重复全量构建被 feature/develop/main 的多轮保护检查放大；本轮曾在修复未收敛时提前推送，造成额外重跑。现有保护保持生效；后续优先改缓存和影响范围，同时验证可信 SHA/不可变镜像来源，不能通过跳过 required checks 或手动发未测试镜像缩短等待。

@@ -24,6 +24,7 @@ class SearchContracts(unittest.IsolatedAsyncioTestCase):
         budget.migrate()
         app = FastAPI()
         app.add_api_route('/providers/tavily/{action}', search.proxy, methods=['POST'])
+        app.add_api_route('/providers/jina/read', search.reader, methods=['POST'])
         self.client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://fixture')
         self.operation = str(uuid4())+'-search'
         self.url = '/providers/tavily/search?operation_id='+self.operation
@@ -73,6 +74,37 @@ class SearchContracts(unittest.IsolatedAsyncioTestCase):
         with patch.object(asyncio.get_running_loop(), 'getaddrinfo', new=AsyncMock(return_value=[(2,1,6,'',('127.0.0.1',443))])):
             with self.assertRaises(HTTPException):
                 await search.public_url('https://example.com')
+
+    async def test_anonymous_reader_is_bounded_verified_cached_and_does_not_forward_keys(self):
+        original=httpx.AsyncClient
+        seen=[]
+        def upstream(req):
+            seen.append(req)
+            return httpx.Response(200,text='Title: Article\n\nURL Source: https://example.com/article\n\nMarkdown Content:\nActual page evidence.')
+        transport=httpx.MockTransport(upstream)
+        url='/providers/jina/read?operation_id='+str(uuid4())+'-reader'
+        with patch.object(search,'public_url',new=AsyncMock(return_value='https://example.com/article')):
+            with patch.object(search.httpx,'AsyncClient',side_effect=lambda **kw:original(transport=transport,**kw)):
+                first=await self.client.post(url,headers=self.headers,json={'url':'https://example.com/article'})
+                second=await self.client.post(url,headers=self.headers,json={'url':'https://example.com/article'})
+        self.assertEqual((first.status_code,second.status_code),(200,200));self.assertEqual(len(seen),1)
+        self.assertNotIn('authorization',seen[0].headers);self.assertEqual(seen[0].url.host,'r.jina.ai')
+        self.assertEqual(first.json()['results'][0]['raw_content'],'Actual page evidence.')
+        with budget.connect() as db:
+            self.assertEqual(db.execute('SELECT amount_fen FROM periods').fetchall(),[(0,),(0,)])
+        self.assertEqual((await self.client.post(url,json={'url':'https://example.com'})).status_code,401)
+        with patch.object(search,'public_url',new=AsyncMock(side_effect=HTTPException(400,'public_http_url_required'))):
+            self.assertEqual((await self.client.post(url,headers=self.headers,json={'url':'https://127.0.0.1'})).status_code,400)
+
+    async def test_reader_wrong_source_or_unknown_failure_never_retries(self):
+        original=httpx.AsyncClient
+        transport=httpx.MockTransport(lambda req:httpx.Response(200,text='Title: Wrong\nURL Source: https://other.example/doc\n\nMarkdown Content:\nWrong body'))
+        url='/providers/jina/read?operation_id='+str(uuid4())+'-reader'
+        with patch.object(search,'public_url',new=AsyncMock(return_value='https://example.com/article')):
+            with patch.object(search.httpx,'AsyncClient',side_effect=lambda **kw:original(transport=transport,**kw)) as provider:
+                first=await self.client.post(url,headers=self.headers,json={'url':'https://example.com/article'})
+                second=await self.client.post(url,headers=self.headers,json={'url':'https://example.com/article'})
+        self.assertEqual((first.status_code,second.status_code),(502,409));self.assertEqual(provider.call_count,1)
 
 
 if __name__ == '__main__':

@@ -83,6 +83,14 @@ class BudgetTests(unittest.TestCase):
                 self.assertEqual(db.execute('SELECT version FROM schema_version').fetchone(), (1,))
                 self.assertIsNotNone(db.execute('SELECT response FROM provider_calls WHERE id=?', (first,)).fetchone()[0])
 
+    def test_anonymous_reader_has_a_durable_zero_credit_receipt(self):
+        call=budget.reserve('jina-read',1,'reader-fixture',credits=0,request_hash='reader-hash')
+        budget.settle(call,0,credits=0,response={'results':[]})
+        with budget.connect() as db:
+            self.assertEqual(db.execute('SELECT amount_fen FROM periods').fetchall(),[(0,),(0,)])
+            self.assertEqual(db.execute('SELECT reserve_credits,charged_credits FROM provider_calls').fetchone(),(0,0))
+            self.assertIsNotNone(db.execute('SELECT response FROM provider_calls').fetchone()[0])
+
     def test_additive_search_migration_preserves_old_model_ledger(self):
         call = budget.reserve('deepseek-flash', 20, 'r3-old-reservation')
         budget.migrate()
