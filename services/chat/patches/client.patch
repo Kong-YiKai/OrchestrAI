@@ -223,6 +223,42 @@ index 5f28684..835e6a4 100644
              </span>
            </button>
          }
+diff --git a/client/src/components/Chat/Input/WebSearch.tsx b/client/src/components/Chat/Input/WebSearch.tsx
+index a991d6e..defa0fc 100644
+--- a/client/src/components/Chat/Input/WebSearch.tsx
++++ b/client/src/components/Chat/Input/WebSearch.tsx
+@@ -20,20 +20,20 @@ function WebSearch() {
+     return null;
+   }
+   const { webSearch: webSearchData, searchApiKeyForm } = context;
+-  const { toggleState: webSearch, debouncedChange, isPinned, authData } = webSearchData;
++  const { toggleState: webSearch, debouncedChange } = webSearchData;
+   const { badgeTriggerRef } = searchApiKeyForm;
+ 
++  // OrchestrAI: the globe is the composer's only web-search switch, so it stays visible
++  // while off (upstream hides it unless pinned or active).
+   return (
+-    (isPinned || (webSearch && authData?.authenticated)) && (
+-      <CheckboxButton
+-        ref={badgeTriggerRef}
+-        checked={webSearch}
+-        setValue={debouncedChange}
+-        label={localize('com_ui_search')}
+-        isCheckedClassName={badgeAccents.blue}
+-        icon={<Globe className="icon-md" aria-hidden="true" />}
+-      />
+-    )
++    <CheckboxButton
++      ref={badgeTriggerRef}
++      checked={webSearch}
++      setValue={debouncedChange}
++      label={localize('com_ui_search')}
++      isCheckedClassName={badgeAccents.blue}
++      icon={<Globe className="icon-md" aria-hidden="true" />}
++    />
+   );
+ }
+ 
 diff --git a/client/src/components/Chat/Messages/Content/WebSearch.tsx b/client/src/components/Chat/Messages/Content/WebSearch.tsx
 index 9cec40d..de8ad49 100644
 --- a/client/src/components/Chat/Messages/Content/WebSearch.tsx
