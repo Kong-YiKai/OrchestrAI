@@ -20,7 +20,7 @@ const call = { type: 'tool_call', name: 'web_search', id: 'call-1', args: { quer
 const config = { metadata: { run_id: 'turn-1', thread_id: 'convo-1', user_id: 'alice' }, toolCall: { id: 'call-1', name: 'web_search', turn: 0 } };
 const source = { id: 'S1', url: 'https://example.com/doc', title: 'Example', state: 'read', evidence: 'Only this actual fetched evidence.', fetched_at: '2026-10-13T00:00:00Z' };
 function reply(value, status = 200) { return new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } }); }
-function payload(message) { return JSON.parse(message.content.replace(/^Error processing tool: /, '').split('\n\n<source')[0]); }
+function payload(message) { return JSON.parse(message.content.replace(/^Error processing tool: /, '').split('\n\n')[0]); }
 function evidence(message, sourceId) { const m = message.content.match(new RegExp(`<source id="${sourceId}"[^>]*>\\n([\\s\\S]*?)\\n</source>`)); return m ? m[1] : null; }
 function inspect(options) {
   const principal = jwt.verify(options.headers.Authorization.slice(7), process.env.RESEARCH_DELEGATION_SECRET, {
@@ -130,4 +130,50 @@ test('a user-supplied link makes the first web_search call mandatory', async () 
   const agent = await loadEphemeralAgent({ req: request, endpoint: 'DeepSeek', model_parameters: { model: 'deepseek-flash' } }, {});
   assert.match(agent.instructions, /必须先调用 web_search，query 填写该完整链接/);
   assert.match(agent.instructions, /提供了链接：https:\/\/zhuanlan\.zhihu\.com\/p\/150190166。回答前/);
+});
+test('citation anchors follow this call\'s turn and the source position shown in the UI', async () => {
+  const unread = { ...source, id: 'S1', url: 'https://example.com/login', state: 'unavailable', evidence: '' };
+  const page = { ...source, id: 'S2', url: 'https://example.com/page' };
+  global.fetch = async (_url, options) => options.method === 'POST' ? reply({ id, status: 'queued' }, 202)
+    : reply({ id, status: 'partial', result: { sources: [unread, page], claims: [{ text: 'x', source_id: 'S2', quote: 'actual' }] } });
+  // ToolNode passes the per-tool turn on the tool call itself (invokeParams.turn).
+  const result = await createOrchestraResearchTool(req).invoke({ ...call, turn: 1 }, config);
+  assert.match(result.content, /<source id="S2" anchor="\\ue202turn1search1"/);
+  assert.match(result.content, /S2=\\ue202turn1search1/); assert.doesNotMatch(result.content, /S1=/);
+  assert.equal(result.artifact.web_search.turn, 1); assert.equal(result.artifact.web_search.organic[1].link, page.url);
+});
+test('deleting a turn removes the question and its replies and re-links the next turn', async () => {
+  const { createOrchestraTurnRouter } = requireApi('@librechat/api');
+  const root = '00000000-0000-0000-0000-000000000000';
+  let rows = [
+    { messageId: 'u1', parentMessageId: root, isCreatedByUser: true, conversationId: 'c1', user: 'alice' },
+    { messageId: 'a1', parentMessageId: 'u1', conversationId: 'c1', user: 'alice' },
+    { messageId: 'u2', parentMessageId: 'a1', isCreatedByUser: true, conversationId: 'c1', user: 'alice' },
+    { messageId: 'a2', parentMessageId: 'u2', conversationId: 'c1', user: 'alice' },
+    { messageId: 'a2b', parentMessageId: 'u2', conversationId: 'c1', user: 'alice' },
+    { messageId: 'u3', parentMessageId: 'a2b', isCreatedByUser: true, conversationId: 'c1', user: 'alice' },
+    { messageId: 'x1', parentMessageId: root, isCreatedByUser: true, conversationId: 'c1', user: 'bob' },
+  ];
+  const owned = (f) => (r) => r.conversationId === f.conversationId && r.user === f.user && (!f.messageId || f.messageId.$in.includes(r.messageId));
+  const Model = {
+    find: (f) => ({ select: () => ({ lean: async () => rows.filter(owned(f)) }) }),
+    updateMany: async (f, u) => { rows = rows.map((r) => owned(f)(r) ? { ...r, ...u.$set } : r); },
+    deleteMany: async (f) => { rows = rows.filter((r) => !owned(f)(r)); },
+  };
+  const router = createOrchestraTurnRouter(() => Model);
+  const layer = router.stack.find((l) => l.route?.methods.delete).route.stack[0].handle;
+  const send = async (user, params) => {
+    const res = { code: 200, body: null, status(c) { this.code = c; return this; }, set() { return this; }, json(b) { this.body = b; return this; } };
+    await layer({ user, params }, res); return res;
+  };
+  const done = await send({ id: 'alice' }, { conversationId: 'c1', messageId: 'u2' });
+  assert.equal(done.code, 200);
+  assert.deepEqual(done.body.removed.sort(), ['a2', 'a2b', 'u2']);
+  assert.deepEqual(done.body.reparented, ['u3']); assert.equal(done.body.parentMessageId, 'a1');
+  assert.equal(rows.find((r) => r.messageId === 'u3').parentMessageId, 'a1');
+  assert.deepEqual(rows.map((r) => r.messageId).sort(), ['a1', 'u1', 'u3', 'x1']);
+  assert.equal((await send({ id: 'alice' }, { conversationId: 'c1', messageId: 'a1' })).code, 404, 'replies are not turns');
+  assert.equal((await send({ id: 'alice' }, { conversationId: 'c1', messageId: 'x1' })).code, 404, 'other users are invisible');
+  assert.equal((await send(undefined, { conversationId: 'c1', messageId: 'u1' })).code, 401);
+  assert.ok(rows.some((r) => r.messageId === 'x1'));
 });

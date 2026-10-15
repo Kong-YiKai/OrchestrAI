@@ -223,12 +223,21 @@ export function createOrchestraResearchTool(
               : {}),
           })),
           instruction:
-            '只使用 state=read 的正文（见下方各来源正文块）；说明 partial/failed 的具体缺口；truncated=true 表示系统只提供了正文前 evidence_chars 个字符，应说明“正文较长，仅基于前一部分”，不能说成网页抓取中断；错误未区分原因时明确原因未确认，不能断言登录或风控；引用用 [来源](url)，不要将摘要冒充正文。',
+            '只使用 state=read 的正文（见下方各来源正文块）；说明 partial/failed 的具体缺口；truncated=true 表示系统只提供了正文前 evidence_chars 个字符，应说明“正文较长，仅基于前一部分”，不能说成网页抓取中断；错误未区分原因时明确原因未确认，不能断言登录或风控；按下方“引用方式”标注来源，不要将摘要冒充正文。',
         });
+        // Anchors must match the attachment the UI renders (this call's turn, the source's
+        // position in `organic`). Without them the model guessed turn numbers, so in a turn with
+        // two searches the weather sentences were badged with the other call's page.
+        const turnIndex = runConfig?.toolCall?.turn ?? 0;
+        const anchor = (s: Source) => `\\ue202turn${turnIndex}search${sources.indexOf(s)}`;
         const blocks = read.map(
-          (s) => `\n\n<source id="${s.id}" url="${s.url}">\n${s.evidence.slice(0, share)}\n</source>`,
+          (s) =>
+            `\n\n<source id="${s.id}" anchor="${anchor(s)}" url="${s.url}">\n${s.evidence.slice(0, share)}\n</source>`,
         );
-        const payload = header + blocks.join('');
+        const citing = read.length
+          ? `\n\n引用方式：在引用该来源内容的句子末尾紧跟它的 anchor 标记（${read.map((s) => `${s.id}=${anchor(s)}`).join('，')}），不要使用 Markdown 链接、[1] 或脚注。`
+          : '';
+        const payload = header + citing + blocks.join('');
         const failed =
           row.status === 'failed' ||
           row.status === 'cancelled' ||
