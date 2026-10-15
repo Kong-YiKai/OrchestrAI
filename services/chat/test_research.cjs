@@ -20,7 +20,7 @@ const call = { type: 'tool_call', name: 'web_search', id: 'call-1', args: { quer
 const config = { metadata: { run_id: 'turn-1', thread_id: 'convo-1', user_id: 'alice' }, toolCall: { id: 'call-1', name: 'web_search', turn: 0 } };
 const source = { id: 'S1', url: 'https://example.com/doc', title: 'Example', state: 'read', evidence: 'Only this actual fetched evidence.', fetched_at: '2026-10-13T00:00:00Z' };
 function reply(value, status = 200) { return new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } }); }
-function payload(message) { return JSON.parse(message.content.replace(/^Error processing tool: /, '').split('\n\n<source')[0]); }
+function payload(message) { return JSON.parse(message.content.replace(/^Error processing tool: /, '').split('\n\n')[0]); }
 function evidence(message, sourceId) { const m = message.content.match(new RegExp(`<source id="${sourceId}"[^>]*>\\n([\\s\\S]*?)\\n</source>`)); return m ? m[1] : null; }
 function inspect(options) {
   const principal = jwt.verify(options.headers.Authorization.slice(7), process.env.RESEARCH_DELEGATION_SECRET, {
@@ -130,4 +130,15 @@ test('a user-supplied link makes the first web_search call mandatory', async () 
   const agent = await loadEphemeralAgent({ req: request, endpoint: 'DeepSeek', model_parameters: { model: 'deepseek-flash' } }, {});
   assert.match(agent.instructions, /必须先调用 web_search，query 填写该完整链接/);
   assert.match(agent.instructions, /提供了链接：https:\/\/zhuanlan\.zhihu\.com\/p\/150190166。回答前/);
+});
+test('citation anchors follow this call\'s turn and the source position shown in the UI', async () => {
+  const unread = { ...source, id: 'S1', url: 'https://example.com/login', state: 'unavailable', evidence: '' };
+  const page = { ...source, id: 'S2', url: 'https://example.com/page' };
+  global.fetch = async (_url, options) => options.method === 'POST' ? reply({ id, status: 'queued' }, 202)
+    : reply({ id, status: 'partial', result: { sources: [unread, page], claims: [{ text: 'x', source_id: 'S2', quote: 'actual' }] } });
+  // ToolNode passes the per-tool turn on the tool call itself (invokeParams.turn).
+  const result = await createOrchestraResearchTool(req).invoke({ ...call, turn: 1 }, config);
+  assert.match(result.content, /<source id="S2" anchor="\\ue202turn1search1"/);
+  assert.match(result.content, /S2=\\ue202turn1search1/); assert.doesNotMatch(result.content, /S1=/);
+  assert.equal(result.artifact.web_search.turn, 1); assert.equal(result.artifact.web_search.organic[1].link, page.url);
 });
