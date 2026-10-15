@@ -5,7 +5,7 @@
 ## 交接（随每次交付更新）
 
 - **当前阶段：** R4 已完成（待用户手动验收），下一阶段 R5（画布接真实 graph、Deep Agents JS 评估、成果库）。
-- **Git：** 生产版本为 main `a51fe84`；develop 与 main 内容一致。分支均已合并，旧 `codex/*` 分支可删除。
+- **Git：** 生产版本为 main `ca04da3`，develop 与 main 内容一致。会话代理不允许删除远端分支，已合并的旧分支由用户在本机删除；建议在 GitHub 开启 “Automatically delete head branches”。
 - **服务器：** 腾讯云 Ubuntu 22.04，2 核 / 4 GB，与 Tarot、BuddyUp、共享 Nginx（`/opt/shared-ingress`）同机。部署目录 `/opt/orchestrai`，Compose 项目 `orchestrai-production`，只绑定回环端口 `127.0.0.1:3088`。SSH 别名 `tarot-tencent` 在用户本机。
 - **本机：** Windows + Docker Desktop（context 为 `desktop-linux`）。候选环境 `http://localhost:3180`，Compose 项目 `orchestrai-r3`，账号在 `deploy/private/candidate-account.json`。本机 TUN/Fake-IP 会把公网域名解析成 198.18.x.x，research 的私网保护会拒绝这些地址，所以本机真实联网测试不可靠，联网验收以服务器为准。
 - **私有文件（Git 忽略，绝不提交或发到聊天里）：** `deploy/private/`，包括 `product.env`、`model.env`、`providers.json`、账号文件和 `age-recovery.key`。
@@ -19,6 +19,7 @@
 - 用户要求输入框只保留一个小地球。删除自加的“联网搜索 · 开启”按钮（`client.patch` 中 ChatForm 的按钮、`Globe` 导入和 4 个文案键，以及 `workbench.css` 中对应样式），保留上游的地球图标。两者控制的是同一个状态，首次默认开启、记住选择的逻辑不变。
 - 生产复测（main `c936da7`）：混问天气和链接时，天气段落的角标指向天气来源，文档段落的角标指向 Python 文档，角标问题已解决。
 - 上线后（main `876bb0b`）发现：上游地球图标在开关关闭时会隐藏（只有固定或开启时才显示），关掉后就找不到入口。改为始终显示，用高亮区分开关状态（`client.patch` 中的 `WebSearch.tsx`）。
+- main `ca04da3` 部署后复测：关闭联网时地球图标仍显示，开、关切换后也不会消失。
 - 删除一轮问答生产复测通过：三轮对话中删除第二轮（“最喜欢的颜色是橙色”）后，追问“列出我告诉过你的所有信息”，只答出代号和住址；第一轮保留，上下文链没有断。
 
 ### 2026-10-15 删除一轮问答
