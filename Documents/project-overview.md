@@ -7,7 +7,7 @@
 | 项目 | 状态 |
 | --- | --- |
 | 生产入口 | `https://orchestrai.elysiumgrid.space/login`，公开注册关闭；账号在本机忽略文件 `deploy/private/production-account.json` |
-| 生产版本 | main `a51fe84`（Actions #38646564674 全部成功，含部署），发布清单 schema=3：9 种镜像、10 个常驻进程 |
+| 生产版本 | main `ca04da3`（Actions #38782172802 全部成功，含部署），发布清单 schema=3：9 种镜像、10 个常驻进程 |
 | 当前阶段 | **R4 已完成**（代码、CI/CD、生产普通聊天实测，待用户统一手动验收）；下一阶段 R5，计划见第 4 节 |
 | 工程结构调整 | 2026-10-14 完成：拆分 LibreChat 巨型补丁、CI 按输入复用镜像、文档与规则精简（见第 5 节） |
 | 预算 | 模型与搜索共用原子人民币预算：每日 ¥5、每月 ¥100；Tavily 另限每日 30、每月 1,000 credits |
