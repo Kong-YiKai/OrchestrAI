@@ -114,7 +114,6 @@
 .orchestra-unavailable h2 { font-size: clamp(24px, 2.3vw, 33px); line-height: 1.5; font-weight: 600; }
 .orchestra-unavailable > p:not(.orchestra-eyebrow) { max-width: 520px; font-size: 13px; line-height: 1.9; color: rgb(var(--text-tertiary)); }
 .orchestra-unavailable :is(.orchestra-app, .orchestra-auth) .orchestra-primary { margin-top: 12px; }
-.orchestra-search-toggle[aria-pressed=true] { color: rgb(var(--link)); border-color: rgb(var(--accent-primary)); background: rgb(var(--accent-primary) / .08); }
 .orchestra-research { min-height: 0; overflow-y: auto; padding: 34px clamp(18px, 4vw, 48px); }
 .orchestra-research-intro h2 { font-size: 27px; font-weight: 600; margin: 14px 0 10px; }
 .orchestra-research-intro > p:last-child { font-size: 13px; line-height: 1.8; color: rgb(var(--text-tertiary)); }
