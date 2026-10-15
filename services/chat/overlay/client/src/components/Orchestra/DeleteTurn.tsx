@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Trash2 } from 'lucide-react';
 import type { TMessage } from 'librechat-data-provider';
@@ -32,19 +32,30 @@ export default function DeleteTurn({
   const [armed, setArmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
+  // The hover toolbar keeps the click handler from the button's first render, so the handler
+  // reads live values from refs instead of its closure (otherwise the confirming click re-arms).
+  const armedRef = useRef(false);
+  const latest = useRef({ token, getMessages, setMessages });
+  latest.current = { token, getMessages, setMessages };
 
   useEffect(() => {
     if (!armed) return;
-    const timer = setTimeout(() => setArmed(false), 4000);
+    const timer = setTimeout(() => {
+      armedRef.current = false;
+      setArmed(false);
+    }, 4000);
     return () => clearTimeout(timer);
   }, [armed]);
 
   const remove = async () => {
-    if (!armed) {
+    if (!armedRef.current) {
+      armedRef.current = true;
       setFailed(false);
       setArmed(true);
       return;
     }
+    armedRef.current = false;
+    const { token, getMessages, setMessages } = latest.current;
     setBusy(true);
     try {
       const response = await fetch(
@@ -67,6 +78,7 @@ export default function DeleteTurn({
       setFailed(true);
     } finally {
       setBusy(false);
+      armedRef.current = false;
       setArmed(false);
     }
   };
