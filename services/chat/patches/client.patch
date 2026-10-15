@@ -307,6 +307,34 @@ index 9cec40d..de8ad49 100644
          <div className="relative flex h-5 items-center gap-1.5">
            <Button
              variant="ghost"
+diff --git a/client/src/components/Chat/Messages/HoverButtons.tsx b/client/src/components/Chat/Messages/HoverButtons.tsx
+index 0dc465d..d156646 100644
+--- a/client/src/components/Chat/Messages/HoverButtons.tsx
++++ b/client/src/components/Chat/Messages/HoverButtons.tsx
+@@ -19,6 +19,7 @@ import { revealedQueuedTurnFamily } from '~/store/steer';
+ import { Fork } from '~/components/Conversations';
+ import { hoverButtonClasses } from './styles';
+ import MessageAudio from './MessageAudio';
++import DeleteTurn from '~/components/Orchestra/DeleteTurn';
+ import Feedback from './Feedback';
+ import { cn } from '~/utils';
+ import store from '~/store';
+@@ -293,6 +294,15 @@ const HoverButtons = ({
+         />
+       )}
+ 
++      {/* OrchestrAI: delete this question and its replies from the conversation context */}
++      {isCreatedByUser && !isSubagentThreadReadOnly && !isSubmitting && (
++        <DeleteTurn
++          message={message}
++          conversationId={conversation.conversationId ?? ''}
++          render={(props) => <HoverButton {...props} isLast={isLast} />}
++        />
++      )}
++
+       {/* Feedback Buttons */}
+       {!error && !isActiveStreamingMessage && !isCreatedByUser && handleFeedback != null && (
+         <Feedback handleFeedback={handleFeedback} feedback={message.feedback} isLast={isLast} />
 diff --git a/client/src/components/Chat/Messages/ui/MessageRender.tsx b/client/src/components/Chat/Messages/ui/MessageRender.tsx
 index 35f98a2..de92b8e 100644
 --- a/client/src/components/Chat/Messages/ui/MessageRender.tsx
