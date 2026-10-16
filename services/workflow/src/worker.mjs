@@ -63,7 +63,7 @@ export function createProcessor(store, settings, options = {}) {
       if (job.name === 'execute') return await engine.execute(id, version);
       const project = (await store.pool.query('SELECT * FROM team_projects WHERE id=$1', [id])).rows[0];
       if (!project || project.status !== 'planning' || project.dispatch_version !== version) return;
-      const { plan, tokens } = await designer.design(project.goal, project.workspace_name);
+      const { plan, tokens } = await designer.design(project.goal);
       await store.designed(id, version, plan, null);
       log('plan_designed', { project_id: id, tasks: plan.tasks.length, tokens });
     } catch (error) {

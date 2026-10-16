@@ -29,6 +29,18 @@ async function previewHtml(file: FileContent, files: TeamFile[], read: (f: TeamF
   };
   let html = await inline(/<link[^>]+href=["']([^"']+\.css)["'][^>]*>/gi, (t) => `<style>${t}</style>`, file.content);
   html = await inline(/<script[^>]+src=["']([^"']+\.js)["'][^>]*><\/script>/gi, (t) => `<script>${t.replace(/<\/script/gi, '<\\/script')}</script>`, html);
+  // Relative images (SVG or bitmaps the team wrote) become data URLs inside the sandbox.
+  for (const match of html.matchAll(/<img[^>]+src=["']([^"']+)["']/gi)) {
+    const ref = match[1];
+    if (/^[a-z]+:|^\/\//i.test(ref)) continue;
+    const target = files.find((f) => f.path === resolve(file.path, ref));
+    if (!target) continue;
+    const image = await read(target);
+    const data = image.encoding === 'utf8'
+      ? `data:${image.media_type};charset=utf-8,${encodeURIComponent(image.content)}`
+      : `data:${image.media_type};base64,${image.content}`;
+    html = html.replace(match[0], match[0].replace(ref, data));
+  }
   return html;
 }
 

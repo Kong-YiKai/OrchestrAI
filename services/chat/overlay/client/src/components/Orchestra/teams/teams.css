@@ -40,6 +40,7 @@
 .orchestra-team-node[data-state=running] .orchestra-team-state { color: rgb(var(--link)); }
 .orchestra-team-node[data-state=completed] .orchestra-team-state { color: #3f9a5c; }
 .orchestra-team-node-title { font-size: 13px; font-weight: 500; line-height: 1.5; }
+.orchestra-team-activity { margin-top: 6px; font-size: 10px; line-height: 1.5; color: rgb(var(--link)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .orchestra-team-review { display: flex; align-items: center; gap: 4px; margin-top: 6px; font-size: 10px; color: rgb(var(--text-tertiary)); }
 .orchestra-team-side { width: 340px; flex-shrink: 0; overflow-y: auto; border-left: 1px solid rgb(var(--border-light)); background: rgb(var(--surface-primary-alt)); }
 .orchestra-team-inspector { display: flex; flex-direction: column; gap: 12px; padding: 18px 20px; border-bottom: 1px solid rgb(var(--border-light)); }

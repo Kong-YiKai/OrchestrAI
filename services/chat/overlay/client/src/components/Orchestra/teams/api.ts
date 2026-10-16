@@ -13,7 +13,25 @@ export type Task = {
   position?: { x: number; y: number };
 };
 export type Plan = { summary: string; roles: Role[]; tasks: Task[] };
-export type TaskState = { status: string; output?: string };
+export type Activity = {
+  kind: 'model' | 'tool';
+  agent: string;
+  turn?: number;
+  tool?: string;
+  path?: string;
+  error?: boolean;
+  at: string;
+};
+export type TaskState = { status: string; output?: string; activity?: Activity };
+
+const TOOLS: Record<string, string> = { file_read: '读取', file_write: '写入', file_edit: '修改', glob: '查看文件' };
+/** One short line for the latest model turn or tool call of a running task. */
+export function describeActivity(a: Activity | undefined, names: Map<string, string>) {
+  if (!a) return '';
+  const who = names.get(a.agent) ?? a.agent;
+  if (a.kind === 'model') return `${who} · 第 ${a.turn ?? '?'} 轮思考完成`;
+  return `${who} · ${TOOLS[a.tool ?? ''] ?? a.tool}${a.path ? ` ${a.path}` : ''}${a.error ? '（失败）' : ''}`;
+}
 export type Run = {
   id: string;
   project_id: string;
