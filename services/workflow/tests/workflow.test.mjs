@@ -207,3 +207,16 @@ test('without a gateway key, model work fails clearly instead of retrying', { sk
     assert.equal(retried.body.status, 'planning');
   } finally { await close(); }
 });
+
+test('a run that stops making progress is profiled, stopped and recorded, never left running', { skip: !integration }, async () => {
+  const mine = await project({ user: 'frank' });
+  const run = (await request(`/projects/${mine.id}/runs`, { method: 'POST', who: { user: 'frank' }, key: randomUUID(), body: {} })).body;
+  const stuck = { name: 'stuck', chat: () => new Promise(() => {}), async *stream() {} };
+  const seen = [];
+  await createEngine(store, { stallMs: 1000, abandonMs: 1000 }, { adapter: stuck,
+    onStall: id => seen.push(['stall', id]), onAbandoned: id => seen.push(['abandoned', id]) }).execute(run.id, 1);
+  const row = await store.run(store.pool, run.id, { user: 'frank', tenant: 'team' });
+  assert.equal(row.status, 'failed');
+  assert.equal(row.error_code, 'stalled');
+  assert.deepEqual(seen.map(([kind]) => kind), ['stall', 'abandoned']);
+});
