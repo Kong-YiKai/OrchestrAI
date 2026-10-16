@@ -55,7 +55,9 @@ const RULES = workspace => `\n\n## 工作区\n团队共享工作目录是 ${work
 // The gateway caps a request at 200 KB of context. OMA estimates 4 chars per token, so
 // compacting at 16000 keeps even all-CJK conversations (3 bytes per char) under the cap
 // while a summarising task can still hold several files at once.
-const LIMITS = { maxTokens: 8192, maxToolOutputChars: 12000, callTimeoutMs: 240000,
+// timeoutMs bounds one agent run, so a stalled task fails (and retries once) instead of
+// holding the whole team forever.
+const LIMITS = { maxTokens: 8192, maxToolOutputChars: 12000, callTimeoutMs: 240000, timeoutMs: 15 * 60 * 1000,
   contextStrategy: { type: 'compact', maxTokens: 16000, preserveRecentTurns: 3 },
   loopDetection: { maxRepetitions: 3, onLoopDetected: 'warn' } };
 
