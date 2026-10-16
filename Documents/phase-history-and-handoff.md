@@ -4,9 +4,9 @@
 
 ## 交接（随每次交付更新）
 
-- **当前阶段：** R5 智能体团队已上线（PR #64–#69 及预算预留 PR）。待做：次日预算恢复后完整跑通一次团队；若看门狗记录到空转，按日志里的堆栈定位框架问题。R4 已完成，待用户手动验收。
+- **当前阶段：** R5 智能体团队已完成（PR #64–#73 及收尾 PR），生产完整跑通，待用户手动验收：画布上改任务和连线后运行；用 Chrome/Edge 把成果保存到本地文件夹。下一阶段 R6（音视频与产物生成）。R4 待用户手动验收。
 - **查服务器：** 用户授权通过其电脑上的 Desktop Commander 执行 `ssh tarot-tencent "sudo -n docker …"`（只读：logs / stats / ps，必要时重启 workflow-worker）。PowerShell 引号复杂时，把脚本 base64 后在服务器端 `base64 -d | docker exec -i … python -` 执行。
-- **Git：** 生产版本为 main `ca04da3`，develop 与 main 内容一致。会话代理不允许删除远端分支，已合并的旧分支由用户在本机删除；建议在 GitHub 开启 “Automatically delete head branches”。
+- **Git：** 生产版本为 main `9e01b93` 之后的收尾发布，develop 与 main 内容一致。会话代理不允许删除远端分支，已合并的旧分支由用户在本机删除；建议在 GitHub 开启 “Automatically delete head branches”。
 - **服务器：** 腾讯云 Ubuntu 22.04，2 核 / 4 GB，与 Tarot、BuddyUp、共享 Nginx（`/opt/shared-ingress`）同机。部署目录 `/opt/orchestrai`，Compose 项目 `orchestrai-production`，只绑定回环端口 `127.0.0.1:3088`。SSH 别名 `tarot-tencent` 在用户本机。
 - **本机：** Windows + Docker Desktop（context 为 `desktop-linux`）。候选环境 `http://localhost:3180`，Compose 项目 `orchestrai-r3`，账号在 `deploy/private/candidate-account.json`。本机 TUN/Fake-IP 会把公网域名解析成 198.18.x.x，research 的私网保护会拒绝这些地址，所以本机真实联网测试不可靠，联网验收以服务器为准。
 - **私有文件（Git 忽略，绝不提交或发到聊天里）：** `deploy/private/`，包括 `product.env`、`model.env`、`providers.json`、账号文件和 `age-recovery.key`。
@@ -16,10 +16,11 @@
 
 ## 历史（倒序）
 
-### 2026-10-16 R5 生产实测与加固（PR #66–#69 及之后）
+### 2026-10-16 R5 生产实测与加固（PR #66–#73 及收尾）
 - 实测：总指挥 20 秒组建团队；并行、互审、讨论、文件产出正常。问题与处理：成果多套一层文件夹（提示词 + 本地保存剥离）；HTML 预览图片不显示（内联相对图片）；汇总任务上下文不足（网关 200 KB、压缩阈值 16k）；任务卡片加实时进度（team_runs.task_states.activity + activity 事件）。
 - 两次 worker 在角色用满 12 轮后空转（CPU 满、无模型调用），本地无法复现；加每任务 15 分钟上限与看门狗（`src/watchdog.mjs`）。
 - 根因（看门狗抓到后本地复现）：OMA 1.21.2 的运行级 `maxTokenBudget` 在仍有任务进行时被超出，调度循环每轮 `requestStop` 都重新唤醒自己，形成微任务死循环（CPU 满、事件循环饿死）。改为不把上限交给 OMA，由 engine 统计 token、超限走 abort 路径（error_code `run_token_budget`），并加回归测试。
+- 最终生产实测完整通过：5 角色 5 任务约 3 分钟全部完成；网关记账约 ¥1.6。收尾：团队 API 遇 401 时用刷新 cookie 续期一次（页面长时间打开后不再显示“服务不可用”）。
 - 第三次实测因当日 ¥5 预算用完而部分完成（当日 ¥4.44，多为前两次空转消耗）；网关改为按请求大小预留预算，预算用完时界面明确提示。
 
 ### 2026-10-16 R5 智能体团队（PR #64）
