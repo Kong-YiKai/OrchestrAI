@@ -44,14 +44,14 @@ def main():
         try:
             with dump.open('rb') as source:
                 compose('exec', '-T', 'postgres', 'pg_restore', '-U', 'postgres', '-d', target, '--exit-on-error', stdin=source)
-            query = "SELECT count(*) || ':' || md5(coalesce(string_agg(row_to_json(r)::text, '' ORDER BY id), '')) FROM runs r"
+            query = "SELECT count(*) || ':' || md5(coalesce(string_agg(row_to_json(r)::text, '' ORDER BY id), '')) FROM team_projects r"
             def fingerprint(db):
                 return compose('exec', '-T', 'postgres', 'psql', '-U', 'postgres', '-d', db, '-Atc', query, capture_output=True).stdout
             assert fingerprint('workflow') == fingerprint(target), 'restored rows differ'
-            for table, order in [('artifacts','run_id'), ('events','seq'), ('checkpoints','thread_id,checkpoint_ns,checkpoint_id')]:
+            for table, order in [('team_runs','id'), ('team_events','seq'), ('team_files','id'), ('team_checkpoints','key')]:
                 query = f"SELECT count(*) || ':' || md5(coalesce(string_agg(row_to_json(r)::text, '' ORDER BY {order}), '')) FROM {table} r"
                 assert fingerprint('workflow') == fingerprint(target), f'restored {table} differ'
-            print('Restore verified: runs, artifacts, events and checkpoints match exactly.')
+            print('Restore verified: projects, runs, events, files and checkpoints match exactly.')
         finally:
             compose('exec', '-T', 'postgres', 'dropdb', '-U', 'postgres', target)
     finally:

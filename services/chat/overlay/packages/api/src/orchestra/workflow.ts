@@ -3,6 +3,14 @@ import { Router } from 'express';
 import jwt from 'jsonwebtoken';
 import type { Request, Response } from 'express';
 
+const ID = '[0-9a-f-]{36}';
+const ROUTES: Record<string, RegExp | undefined> = {
+  GET: new RegExp(`^/(?:projects(?:/${ID})?|runs/${ID}(?:/(?:events|files(?:/${ID})?))?)$`),
+  POST: new RegExp(`^/(?:projects(?:/${ID}/(?:design|runs))?|runs/${ID}/cancel)$`),
+  PUT: new RegExp(`^/projects/${ID}/plan$`),
+  DELETE: new RegExp(`^/projects/${ID}$`),
+};
+
 /** Forward only verified chat identity and the workflow protocol, never client credentials. */
 export function createOrchestraWorkflowRouter(): Router {
   const router = Router();
@@ -18,9 +26,7 @@ export function createOrchestraWorkflowRouter(): Router {
       res.status(503).json({ error: 'workflow_not_configured' });
       return;
     }
-    const allowed = req.method === 'GET'
-      ? /^\/runs\/[0-9a-f-]{36}(?:\/(?:events|artifact))?$/
-      : req.method === 'POST' ? /^\/runs(?:\/[0-9a-f-]{36}\/(?:approval|cancel))?$/ : undefined;
+    const allowed = ROUTES[req.method];
     if (!allowed?.test(req.path)) {
       res.status(404).json({ error: 'route_not_found' });
       return;
@@ -36,8 +42,8 @@ export function createOrchestraWorkflowRouter(): Router {
       ? `?after=${req.query.after}` : '';
     try {
       const upstream = await fetch(`${base}${req.path}${cursor}`, { method: req.method, headers,
-        ...(req.method === 'POST' ? { body: JSON.stringify(req.body) } : {}),
-        signal: AbortSignal.timeout(10000) });
+        ...(req.method === 'POST' || req.method === 'PUT' ? { body: JSON.stringify(req.body ?? {}) } : {}),
+        signal: AbortSignal.timeout(15000) });
       res.status(upstream.status).type('application/json').send(await upstream.text());
     } catch {
       res.status(502).json({ error: 'workflow_unavailable' });

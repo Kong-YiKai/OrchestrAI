@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 import secrets
 import subprocess
-import time
 import urllib.error
 import urllib.request
 import uuid
@@ -108,26 +107,27 @@ def main():
                                content_type='multipart/form-data; boundary=' + boundary)
     assert status == 200 and uploaded, 'TXT upload failed'
 
-    status, run = request('/api/workflow/runs', 'POST', {'text': 'R3 authenticated chat delegation smoke'},
-                          headers={'Idempotency-Key': 'r3-smoke-' + uuid.uuid4().hex})
-    assert status == 202 and run.get('id'), 'chat delegation admission'
-    path = '/api/workflow/runs/' + run['id']
-    for _ in range(30):
-        status, run = request(path)
-        if run.get('status') == 'waiting':
-            break
-        time.sleep(0.2)
-    assert status == 200 and run['status'] == 'waiting', 'workflow approval interrupt'
-    status, _ = request(path + '/approval', 'POST', {'version': run['approval_version'], 'approve': True})
-    assert status == 200, 'approval delegation'
-    for _ in range(30):
-        status, run = request(path)
-        if run.get('status') == 'completed':
-            break
-        time.sleep(0.2)
-    status, artifact = request(path + '/artifact')
-    assert status == 200 and artifact.get('sha256'), 'real workflow artifact'
-    print('Candidate smoke passed: auth, TXT upload, verified chat identity -> approval -> real artifact.')
+    # Agent-team delegation without model calls: an explicit plan round-trips through
+    # chat identity, is edited with a version check, and is deleted again.
+    plan = {'summary': 'candidate smoke',
+            'roles': [{'id': 'writer', 'name': 'writer', 'description': 'writes', 'instructions': 'write one file'}],
+            'tasks': [{'id': 'draft', 'title': 'draft', 'description': 'write README.md', 'role': 'writer'}]}
+    status, project = request('/api/workflow/projects', 'POST',
+                              {'goal': 'candidate smoke', 'workspace_name': 'candidate-smoke', 'plan': plan},
+                              headers={'Idempotency-Key': 'r5-smoke-' + uuid.uuid4().hex})
+    assert status == 202 and project.get('status') == 'ready', 'chat delegation admission'
+    path = '/api/workflow/projects/' + project['id']
+    status, edited = request(path + '/plan', 'PUT', {'version': project['plan_version'], 'plan': dict(plan, summary='edited')})
+    assert status == 200 and edited['plan_version'] == project['plan_version'] + 1, 'versioned plan edit'
+    status, _ = request(path + '/plan', 'PUT', {'version': project['plan_version'], 'plan': plan})
+    assert status == 409, 'stale plan edit rejected'
+    status, listed = request('/api/workflow/projects')
+    assert status == 200 and any(p['id'] == project['id'] for p in listed['projects']), 'project listing'
+    status, _ = request(path, 'DELETE')
+    assert status == 200, 'project deletion'
+    status, _ = request(path)
+    assert status == 404, 'deleted project hidden'
+    print('Candidate smoke passed: auth, TXT upload, verified chat identity -> team plan edit -> delete.')
     print('No model calls. Candidate account is in ignored deploy/private/candidate-account.json.')
 
 

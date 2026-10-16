@@ -2,7 +2,6 @@ import { readFile, readdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import pg from 'pg';
-import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 
 export async function migrate(url) {
   const client = new pg.Client({ connectionString: url, connectionTimeoutMillis: 5000 });
@@ -26,9 +25,6 @@ export async function migrate(url) {
         await client.query('COMMIT');
       } catch (error) { await client.query('ROLLBACK'); throw error; }
     }
-    // Upstream owns its internal checkpoint migrations; run under the same release lock.
-    const saver = PostgresSaver.fromConnString(url);
-    try { await saver.setup(); } finally { await saver.end(); }
   } finally { await client.end(); }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
