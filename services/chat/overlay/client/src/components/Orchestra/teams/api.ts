@@ -92,16 +92,26 @@ export function useTeamApi() {
   const { token } = useAuthContext();
   return useCallback(
     async <T,>(path: string, method = 'GET', body?: unknown, key?: string, signal?: AbortSignal) => {
-      const response = await fetch(`/api/workflow${path}`, {
-        method,
-        signal,
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          ...(key ? { 'Idempotency-Key': key } : {}),
-        },
-        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-      });
+      const send = (bearer?: string) =>
+        fetch(`/api/workflow${path}`, {
+          method,
+          signal,
+          headers: {
+            Authorization: `Bearer ${bearer}`,
+            'Content-Type': 'application/json',
+            ...(key ? { 'Idempotency-Key': key } : {}),
+          },
+          ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+        });
+      let response = await send(token);
+      // A page left open outlives the short-lived access token; renew it once from
+      // the refresh cookie (as the rest of the app does) instead of showing an error.
+      if (response.status === 401) {
+        const renewed = await fetch('/api/auth/refresh', { method: 'POST' })
+          .then((r) => (r.ok ? r.json() : undefined))
+          .catch(() => undefined);
+        if (renewed?.token) response = await send(renewed.token);
+      }
       const value = await response.json().catch(() => ({}));
       if (!response.ok) {
         if (response.status === 401) throw new TeamError('', ['登录已过期，请重新登录。']);
