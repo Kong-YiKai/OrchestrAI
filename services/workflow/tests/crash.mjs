@@ -1,6 +1,9 @@
+import { config } from '../src/config.mjs';
 import { Store } from '../src/store.mjs';
-import { runtime } from '../src/runtime.mjs';
-const store = new Store(process.env.DATABASE_URL);
-const engine = runtime(process.env.DATABASE_URL,store,{ afterArtifact:async()=>process.exit(73) });
-await engine.execute(process.argv[2],Number(process.argv[3]));
+import { createEngine } from '../src/engine.mjs';
+import { fakeModel } from './fake-model.mjs';
+
+// Child process for the crash test: dies (exit 73) while the "page" task is in flight.
+const store = new Store(config({ ...process.env, DELEGATION_SECRET: 'test-only-delegation-01234567890123456789' }).databaseUrl);
+await createEngine(store, {}, { adapter: fakeModel({ crashOn: 'page' }).adapter }).execute(process.argv[2], 1);
 process.exit(1);

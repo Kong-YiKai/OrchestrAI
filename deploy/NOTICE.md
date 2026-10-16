@@ -17,8 +17,10 @@ covers LibreChat-derived files in the overlay.
 | LibreChat Agents | 4.0.1 | MIT; research reuses the existing upstream search/extraction tool, not a second chat platform |
 | okapibm25 | 1.4.1 | MIT; existing Agents dependency, local ranking without another provider |
 | BullMQ / jose / pg | 5.81.5 / 6.1.0 / 8.16.3 | MIT; shared versions with workflow, independently deployed research state/queue/auth |
+| Open Multi-Agent (`@open-multi-agent/core`) | 1.21.2 | MIT; workflow worker's agent-team runtime (task graph, Postgres checkpoints, consensus review). Agents get only file read/write/edit/glob tools sandboxed to a per-run temporary directory; shell, MCP and network tools are not enabled |
+| React Flow (`@xyflow/react`) | 12.12.0 | MIT; team canvas in the chat client |
 
-Open WebUI and Dify are product references only; neither codebase is copied or
+Open WebUI, Dify and awwo-canvas (MIT, commander/canvas UX) are product references only; neither codebase is copied or
 deployed. Python runtime dependencies are pinned in each service's requirements.
 LibreChat uses its pinned npm lock with `services/chat/patches/dependencies.patch`. Product CI
 produces per-image SPDX and vulnerability reports; an SPDX file does not by itself
@@ -29,8 +31,8 @@ Runtime hardening: MongoDB keeps server 8.0.20; signed vendor packages pin
 mongosh 2.13.0/database-tools 100.19.1 and Ubuntu TLS packages. Unused privileged
 launcher, YAML loader and administration tools are removed. Only dump/restore
 remain for encrypted snapshots. Chat runs Node directly without npm/npx; shell
-MCP via npx is not enabled in this product runtime. R5 execution belongs in its
-own restricted worker.
+MCP via npx is not enabled in this product runtime. R5 agent teams run in the separate
+workflow worker, which reaches models only through the budgeted gateway.
 
 The tracked LibreChat dependency patch upgrades affected production dependencies. A bounded
 braces parser guard is applied and checked during image build pending an upstream

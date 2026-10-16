@@ -1,0 +1,86 @@
+.orchestra-team { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
+.orchestra-team-pad { padding: 16px 24px; }
+.orchestra-team-projects { display: flex; gap: 8px; overflow-x: auto; padding: 14px 24px; border-bottom: 1px solid rgb(var(--border-light)); flex-shrink: 0; }
+.orchestra-team-projects button, .orchestra-team-results nav button { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; max-width: 220px; padding: 7px 12px; border: 1px solid rgb(var(--border-light)); border-radius: 9px; background: rgb(var(--surface-primary-alt)); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.orchestra-team-projects button[aria-pressed=true], .orchestra-team-results nav button[aria-pressed=true] { border-color: rgb(var(--accent-primary)); color: rgb(var(--link)); background: rgb(var(--surface-primary)); }
+.orchestra-team-projects button span { font-size: 10px; color: rgb(var(--text-tertiary)); }
+.orchestra-team .orchestra-error { margin: 12px 24px 0; }
+.orchestra-team-warning { font-size: 12px; color: rgb(var(--text-destructive)); margin: 6px 0; }
+.orchestra-team-create { display: flex; flex-direction: column; gap: 16px; max-width: 760px; padding: 32px clamp(18px, 4vw, 48px); overflow-y: auto; }
+.orchestra-team-create h2 { font-size: 26px; font-weight: 600; }
+.orchestra-team-create label, .orchestra-team-inspector label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: rgb(var(--text-secondary)); }
+.orchestra-team :is(input:not([type=checkbox]), textarea, select) { width: 100%; padding: 9px 12px; border: 1px solid rgb(var(--border-light)); border-radius: 10px; background: rgb(var(--surface-primary)); color: rgb(var(--text-primary)); font-size: 13px; line-height: 1.7; }
+.orchestra-team :is(input, textarea, select):disabled { opacity: .75; }
+.orchestra-team-create button[type=submit] { align-self: flex-start; }
+.orchestra-team-local { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.orchestra-team-local span { font-size: 11px; color: rgb(var(--text-tertiary)); }
+.orchestra-team-wait { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 40px clamp(18px, 4vw, 48px); }
+.orchestra-team-wait h3 { font-size: 18px; font-weight: 600; }
+.orchestra-team-wait svg { color: rgb(var(--link)); }
+.orchestra-team-board { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.orchestra-team-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 12px 24px; border-bottom: 1px solid rgb(var(--border-light)); background: rgb(var(--surface-primary)); }
+.orchestra-team-goal { display: flex; flex-direction: column; min-width: 160px; flex: 1; }
+.orchestra-team-goal strong { font-size: 14px; }
+.orchestra-team-goal span { font-size: 11px; color: rgb(var(--text-tertiary)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.orchestra-view-tabs.orchestra-team-switch button:last-child { display: block; }
+.orchestra-team-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.orchestra-team-actions :is(.orchestra-primary, .orchestra-secondary) { min-height: 34px; padding: 6px 12px; font-size: 12px; }
+.orchestra-team-body { display: flex; flex: 1; min-height: 0; }
+.orchestra-team-canvas { flex: 1; min-width: 0; min-height: 360px; }
+.orchestra-team-canvas .react-flow { --xy-background-color: rgb(var(--surface-chat)); --xy-edge-stroke: rgb(var(--border-heavy)); --xy-edge-stroke-selected: rgb(var(--accent-primary)); --xy-controls-button-background-color: rgb(var(--surface-primary)); --xy-controls-button-color: rgb(var(--text-primary)); --xy-controls-button-border-color: rgb(var(--border-light)); --xy-handle-background-color: rgb(var(--accent-primary)); }
+.orchestra-team-node { width: 220px; padding: 12px 14px; border: 1px solid rgb(var(--border-light)); border-radius: 14px; background: rgb(var(--surface-primary)); color: rgb(var(--text-primary)); box-shadow: 0 1px 3px color-mix(in srgb, rgb(var(--border-medium)) 40%, transparent); }
+.orchestra-team-node[data-selected] { border-color: rgb(var(--accent-primary)); box-shadow: 0 0 0 2px color-mix(in srgb, rgb(var(--accent-primary)) 25%, transparent); }
+.orchestra-team-node[data-state=running], .orchestra-team-node[data-state=retrying] { border-color: rgb(var(--accent-primary)); }
+.orchestra-team-node[data-state=completed] { border-color: #3f9a5c; }
+.orchestra-team-node[data-state=failed] { border-color: rgb(var(--text-destructive)); }
+.orchestra-team-node[data-state=skipped] { opacity: .6; }
+.orchestra-team-node-head { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.orchestra-team-role { font-size: 10px; padding: 2px 8px; border-radius: 6px; background: rgb(var(--surface-active)); color: rgb(var(--link)); }
+.orchestra-team-state { font-size: 10px; color: rgb(var(--text-tertiary)); }
+.orchestra-team-node[data-state=running] .orchestra-team-state { color: rgb(var(--link)); }
+.orchestra-team-node[data-state=completed] .orchestra-team-state { color: #3f9a5c; }
+.orchestra-team-node-title { font-size: 13px; font-weight: 500; line-height: 1.5; }
+.orchestra-team-review { display: flex; align-items: center; gap: 4px; margin-top: 6px; font-size: 10px; color: rgb(var(--text-tertiary)); }
+.orchestra-team-side { width: 340px; flex-shrink: 0; overflow-y: auto; border-left: 1px solid rgb(var(--border-light)); background: rgb(var(--surface-primary-alt)); }
+.orchestra-team-inspector { display: flex; flex-direction: column; gap: 12px; padding: 18px 20px; border-bottom: 1px solid rgb(var(--border-light)); }
+.orchestra-team-inspector header { display: flex; align-items: center; justify-content: space-between; }
+.orchestra-team-inspector h3 { font-size: 14px; font-weight: 600; }
+.orchestra-team-inspector fieldset { display: flex; flex-direction: column; gap: 10px; }
+.orchestra-team-inspector legend { font-size: 12px; color: rgb(var(--text-secondary)); margin-bottom: 6px; }
+.orchestra-team-inspector details { border: 1px solid rgb(var(--border-light)); border-radius: 12px; padding: 10px 12px; background: rgb(var(--surface-primary)); }
+.orchestra-team-inspector details[open] > summary { margin-bottom: 10px; }
+.orchestra-team-inspector details > label { margin-bottom: 10px; }
+.orchestra-team-inspector summary { display: flex; flex-direction: column; gap: 2px; cursor: pointer; list-style: none; }
+.orchestra-team-inspector summary strong { font-size: 13px; font-weight: 500; }
+.orchestra-team-inspector summary span { font-size: 11px; color: rgb(var(--text-tertiary)); line-height: 1.6; }
+.orchestra-team-summary { font-size: 12px; line-height: 1.8; color: rgb(var(--text-secondary)); }
+.orchestra-team-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.orchestra-team-chips label { flex-direction: row; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid rgb(var(--border-light)); border-radius: 8px; background: rgb(var(--surface-primary)); }
+.orchestra-team-output p { font-size: 12px; margin-bottom: 6px; }
+.orchestra-team-output pre, .orchestra-team-preview pre { max-height: 320px; overflow: auto; padding: 10px 12px; border-radius: 10px; background: rgb(var(--surface-primary)); border: 1px solid rgb(var(--border-light)); font-size: 11px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.orchestra-team-danger { color: rgb(var(--text-destructive)) !important; }
+.orchestra-team-manage { flex-direction: row; flex-wrap: wrap; }
+.orchestra-team-manage :is(.orchestra-secondary) { min-height: 34px; padding: 6px 12px; font-size: 12px; }
+.orchestra-team-files { display: flex; flex-direction: column; gap: 10px; }
+.orchestra-team-files-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.orchestra-team-files-actions :is(.orchestra-primary, .orchestra-secondary) { min-height: 34px; padding: 6px 12px; font-size: 12px; }
+.orchestra-team-files ul { display: flex; flex-direction: column; gap: 4px; }
+.orchestra-team-files li { display: flex; align-items: center; gap: 4px; }
+.orchestra-team-files li > button:first-child { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; padding: 7px 10px; border-radius: 9px; font-size: 12px; text-align: left; }
+.orchestra-team-files li > button:first-child:hover, .orchestra-team-files li > button[aria-pressed=true] { background: rgb(var(--surface-hover)); }
+.orchestra-team-files li span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.orchestra-team-files li small { font-size: 10px; color: rgb(var(--text-tertiary)); }
+.orchestra-team-preview h4 { font-size: 12px; margin-bottom: 8px; }
+.orchestra-team-preview iframe { width: 100%; height: 420px; border: 1px solid rgb(var(--border-light)); border-radius: 10px; background: #fff; }
+.orchestra-team-preview img { max-width: 100%; border: 1px solid rgb(var(--border-light)); border-radius: 10px; background: #fff; }
+.orchestra-team-results { display: flex; flex-direction: column; gap: 16px; padding: 20px clamp(18px, 4vw, 48px); overflow-y: auto; max-width: 980px; }
+.orchestra-team-results nav { display: flex; gap: 8px; flex-wrap: wrap; }
+.orchestra-team-results .orchestra-team-preview iframe { height: 560px; }
+@media (max-width: 1023px) {
+  .orchestra-team-body { flex-direction: column; overflow-y: auto; }
+  .orchestra-team-canvas { min-height: 420px; flex: none; height: 55vh; }
+  .orchestra-team-side { width: 100%; border-left: 0; border-top: 1px solid rgb(var(--border-light)); overflow: visible; }
+}
+@media (max-width: 768px) {
+  .orchestra-team-projects, .orchestra-team-toolbar { padding: 10px 14px; }
+}

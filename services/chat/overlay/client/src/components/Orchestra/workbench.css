@@ -109,11 +109,6 @@
 .orchestra-context-file p { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .orchestra-context-file span { font-size: 10px; line-height: 1.7; color: rgb(var(--text-tertiary)); }
 .orchestra-context-full { width: 100%; max-width: 850px; border-left: 0; margin: 0 auto; }
-.orchestra-unavailable { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 18px; flex: 1; min-height: 0; overflow-y: auto; padding: 40px clamp(24px, 7vw, 90px); }
-.orchestra-empty-icon { color: rgb(var(--link)); background: rgb(var(--surface-primary)); border: 1px solid rgb(var(--border-light)); border-radius: 16px; padding: 18px; }
-.orchestra-unavailable h2 { font-size: clamp(24px, 2.3vw, 33px); line-height: 1.5; font-weight: 600; }
-.orchestra-unavailable > p:not(.orchestra-eyebrow) { max-width: 520px; font-size: 13px; line-height: 1.9; color: rgb(var(--text-tertiary)); }
-.orchestra-unavailable :is(.orchestra-app, .orchestra-auth) .orchestra-primary { margin-top: 12px; }
 .orchestra-research { min-height: 0; overflow-y: auto; padding: 34px clamp(18px, 4vw, 48px); }
 .orchestra-research-intro h2 { font-size: 27px; font-weight: 600; margin: 14px 0 10px; }
 .orchestra-research-intro > p:last-child { font-size: 13px; line-height: 1.8; color: rgb(var(--text-tertiary)); }
@@ -196,7 +191,6 @@
   .orchestra-composer textarea { min-height: 56px; font-size: 13px; }
   .orchestra-context-full { background: rgb(var(--surface-chat)); }
   .orchestra-context-full .orchestra-context-heading { min-height: 54px; }
-  .orchestra-unavailable { padding: 28px 24px; justify-content: flex-start; }
   .orchestra-research { padding: 28px 16px; }
   .orchestra-research-intro h2 { font-size: 22px; }
   .orchestra-research-form { padding: 16px; }

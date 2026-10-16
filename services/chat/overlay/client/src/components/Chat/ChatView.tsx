@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react';
+import { lazy, memo, Suspense, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { useRecoilValue } from 'recoil';
 import { useForm } from 'react-hook-form';
@@ -32,9 +32,12 @@ import Landing from '~/components/Orchestra/Landing';
 import Header from '~/components/Orchestra/Header';
 import OrchestraContext from '~/components/Orchestra/Context';
 import Research from '~/components/Orchestra/Research';
-import { useWorkbench, UnavailableView } from '~/components/Orchestra/Workbench';
+import { useWorkbench } from '~/components/Orchestra/Workbench';
 import { cn } from '~/utils';
 import store from '~/store';
+
+/** The team canvas (React Flow) loads only when its view opens. */
+const Teams = lazy(() => import('~/components/Orchestra/teams/Teams'));
 
 function LoadingSpinner() {
   return (
@@ -242,7 +245,9 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                         )}
                         {(view === 'canvas' || view === 'results') && (
                           <div className="orchestra-main-view">
-                            <UnavailableView kind={view} />
+                            <Suspense fallback={<LoadingSpinner />}>
+                              <Teams mode={view} />
+                            </Suspense>
                           </div>
                         )}
                         {view === 'context' && <OrchestraContext full />}
