@@ -48,14 +48,15 @@ export function modelSettings(settings, adapter) {
 }
 
 const RULES = workspace => `\n\n## 工作区\n团队共享工作目录是 ${workspace}。工具里的文件路径必须是以它开头的绝对路径。` +
-  '交付物必须写成文件保存在这个目录（可以用子目录区分模块，文件名简洁可读）；单次写入过长时先写主体再用 file_edit 补充。' +
-  '开始前先用 glob 和 file_read 查看依赖任务已经写好的文件，在其基础上继续；除非任务要求，不要覆盖别人的文件。' +
+  '交付物必须写成文件保存在这个目录（可以用子目录区分模块，文件名简洁可读，不要再建一层以项目命名的外层文件夹）；单次写入过长时先写主体再用 file_edit 补充。' +
+  '开始前先用 glob 查看已有文件，只读取你真正需要的文件，同一个文件不要反复读取；在其基础上继续，除非任务要求，不要覆盖别人的文件。' +
   '最后用几句话说明你写入或修改了哪些文件、完成了什么；没完成的部分如实说明，不要声称做了没做的事。';
 
-// The gateway caps a request at 100 KB of context. OMA estimates 4 chars per token, so
-// compacting at 6000 keeps even all-CJK conversations (3 bytes per char) under the cap.
-const LIMITS = { maxTokens: 8192, maxToolOutputChars: 6000, callTimeoutMs: 240000,
-  contextStrategy: { type: 'compact', maxTokens: 6000, preserveRecentTurns: 2 },
+// The gateway caps a request at 200 KB of context. OMA estimates 4 chars per token, so
+// compacting at 16000 keeps even all-CJK conversations (3 bytes per char) under the cap
+// while a summarising task can still hold several files at once.
+const LIMITS = { maxTokens: 8192, maxToolOutputChars: 12000, callTimeoutMs: 240000,
+  contextStrategy: { type: 'compact', maxTokens: 16000, preserveRecentTurns: 3 },
   loopDetection: { maxRepetitions: 3, onLoopDetected: 'warn' } };
 
 export function roster(plan, workspace, model) {
@@ -167,7 +168,19 @@ export function createEngine(store, settings, { adapter } = {}) {
           if (event.type === 'task_complete') await syncFiles(runId, workspace, taskId);
         })().catch(() => log('task_state_unavailable', { run_id: runId })));
       };
-      const oma = new OpenMultiAgent({ maxConcurrency: settings.concurrency ?? 2, defaultCwd: workspace, onProgress });
+      // Model turns and tool calls become a live activity line per task, so a long task
+      // visibly makes progress instead of sitting on "running".
+      const onTrace = trace => {
+        if (trace.type !== 'llm_call' && trace.type !== 'tool_call') return;
+        const taskId = ids.get(trace.taskId);
+        if (!taskId) return;
+        const path = typeof trace.input?.path === 'string' ? relative(workspace, trace.input.path).split(sep).join('/').slice(0, 200) : undefined;
+        const data = trace.type === 'llm_call'
+          ? { kind: 'model', agent: trace.agent, turn: trace.turn, tokens: trace.tokens, ms: trace.durationMs }
+          : { kind: 'tool', agent: trace.agent, tool: trace.tool, ...(path ? { path } : {}), ...(trace.isError ? { error: true } : {}), ms: trace.durationMs };
+        pending.push(store.activity(runId, taskId, data).catch(() => log('activity_unavailable', { run_id: runId })));
+      };
+      const oma = new OpenMultiAgent({ maxConcurrency: settings.concurrency ?? 2, defaultCwd: workspace, onProgress, onTrace });
       const team = oma.createTeam(runId, { name: 'team', agents });
       const specs = taskSpecs(plan, agents);
       const checkpoint = { store: checkpointStore(store.pool, runId), runId };

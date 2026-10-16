@@ -184,13 +184,13 @@ def bound(data, call_type):
             raise HTTPException(400, 'invalid_content')
         texts.append(json.dumps({k: v for k, v in message.items() if k != 'content'}, ensure_ascii=False))
     texts.append(json.dumps(data.get('tools', []), ensure_ascii=False))
-    if images > 5 or sum(len(t.encode()) for t in texts) > 100000:
+    if images > 5 or sum(len(t.encode()) for t in texts) > 200000:
         raise HTTPException(413, 'context_limit')
     # Flash peak price: $0.3/$1.2 per million input/output; FX ceiling 8 CNY/USD.
     # For images reserve for the entire 1M-token model context, not a guessed
     # image token count. Text-only input is bounded by UTF-8 bytes plus margin:
-    # 100k input tokens (24 fen) + 8192 output tokens (7.9 fen) < 35 fen.
-    return 250 if images else 35
+    # 200k input tokens (48 fen) + 8192 output tokens (7.9 fen) < 60 fen.
+    return 250 if images else 60
 
 
 class Budget(CustomLogger):

@@ -11,15 +11,15 @@ import {
 import type { Connection, Edge, EdgeChange, Node, NodeChange, NodeProps } from '@xyflow/react';
 import { MessagesSquare, ShieldCheck } from 'lucide-react';
 import '@xyflow/react/dist/style.css';
-import { TASK_LABELS } from './api';
+import { TASK_LABELS, describeActivity } from './api';
 import { createsCycle } from './plan';
 import type { Plan, Task, TaskState } from './api';
 
-type TaskData = { task: Task; role: string; state?: TaskState; reviewers: string };
+type TaskData = { task: Task; role: string; state?: TaskState; reviewers: string; activity: string };
 type TaskNode = Node<TaskData, 'task'>;
 
 const TaskCard = memo(function TaskCard({ data, selected }: NodeProps<TaskNode>) {
-  const { task, role, state, reviewers } = data;
+  const { task, role, state, reviewers, activity } = data;
   return (
     <div className="orchestra-team-node" data-state={state?.status} data-selected={selected || undefined}>
       <Handle type="target" position={Position.Left} />
@@ -34,6 +34,7 @@ const TaskCard = memo(function TaskCard({ data, selected }: NodeProps<TaskNode>)
           {task.review.mode === 'review' ? '互审' : '讨论'} · {reviewers}
         </p>
       )}
+      {activity && <p className="orchestra-team-activity">{activity}</p>}
       <Handle type="source" position={Position.Right} />
     </div>
   );
@@ -76,6 +77,9 @@ export default function TeamCanvas({
           role: names.get(task.role) ?? task.role,
           state: states?.[task.id],
           reviewers: (task.review?.reviewers ?? []).map((r) => names.get(r) ?? r).join('、'),
+          activity: ['running', 'retrying'].includes(states?.[task.id]?.status ?? '')
+            ? describeActivity(states?.[task.id]?.activity, names)
+            : '',
         },
       })),
     [plan.tasks, names, states, selected],

@@ -147,6 +147,7 @@ test('commander designs the team, the team runs in parallel with review and writ
     assert.equal(events.events[0].type, 'queued');
     assert.equal(events.events.at(-1).type, 'completed');
     assert.ok(events.events.some(e => e.type === 'task' && e.task_id === 'outline' && e.data.status === 'completed'));
+    assert.ok(events.events.some(e => e.type === 'activity' && e.task_id === 'page' && e.data.tool === 'file_write' && e.data.path === 'site/index.html'));
     assert.deepEqual((await request(`/runs/${run.id}/events?after=${events.next_cursor}`)).body.events, []);
     assert.equal((await request(`/runs/${run.id}/files`, { who: { user: 'bob' } })).status, 404);
   } finally { await close(); }
