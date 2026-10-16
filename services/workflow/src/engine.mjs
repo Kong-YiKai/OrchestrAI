@@ -226,6 +226,8 @@ export function createEngine(store, settings, { adapter, onStall, onAbandoned } 
       const done = Object.values(states).filter(t => t.status === 'completed').length;
       let status = result?.success ? 'completed' : done ? 'partial' : 'failed';
       let error = result?.success ? null : String(failure?.code ?? failure?.name ?? (result?.status?.code && result.status.code !== 'ok' ? result.status.code : 'tasks_failed')).slice(0, 80);
+      // The gateway's CNY budget is the usual reason a healthy team stops; say so plainly.
+      if (error && Object.values(states).some(t => /provider_budget_exceeded/.test(t.output ?? ''))) error = 'model_budget_exhausted';
       if (stalled) status = done ? 'partial' : 'failed';
       else if (abort.signal.aborted) { status = 'cancelled'; error = null; }
       if (failure && !abort.signal.aborted) log('run_failed', { run_id: runId, error_code: error });

@@ -8,7 +8,7 @@
 | --- | --- |
 | 生产入口 | `https://orchestrai.elysiumgrid.space/login`，公开注册关闭；账号在本机忽略文件 `deploy/private/production-account.json` |
 | 生产版本 | main `ca04da3`（Actions #38782172802 全部成功，含部署），发布清单 schema=3：9 种镜像、10 个常驻进程 |
-| 当前阶段 | **R5 智能体团队**：后台（R5-1）和画布（R5-2）已完成，PR #64；待部署与 DeepSeek 真实端到端测试（R5-3）。R4 已完成，待用户统一手动验收 |
+| 当前阶段 | **R5 智能体团队**：后台与画布已上线（PR #64–#69）；生产 DeepSeek 实测已跑通组建团队、并行、审查和文件产出，完整跑完一次待次日预算恢复后验证。R4 已完成，待用户统一手动验收 |
 | 工程结构调整 | 2026-10-14 完成：拆分 LibreChat 巨型补丁、CI 按输入复用镜像、文档与规则精简（见第 5 节） |
 | 预算 | 模型与搜索共用原子人民币预算：每日 ¥5、每月 ¥100；Tavily 另限每日 30、每月 1,000 credits |
 
@@ -84,9 +84,9 @@
 
 | 步骤 | 状态 | 内容 |
 | --- | --- | --- |
-| R5-1 后台 | 已完成 | `services/workflow` 重写：`plan.mjs`（zod 方案校验：角色 ≤12、任务 ≤30、引用、自审、环）、`designer.mjs`（总指挥）、`engine.mjs`（OMA 执行、Postgres 检查点、工作区同步到 `team_files`、取消、恢复）、新 API 与迁移 `002_teams.sql`；网关单次输出上限 8192、上下文 100 KB、超时 180 s |
+| R5-1 后台 | 已完成 | `services/workflow` 重写：`plan.mjs`（zod 方案校验：角色 ≤12、任务 ≤30、引用、自审、环）、`designer.mjs`（总指挥）、`engine.mjs`（OMA 执行、Postgres 检查点、工作区同步到 `team_files`、取消、恢复）、新 API 与迁移 `002_teams.sql`；网关单次输出上限 8192、上下文 200 KB、超时 180 s、按请求大小预留预算 |
 | R5-2 画布 | 已完成 | `overlay/.../Orchestra/teams/`：React Flow 画布、任务/角色编辑、运行状态、成果预览（HTML 在 sandbox iframe 中）、本地文件夹保存；依赖 `@xyflow/react` 12.12.0 |
-| R5-3 上线 | 待做 | 管理员同步 `deploy/compose.yml` 与 `scripts/test-product.py` → 发布 → 生产 DeepSeek 真实任务（如调研报告 + 网页）→ 文档收尾 |
+| R5-3 上线与实测 | 进行中 | 已发布（管理员同步过 compose 与 test-product.py）。三次生产实测：组建团队、并行、互审 / 讨论、文件产出正常；两次在某角色用满 12 轮后 worker 空转（CPU 满、无模型调用），原因在框架内部、尚未定位，已加看门狗（无进展 8 分钟→记录 CPU 剖析、停止并标记；主线程卡死 90 秒→记录堆栈、标记失败并重启）；第三次未卡住，因当日 ¥5 预算用完而部分完成 |
 
 限制：团队只能产出文本类文件（Markdown、HTML/CSS/JS、JSON、CSV、SVG、源码），不能联网、不能运行代码、不能生成图片或音频；每用户同时一个运行；单次运行默认 40 万 token 上限（`WORKFLOW_RUN_TOKENS`）；单文件 ≤2 MiB、单次运行 ≤20 MiB / 200 个文件；本地保存依赖 Chromium 浏览器，其他浏览器逐个下载；浏览器不能默认打开 D 盘，只会记住上次选择的位置。旧的 R2 表（runs/events/artifacts、LangGraph checkpoint）暂留以便回滚，之后的版本再删除。
 
@@ -123,6 +123,7 @@
 - 新建对话时联网开关曾观察到一次默认开启、未继承上一个对话的关闭选择；同一对话内刷新后保留选择。
 - 模型偶尔用英文写一句开场白；正文会遵循用户的语言。
 - 联网研究结果不会自动进入团队；团队成员没有联网工具。
+- 团队 worker 曾两次在角色用满轮数后空转；看门狗会自动停止并在 worker 日志里留下 `stall_profile` / `worker_blocked` 记录，下次出现时据此定位。深链接 `/c/new?view=canvas&team=…` 刷新后会丢失参数（LibreChat 新对话路由重置查询串）。
 - 用户手动验收项：完整产品、故障恢复（隔离环境）、混合容量、许可证审核、30 条搜索质量集。
 
 ## 8. 验证命令
