@@ -4,10 +4,9 @@ model_list:
       model: deepseek/deepseek-flash
       api_key: os.environ/DEEPSEEK_API_KEY
       api_base: https://api.deepseek.com
-      max_tokens: 2048
-      timeout: 60
+      timeout: 180
       max_retries: 0
-      max_parallel_requests: 2
+      max_parallel_requests: 4
       thinking: {type: disabled}
   - model_name: text-embedding-v4
     litellm_params:
@@ -20,7 +19,7 @@ model_list:
       max_parallel_requests: 1
 router_settings:
   num_retries: 0
-  timeout: 60
+  timeout: 180
 general_settings:
   master_key: os.environ/GATEWAY_KEY
   disable_spend_logs: true

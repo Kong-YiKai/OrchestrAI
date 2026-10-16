@@ -11,15 +11,14 @@
     "worker": "node src/worker.mjs",
     "migrate": "node src/migrate.mjs",
     "test": "node --test --test-concurrency=1 tests/*.test.mjs",
-    "check": "node --check src/api.mjs && node --check src/worker.mjs && node --check src/store.mjs && node --check src/runtime.mjs"
+    "check": "node --check src/api.mjs && node --check src/worker.mjs && node --check src/store.mjs && node --check src/engine.mjs && node --check src/plan.mjs && node --check src/designer.mjs"
   },
   "dependencies": {
-    "@langchain/core": "1.2.8",
-    "@langchain/langgraph": "1.4.8",
-    "@langchain/langgraph-checkpoint-postgres": "1.0.4",
+    "@open-multi-agent/core": "1.21.2",
     "bullmq": "5.81.5",
     "jose": "6.1.0",
-    "pg": "8.16.3"
+    "pg": "8.16.3",
+    "zod": "3.25.76"
   },
   "devDependencies": {
     "knip": "6.41.0"

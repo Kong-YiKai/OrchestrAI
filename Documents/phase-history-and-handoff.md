@@ -4,7 +4,7 @@
 
 ## 交接（随每次交付更新）
 
-- **当前阶段：** R4 已完成（待用户手动验收），下一阶段 R5（画布接真实 graph、Deep Agents JS 评估、成果库）。
+- **当前阶段：** R5 智能体团队。R5-1 后台、R5-2 画布已完成（分支 `claude/r5-oma-runtime`，PR #64）；R5-3 待做：管理员同步 `deploy/compose.yml` 与 `scripts/test-product.py` 后发布，再用 DeepSeek 做生产端到端测试。R4 已完成，待用户手动验收。
 - **Git：** 生产版本为 main `ca04da3`，develop 与 main 内容一致。会话代理不允许删除远端分支，已合并的旧分支由用户在本机删除；建议在 GitHub 开启 “Automatically delete head branches”。
 - **服务器：** 腾讯云 Ubuntu 22.04，2 核 / 4 GB，与 Tarot、BuddyUp、共享 Nginx（`/opt/shared-ingress`）同机。部署目录 `/opt/orchestrai`，Compose 项目 `orchestrai-production`，只绑定回环端口 `127.0.0.1:3088`。SSH 别名 `tarot-tencent` 在用户本机。
 - **本机：** Windows + Docker Desktop（context 为 `desktop-linux`）。候选环境 `http://localhost:3180`，Compose 项目 `orchestrai-r3`，账号在 `deploy/private/candidate-account.json`。本机 TUN/Fake-IP 会把公网域名解析成 198.18.x.x，research 的私网保护会拒绝这些地址，所以本机真实联网测试不可靠，联网验收以服务器为准。
@@ -14,6 +14,13 @@
 - **CI 耗时：** 调整前 main 全流程约 32 分钟。调整后只改 chat 时约 16 分钟（PR CI 约 10–13 分钟），未改动的服务直接复用 main 发布的 `inputs-<hash>` 镜像；纯文档改动不构建、不发布。
 
 ## 历史（倒序）
+
+### 2026-10-16 R5 智能体团队（PR #64）
+- 选型：执行层用 Open Multi-Agent 1.21.2（MIT），替换 LangGraph 验证流程；awwo-canvas 只参考画布与总指挥交互。
+- workflow：总指挥（`designer.mjs`）按目标生成角色和任务图；`plan.mjs` 校验；`engine.mjs` 把方案映射成 OMA 任务（依赖按标题、互审 = refute、讨论 = lens，审查者只读文件），检查点写 `team_checkpoints`，工作区文件写 `team_files`，崩溃后 `restore()` 不重做已完成任务。API 见 `api.mjs` 路由表；每用户同时一个运行。
+- gateway：输出上限 2048 → 8192、上下文 60 → 100 KB、单次预留 20 → 35 分、超时 60 → 180 s、并发 2 → 4。
+- chat：画布 / 我的成果两个视图接入真实团队（React Flow），HTML 成果只在 sandbox iframe 中预览，本地保存用 File System Access API。删除了“尚未接入”占位视图和文案。
+- 测试：workflow 11 项（真实 Postgres + Redis，假模型覆盖并行、审查、崩溃恢复、取消、outbox）；本地用真实 API + 假模型 worker 在 Chromium 中走通创建 → 编辑 → 运行 → 预览。
 
 ### 2026-10-16 只保留一个联网开关
 - 用户要求输入框只保留一个小地球。删除自加的“联网搜索 · 开启”按钮（`client.patch` 中 ChatForm 的按钮、`Globe` 导入和 4 个文案键，以及 `workbench.css` 中对应样式），保留上游的地球图标。两者控制的是同一个状态，首次默认开启、记住选择的逻辑不变。

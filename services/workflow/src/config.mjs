@@ -7,8 +7,15 @@ export function config(env = process.env) {
   if (redis.protocol !== 'redis:' && redis.protocol !== 'rediss:') throw new Error('Invalid REDIS_URL scheme');
   const port = Number(env.PORT || 8090);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid PORT');
+  const tokens = Number(env.WORKFLOW_RUN_TOKENS || 400000);
+  if (!Number.isInteger(tokens) || tokens < 1000) throw new Error('Invalid WORKFLOW_RUN_TOKENS');
   return {
     databaseUrl: env.DATABASE_URL,
+    // Agents reach models only through the budgeted gateway; without a key the API
+    // still serves plans and files, and model work fails with model_not_configured.
+    gateway: env.GATEWAY_KEY ? { url: env.GATEWAY_URL || 'http://gateway:4000/v1', key: env.GATEWAY_KEY,
+      model: env.WORKFLOW_MODEL || 'deepseek-flash' } : null,
+    runTokenBudget: tokens,
     delegationSecret: env.DELEGATION_SECRET,
     port,
     redis: {

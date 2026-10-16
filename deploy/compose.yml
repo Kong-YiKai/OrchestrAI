@@ -13,6 +13,10 @@ x-app: &app
     DATABASE_URL: postgresql://workflow:${WORKFLOW_DB_PASSWORD:?required}@postgres:5432/workflow
     REDIS_URL: redis://:${REDIS_PASSWORD:?required}@redis:6379/1
     DELEGATION_SECRET: ${DELEGATION_SECRET:?required}
+    # Agent teams call models only through the budgeted gateway (product stack).
+    GATEWAY_KEY: ${GATEWAY_KEY:-}
+    WORKFLOW_MODEL: ${WORKFLOW_MODEL:-deepseek-flash}
+    WORKFLOW_RUN_TOKENS: ${WORKFLOW_RUN_TOKENS:-400000}
   logging: &logs
     driver: json-file
     options: { max-size: 10m, max-file: '3' }
@@ -76,6 +80,9 @@ services:
   workflow-worker:
     <<: *app
     command: [node, src/worker.mjs]
+    # Agents write deliverables to a per-run workspace under /tmp before they are stored.
+    tmpfs: [/tmp:size=96m]
+    mem_limit: 384m
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }

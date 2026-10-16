@@ -33,7 +33,9 @@
 | LibreChat 的 npm 依赖 | `services/chat/patches/dependencies.patch`（独立 PR） | 同上 |
 | 搜索/读取 provider、预算记账 | `services/gateway/search.py`、`budget.py` 及其测试 | `python -m unittest test_search test_budget`（gateway 镜像内） |
 | 研究流程、重排、证据过滤 | `services/research/src/engine.mjs`、`service.mjs` 及测试 | `node --test tests/*.test.mjs`、`scripts/test-research.py` |
-| 工作流服务 | `services/workflow/**` | 该服务 npm `check` + `scripts/test-services.py` |
+| 智能体团队：方案校验 / 总指挥 / 执行 | `services/workflow/src/{plan,designer,engine}.mjs`（提示词就在 designer/engine 里） | 该服务 `npm run check`、`npm test`（`INTEGRATION=1` 需 Postgres+Redis，模型用 `tests/fake-model.mjs`）+ `scripts/test-services.py` |
+| 智能体团队：API、存储、队列 | `services/workflow/src/{api,store,worker}.mjs`、`migrations/` | 同上 |
+| 团队画布界面 | `services/chat/overlay/client/src/components/Orchestra/teams/` | `--service chat` 构建（含 tsc） |
 | 文档解析/RAG | `services/ingestion/upstream.patch`、`migrations/` | `--service ingestion` 构建 |
 
 **改上游文件（刷新补丁）的方法：** 先运行 `python scripts/prepare-upstreams.py`，生成的 `.build/librechat` 中已提交原始上游并打了 `upstream` 标签。在 `.build/librechat` 中直接修改上游文件，再执行：
