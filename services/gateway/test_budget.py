@@ -1,4 +1,5 @@
 """Deterministic tests: no provider traffic or paid calls."""
+import math
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import os
@@ -64,6 +65,14 @@ class BudgetTests(unittest.TestCase):
             budget.bound({'model': 'deepseek-flash', 'api_base': 'https://other.invalid'}, 'acompletion')
         with self.assertRaises(HTTPException):
             budget.bound({'model': 'text-embedding-v4', 'input': ['x'] * 11}, 'aembedding')
+
+    def test_text_reservation_matches_the_request_worst_case(self):
+        small = budget.bound({'model': 'deepseek-flash', 'messages': [{'role': 'user', 'content': 'hi'}]}, 'acompletion')
+        large = budget.bound({'model': 'deepseek-flash', 'max_tokens': 8192,
+                              'messages': [{'role': 'user', 'content': 'x' * 150000}]}, 'acompletion')
+        self.assertLessEqual(small, 4)
+        self.assertGreaterEqual(large, math.ceil(150000 * 0.00024 + 8192 * 0.00096))
+        self.assertLess(large, 60)
 
     def test_search_and_models_share_atomic_cny_budget_and_separate_credits(self):
         with patch.dict(os.environ, {'SEARCH_DAILY_CREDITS': '2', 'SEARCH_MONTHLY_CREDITS': '2'}):
