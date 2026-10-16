@@ -137,6 +137,13 @@ export class Store {
       await this.event(c, runId, 'task', taskId, { status });
     });
   }
+  async activity(runId, taskId, data) {
+    await this.transaction(async c => {
+      await c.query(`UPDATE team_runs SET task_states=jsonb_set(task_states,ARRAY[$2::text],
+        COALESCE(task_states->$2,'{}'::jsonb) || jsonb_build_object('activity',$3::jsonb)) WHERE id=$1`, [runId, taskId, { ...data, at: new Date().toISOString() }]);
+      await this.event(c, runId, 'activity', taskId, data);
+    });
+  }
   async finishTasks(runId, final) {
     if (!Object.keys(final).length) return;
     await this.transaction(async c => {

@@ -63,8 +63,11 @@ export async function writeFolder(root: FileSystemDirectoryHandle, workspace: st
     if ((await handle.requestPermission?.({ mode: 'readwrite' })) !== 'granted') throw new Error('permission');
   }
   const base = await root.getDirectoryHandle(workspace, { create: true });
+  // Agents sometimes wrap everything in a folder named like the project; don't nest it twice.
+  const wrapped = files.length > 0 && files.every((f) => f.path.startsWith(`${workspace}/`));
   for (const file of files) {
-    const parts = file.path.split('/').filter((p) => p && p !== '.' && p !== '..');
+    const path = wrapped ? file.path.slice(workspace.length + 1) : file.path;
+    const parts = path.split('/').filter((p) => p && p !== '.' && p !== '..');
     let dir = base;
     for (const part of parts.slice(0, -1)) dir = await dir.getDirectoryHandle(part, { create: true });
     const target = await dir.getFileHandle(parts.at(-1)!, { create: true });
