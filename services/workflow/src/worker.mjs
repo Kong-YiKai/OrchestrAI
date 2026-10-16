@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
+import { Worker as Thread } from 'node:worker_threads';
 import { Queue, UnrecoverableError, Worker } from 'bullmq';
 import { Store } from './store.mjs';
 import { createEngine } from './engine.mjs';
@@ -73,11 +74,27 @@ export function createProcessor(store, settings, options = {}) {
   };
 }
 
+/** Watchdog thread: CPU profile on a stalled run, stack + restart if the loop blocks. */
+function startWatchdog(settings) {
+  const thread = new Thread(new URL('./watchdog.mjs', import.meta.url), { workerData: { databaseUrl: settings.databaseUrl } });
+  thread.unref();
+  thread.on('error', () => log('watchdog_unavailable'));
+  const beat = setInterval(() => thread.postMessage('beat'), 1000);
+  beat.unref();
+  return {
+    onStall: runId => thread.postMessage({ type: 'profile', reason: runId }),
+    // The framework ignored the abort and keeps running: restart the process to stop it.
+    onAbandoned: runId => { log('run_abandoned', { run_id: runId }); setTimeout(() => process.exit(1), 10_000).unref(); },
+    close: () => { clearInterval(beat); return thread.terminate(); },
+  };
+}
+
 export async function startWorker(settings, options = {}) {
   const store = new Store(settings.databaseUrl);
   const id = `worker-${randomUUID()}`;
+  const watchdog = options.watchdog === false ? null : startWatchdog(settings);
   const queue = new Queue(queueName, { connection: { ...settings.redis, maxRetriesPerRequest: 1 } });
-  const worker = new Worker(queueName, createProcessor(store, settings, options), {
+  const worker = new Worker(queueName, createProcessor(store, settings, { onStall: watchdog?.onStall, onAbandoned: watchdog?.onAbandoned, ...options }), {
     connection: { ...settings.redis, maxRetriesPerRequest: null }, concurrency: 3,
   });
   worker.on('completed', job => log('job_completed', { kind: job.name, id: job.data.id }));
@@ -102,7 +119,7 @@ export async function startWorker(settings, options = {}) {
   })();
   // On SIGTERM an in-flight run is not awaited: its job stalls and the next worker resumes
   // it from the Postgres checkpoint.
-  return async (force = false) => { closing = true; await loop; await worker.close(force); await queue.close(); await store.close(); };
+  return async (force = false) => { closing = true; await loop; await worker.close(force); await queue.close(); await watchdog?.close(); await store.close(); };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
