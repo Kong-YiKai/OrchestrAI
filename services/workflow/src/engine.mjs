@@ -95,7 +95,9 @@ export function taskSpecs(plan, agents) {
   }));
 }
 
-export function createEngine(store, settings, { adapter } = {}) {
+export function createEngine(store, settings, { adapter, onStall, onAbandoned } = {}) {
+  const stallMs = settings.stallMs ?? 8 * 60 * 1000;
+  const abandonMs = settings.abandonMs ?? 60 * 1000;
   async function syncFiles(runId, workspace, taskId) {
     const entries = await readdir(workspace, { recursive: true, withFileTypes: true }).catch(() => []);
     let total = 0, count = 0;
@@ -137,6 +139,10 @@ export function createEngine(store, settings, { adapter } = {}) {
     const workspace = join(tmpdir(), 'team-runs', runId);
     const abort = new AbortController();
     let watcher;
+    let progress = Date.now();
+    let stalled = false;
+    let giveUp;
+    const abandoned = new Promise(resolve => { giveUp = resolve; });
     try {
       await lock.query('SELECT pg_advisory_lock(hashtextextended($1,0))', [runId]);
       const run = (await lock.query('SELECT * FROM team_runs WHERE id=$1', [runId])).rows[0];
@@ -152,6 +158,15 @@ export function createEngine(store, settings, { adapter } = {}) {
           const { rows } = await store.pool.query('SELECT status FROM team_runs WHERE id=$1', [runId]);
           if (rows[0]?.status === 'cancelled') abort.abort();
         } catch { /* The next tick retries; cancellation is also checked at the end. */ }
+        // No model turn, tool call or task event for stallMs: record where the time goes,
+        // stop the run, and if the framework ignores the abort, give up on it after a minute.
+        if (!stalled && Date.now() - progress > stallMs) {
+          stalled = true;
+          log('run_stalled', { run_id: runId, idle_ms: Date.now() - progress });
+          onStall?.(runId);
+          abort.abort();
+          setTimeout(() => giveUp({ abandoned: true, error: Object.assign(new Error('stalled'), { code: 'stalled' }) }), abandonMs).unref();
+        }
       }, 2000);
       const plan = run.plan;
       const agents = roster(plan, workspace, model);
@@ -159,6 +174,7 @@ export function createEngine(store, settings, { adapter } = {}) {
       const pending = [];
       const STATES = { task_start: 'running', task_complete: 'completed', task_skipped: 'skipped', task_retry: 'retrying', error: 'failed' };
       const onProgress = event => {
+        progress = Date.now();
         const meta = event.data?.metadata?.planTaskId;
         if (meta && event.task) ids.set(event.task, meta);
         const taskId = ids.get(event.task);
@@ -173,6 +189,7 @@ export function createEngine(store, settings, { adapter } = {}) {
       // Model turns and tool calls become a live activity line per task, so a long task
       // visibly makes progress instead of sitting on "running".
       const onTrace = trace => {
+        progress = Date.now();
         if (trace.type !== 'llm_call' && trace.type !== 'tool_call') return;
         const taskId = ids.get(trace.taskId);
         if (!taskId) return;
@@ -188,12 +205,12 @@ export function createEngine(store, settings, { adapter } = {}) {
       const checkpoint = { store: checkpointStore(store.pool, runId), runId };
       const options = { checkpoint, abortSignal: abort.signal, maxTokenBudget: settings.runTokenBudget };
       const resumable = (await checkpoint.store.list()).length > 0;
-      let result, failure;
-      try {
-        result = resumable ? await oma.restore(team, specs, options) : await oma.runTasks(team, specs, options);
-      } catch (error) {
-        failure = error;
-      }
+      const work = (resumable ? oma.restore(team, specs, options) : oma.runTasks(team, specs, options))
+        .then(value => ({ value }), error => ({ error }));
+      const outcome = await Promise.race([work, abandoned]);
+      let result = outcome.value;
+      let failure = outcome.error;
+      if (stalled && !failure) failure = Object.assign(new Error('stalled'), { code: 'stalled' });
       await Promise.allSettled(pending);
       await syncFiles(runId, workspace, null).catch(() => log('file_sync_unavailable', { run_id: runId }));
       // Reconcile from the final record: tasks finished before a restore emit no events.
@@ -205,10 +222,12 @@ export function createEngine(store, settings, { adapter } = {}) {
         final[id] = { status, output: result.taskResults?.get(t.id)?.output?.slice(0, 6000) };
       }
       await store.finishTasks(runId, final);
-      const done = Object.values(final).filter(t => t.status === 'completed').length;
+      const states = result ? final : (await store.pool.query('SELECT task_states FROM team_runs WHERE id=$1', [runId])).rows[0]?.task_states ?? {};
+      const done = Object.values(states).filter(t => t.status === 'completed').length;
       let status = result?.success ? 'completed' : done ? 'partial' : 'failed';
       let error = result?.success ? null : String(failure?.code ?? failure?.name ?? (result?.status?.code && result.status.code !== 'ok' ? result.status.code : 'tasks_failed')).slice(0, 80);
-      if (abort.signal.aborted) { status = 'cancelled'; error = null; }
+      if (stalled) status = done ? 'partial' : 'failed';
+      else if (abort.signal.aborted) { status = 'cancelled'; error = null; }
       if (failure && !abort.signal.aborted) log('run_failed', { run_id: runId, error_code: error });
       await store.transaction(async c => {
         const updated = await c.query(`UPDATE team_runs SET status=$2,error_code=$3,updated_at=now()
@@ -216,6 +235,8 @@ export function createEngine(store, settings, { adapter } = {}) {
         if (updated.rowCount) await store.event(c, runId, status, null, { completed: done, total: plan.tasks.length,
           tokens: result?.totalTokenUsage ?? null, ...(error ? { error_code: error } : {}) });
       });
+      // The framework kept running after the abort; only a process restart stops it.
+      if (outcome.abandoned) onAbandoned?.(runId);
     } finally {
       clearInterval(watcher);
       await rm(workspace, { recursive: true, force: true }).catch(() => {});

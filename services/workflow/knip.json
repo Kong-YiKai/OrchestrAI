@@ -1,4 +1,4 @@
 {
-  "entry": ["src/smoke.mjs", "tests/*.mjs"],
+  "entry": ["src/smoke.mjs", "src/watchdog.mjs", "tests/*.mjs"],
   "project": ["src/**/*.mjs", "tests/**/*.mjs"]
 }
