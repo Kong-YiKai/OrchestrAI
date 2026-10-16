@@ -1,6 +1,6 @@
 # OrchestrAI — 项目总览
 
-> 更新：2026-10-15（Asia/Singapore）。本文件只记录**当前状态、架构、阶段计划和下一步**；过程细节与历史见 `phase-history-and-handoff.md`，执行规则见根目录 `AGENTS.md`。2026-10-14 之前的完整长版 overview 保留在 Git 历史中（`Documents/project-overview.md` 在提交 `867e76d` 及更早版本）。
+> 更新：2026-10-16（Asia/Singapore）。本文件只记录**当前状态、架构、阶段计划和下一步**；过程细节与历史见 `phase-history-and-handoff.md`，执行规则见根目录 `AGENTS.md`。2026-10-14 之前的完整长版 overview 保留在 Git 历史中（`Documents/project-overview.md` 在提交 `867e76d` 及更早版本）。
 
 ## 1. 当前状态一览
 
@@ -8,14 +8,14 @@
 | --- | --- |
 | 生产入口 | `https://orchestrai.elysiumgrid.space/login`，公开注册关闭；账号在本机忽略文件 `deploy/private/production-account.json` |
 | 生产版本 | main `ca04da3`（Actions #38782172802 全部成功，含部署），发布清单 schema=3：9 种镜像、10 个常驻进程 |
-| 当前阶段 | **R4 已完成**（代码、CI/CD、生产普通聊天实测，待用户统一手动验收）；下一阶段 R5，计划见第 4 节 |
+| 当前阶段 | **R5 智能体团队**：后台（R5-1）和画布（R5-2）已完成，PR #64；待部署与 DeepSeek 真实端到端测试（R5-3）。R4 已完成，待用户统一手动验收 |
 | 工程结构调整 | 2026-10-14 完成：拆分 LibreChat 巨型补丁、CI 按输入复用镜像、文档与规则精简（见第 5 节） |
 | 预算 | 模型与搜索共用原子人民币预算：每日 ¥5、每月 ¥100；Tavily 另限每日 30、每月 1,000 credits |
 
 ## 2. 产品方向（已确认）
 
 - 品牌为 **OrchestrAI**：暖色奶咖主题、琥珀橙强调色、三栏工作台，画布特色保留。界面依据 2026-10-13 的 [Figma 设计](https://www.figma.com/design/eN0Gjqa8PggrWnYIUXDrLN) 合理适配。
-- 优先复用成熟开源实现：LibreChat 提供聊天产品内核，LangGraph JS 提供工作流运行时，LiteLLM 作为网关，RAG API 负责文档检索；Open WebUI 和 Dify 只作产品参考，不复制代码。
+- 优先复用成熟开源实现：LibreChat 提供聊天产品内核，Open Multi-Agent（OMA，MIT）提供多智能体团队运行时（2026-10-16 起替换 LangGraph），React Flow 提供画布，LiteLLM 作为网关，RAG API 负责文档检索；Open WebUI、Dify、awwo-canvas 只作产品参考，不复制代码。
 - 按业务能力划分独立服务；CI 全部通过后自动部署生产，不设人工批准步骤。
 - 重型解析、模型和抓取优先调用外部 API；共享服务器为 2 核 / 4 GB，与 Tarot、BuddyUp 同机。
 - 改革前的旧聊天和附件都是可弃测试数据，不迁移。
@@ -29,13 +29,14 @@
 | `research` | Node + `@librechat/agents` Tavily 工具 + BM25 | 查询、读取、重排、证据和研究记录（PostgreSQL 独立库）；BullMQ（Redis DB1）队列可重建 |
 | `gateway` | LiteLLM 1.105.0 | 模型路由、密钥、原子预算（SQLite）；受限 Tavily / Jina Reader transport |
 | `ingestion` | LibreChat RAG API v0.9.0 + 补丁 | PDF/TXT 解析、embedding（百炼 text-embedding-v4，1024 维）、pgvector |
-| `workflow` | LangGraph JS + BullMQ | run、checkpoint、审批、产物（PostgreSQL）；目前只有确定性流程，未接画布 |
+| `workflow` | Open Multi-Agent + BullMQ | 团队项目（目标 + 可编辑方案）、运行、事件、检查点、成果文件（PostgreSQL `team_*` 表）；模型只经 gateway 调用 |
 | `postgres` / `redis` / `mongo` | 固定 digest 加固镜像 | 各服务独立库或角色，不跨库写表 |
 
 - 浏览器 → web → chat；chat 用真实登录身份签发短期委托，调用 research、ingestion 和 workflow。服务密钥不进浏览器。
 - 普通聊天：输入框左下角的地球图标（唯一的联网开关，高亮表示开启）决定是否加载 `web_search` 工具，工具调用唯一的 research 服务；用户提供的链接优先直接读取，Tavily 直接读取失败时只做一次匿名 Jina Reader 回退。
 - 删除一轮问答：用户消息的悬浮按钮里有“删除这一轮问答”（点两次确认），会删除该提问及其所有回答，后续对话改接到上一轮，因此被删内容不再进入上下文。由 chat 的 `/api/orchestra/turns` 执行，只操作当前用户自己的消息；生成进行中不显示该按钮。
 - 侧栏“联网研究”是独立的研究记录入口，可以把结果手动带入草稿。
+- 智能体团队（“画布”视图）：用户写目标 → worker 里的总指挥（DeepSeek）生成角色和任务图 → 用户在画布上改任务、角色、连线（先后顺序）和把关方式（互审 / 讨论）→ 运行。无依赖的任务并行（并发 2），每个角色只有工作区内的文件读写工具；检查点存 PostgreSQL，worker 重启后从断点继续。成果文件随运行入库，在“我的成果”里预览、下载，或用浏览器 File System Access API 写入用户选的本地文件夹（Chrome / Edge）。
 - 附件：支持 TXT、文本型 PDF、PNG、JPEG、WebP；单个 10 MiB，每条消息 5 个，总计 25 MiB；PDF 不超过 200 页；不支持 OCR 和 DOCX。
 
 ### 代码组织
@@ -54,7 +55,7 @@
 | R2 微服务与交付基础 | 已完成（待用户手动验收） | workflow 服务、CI/CD、受限部署身份、加密异地备份 |
 | R3 聊天与附件 | 已完成（待用户手动验收） | 登录、历史、图片/PDF/TXT、文档问答、六份协调备份 |
 | R4 Web Research | 已完成（待用户手动验收） | 普通聊天中天气查询和网页总结都真实调用 research，并展示来源或具体失败；Reader 回退上线；必要 CI 和部署烟测通过 |
-| R5 真实工作流执行 | 未完成 | 画布映射真实 graph；DAG、审批、取消、重启恢复；评估 Deep Agents JS；成果库 |
+| R5 智能体团队 | 进行中 | 总指挥组建团队、画布编辑、串行/并行/互审/讨论、取消、重启恢复、成果库与本地保存；生产 DeepSeek 端到端实测 |
 | R6 音视频与产物生成 | 未完成 | 转写、视频摘要、PPT/文档、图片生成，独立 worker |
 | R7 运行质量 | 未完成 | 评测回归、成本看板、依赖升级机制、观测 |
 | R8 桌面与扩展 | 未完成 | Windows 执行端、子对话、团队等 |
@@ -75,22 +76,19 @@
   另外修复了 `20~25℃` 被显示成删除线的问题。
 - 用户手动验收项（不阻塞）：30 条搜索质量集、容量、完整恢复、许可证审核，以及第 7 节列出的已知限制。
 
-### R5 计划：真实工作流执行（下一阶段，尚未开始）
+### R5：智能体团队（2026-10-16）
 
-目标：用户能在画布上搭建或确认一个多步骤任务，系统真实执行、可审批、可取消，断线或重启后能恢复，产出能在“成果”里查看和下载。现有 workflow 服务（LangGraph JS + BullMQ + PostgreSQL）只支持固定的“校验 → 审批 → 报告”，R5 在它上面原位扩展，不另起平台。
+用户确认：只用 DeepSeek（模型可切换）；分工不固定，由总指挥按目标分配角色；总指挥画出串行 / 并行 / 讨论 / 互审，用户可改画布；预算沿用每日 ¥5、每月 ¥100；优先参考成熟框架。
 
-| 步骤 | 内容 | 主要改动位置 |
+选型：对比 awwo-canvas（MIT，画布和指挥体验好，但运行在内存、无账号和文件产出）、Deep Agents 等后，执行层采用 **Open Multi-Agent 1.21.2**（MIT）：任务图、并行调度、`verify` 共识审查（refute = 互审，lens = 讨论）、MemoryStore 检查点与 `restore()`，内置文件工具限定在工作目录。awwo-canvas 只参考交互。
+
+| 步骤 | 状态 | 内容 |
 | --- | --- | --- |
-| R5-1 工作流定义 | 版本化保存 graph（节点、边、参数），校验无环和输入输出；首批节点类型限定为：模型步骤、联网研究、文档检索、人工审批、生成文档 | `services/workflow`（新迁移） |
-| R5-2 执行 | LangGraph 按 DAG 调度，可并行；每个外部调用带 operation ID 和幂等；审批绑定参数和版本；取消；重启恢复。研究、检索、模型调用复用 research、ingestion、gateway 及其预算 | `services/workflow` |
-| R5-3 画布 | 重新引入 React Flow，在中央工作区编辑和查看 graph，实时显示节点状态（事件游标），失败节点显示原因 | `services/chat/overlay/client` |
-| R5-4 成果库 | 运行产物（Markdown 报告或文件）归属到会话和运行，可在“成果”视图浏览、下载、删除 | workflow 产物 API + overlay |
-| R5-5 从聊天发起 | “推进一项工作”生成工作流草稿，用户确认后在画布打开；不自动执行 | overlay + chat 委托 |
-| R5-6 Harness 评估 | 在 workflow worker 内用 Deep Agents JS 做一个“自主任务”节点的小型对照试验，再决定是否采用 | `services/workflow`（隔离试验） |
+| R5-1 后台 | 已完成 | `services/workflow` 重写：`plan.mjs`（zod 方案校验：角色 ≤12、任务 ≤30、引用、自审、环）、`designer.mjs`（总指挥）、`engine.mjs`（OMA 执行、Postgres 检查点、工作区同步到 `team_files`、取消、恢复）、新 API 与迁移 `002_teams.sql`；网关单次输出上限 8192、上下文 100 KB、超时 180 s |
+| R5-2 画布 | 已完成 | `overlay/.../Orchestra/teams/`：React Flow 画布、任务/角色编辑、运行状态、成果预览（HTML 在 sandbox iframe 中）、本地文件夹保存；依赖 `@xyflow/react` 12.12.0 |
+| R5-3 上线 | 待做 | 管理员同步 `deploy/compose.yml` 与 `scripts/test-product.py` → 发布 → 生产 DeepSeek 真实任务（如调研报告 + 网页）→ 文档收尾 |
 
-结束条件：真实的三节点任务（研究 → 总结 → 审批 → 产出文档）在生产成功；断线、worker 崩溃、重复投递都不会重复产生副作用；mock 只出现在测试中。
-
-开始前需要用户确认：首批节点类型；R5 是否沿用每日 ¥5、每月 ¥100 的预算；是否接受 Deep Agents JS 试验。如果需要调整 Compose（例如 worker 内存上限），属于需要服务器管理员同步的配置改动（见 AGENTS.md 第 3 节）。
+限制：团队只能产出文本类文件（Markdown、HTML/CSS/JS、JSON、CSV、SVG、源码），不能联网、不能运行代码、不能生成图片或音频；每用户同时一个运行；单次运行默认 40 万 token 上限（`WORKFLOW_RUN_TOKENS`）；单文件 ≤2 MiB、单次运行 ≤20 MiB / 200 个文件；本地保存依赖 Chromium 浏览器，其他浏览器逐个下载；浏览器不能默认打开 D 盘，只会记住上次选择的位置。旧的 R2 表（runs/events/artifacts、LangGraph checkpoint）暂留以便回滚，之后的版本再删除。
 
 ## 5. 工程结构调整（2026-10-14）
 
@@ -124,7 +122,7 @@
 - Reader 回退可能把只有标题和页脚的登录壳页面（如小红书 explore）标为“已读取”；模型会如实说明缺少正文，但研究服务的壳页面识别还可以加强。
 - 新建对话时联网开关曾观察到一次默认开启、未继承上一个对话的关闭选择；同一对话内刷新后保留选择。
 - 模型偶尔用英文写一句开场白；正文会遵循用户的语言。
-- 画布、成果库、自动研究上下文共享尚未接通，界面明确标注为不可用。
+- 联网研究结果不会自动进入团队；团队成员没有联网工具。
 - 用户手动验收项：完整产品、故障恢复（隔离环境）、混合容量、许可证审核、30 条搜索质量集。
 
 ## 8. 验证命令
