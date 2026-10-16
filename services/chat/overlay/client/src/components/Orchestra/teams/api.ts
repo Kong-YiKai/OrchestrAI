@@ -73,6 +73,7 @@ const ERRORS: Record<string, string> = {
   execution_failed: '运行失败，请稍后重试。',
   model_budget_exhausted: '今日模型预算已用完（每日 ¥5），明天 0 点恢复；已写好的文件保留。',
   stalled: '团队长时间没有进展，已自动停止；已写好的文件保留。',
+  run_token_budget: '这次运行用完了单次 token 上限，已停止；已写好的文件保留。可以精简任务后重新运行。',
   worker_stalled: '执行程序卡住，已自动重启并停止这次运行；已写好的文件保留。',
   error: '运行出错。',
   timeout: '运行超时。',

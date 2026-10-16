@@ -220,3 +220,19 @@ test('a run that stops making progress is profiled, stopped and recorded, never 
   assert.equal(row.error_code, 'stalled');
   assert.deepEqual(seen.map(([kind]) => kind), ['stall', 'abandoned']);
 });
+
+test('crossing the run token cap stops the team cleanly instead of livelocking', { skip: !integration }, async () => {
+  const mine = await project({ user: 'gina' });
+  const run = (await request(`/projects/${mine.id}/runs`, { method: 'POST', who: { user: 'gina' }, key: randomUUID(), body: {} })).body;
+  const model = fakeModel();
+  const heavy = { ...model.adapter, chat: async (messages, options) => {
+    const reply = await model.adapter.chat(messages, options);
+    return { ...reply, usage: { input_tokens: 40000, output_tokens: 10 } };
+  } };
+  const started = Date.now();
+  await createEngine(store, { runTokenBudget: 100000, stallMs: 60000 }, { adapter: heavy }).execute(run.id, 1);
+  assert.ok(Date.now() - started < 20000, 'run ended promptly');
+  const row = await store.run(store.pool, run.id, { user: 'gina', tenant: 'team' });
+  assert.ok(['partial', 'failed'].includes(row.status), row.status);
+  assert.equal(row.error_code, 'run_token_budget');
+});

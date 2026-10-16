@@ -141,6 +141,8 @@ export function createEngine(store, settings, { adapter, onStall, onAbandoned } 
     let watcher;
     let progress = Date.now();
     let stalled = false;
+    let spent = 0;
+    let overBudget = false;
     let giveUp;
     const abandoned = new Promise(resolve => { giveUp = resolve; });
     try {
@@ -191,6 +193,17 @@ export function createEngine(store, settings, { adapter, onStall, onAbandoned } 
       const onTrace = trace => {
         progress = Date.now();
         if (trace.type !== 'llm_call' && trace.type !== 'tool_call') return;
+        // The run's token cap is enforced here, through the abort path. OMA's own
+        // maxTokenBudget livelocks its dispatch loop when the cap is crossed while a
+        // task is still in flight (requestStop re-signals the loop on every pass).
+        if (trace.type === 'llm_call' && !overBudget) {
+          spent += (trace.tokens?.input_tokens ?? 0) + (trace.tokens?.output_tokens ?? 0);
+          if (spent > settings.runTokenBudget) {
+            overBudget = true;
+            log('run_token_budget', { run_id: runId, tokens: spent });
+            abort.abort();
+          }
+        }
         const taskId = ids.get(trace.taskId);
         if (!taskId) return;
         const path = typeof trace.input?.path === 'string' ? relative(workspace, trace.input.path).split(sep).join('/').slice(0, 200) : undefined;
@@ -203,7 +216,7 @@ export function createEngine(store, settings, { adapter, onStall, onAbandoned } 
       const team = oma.createTeam(runId, { name: 'team', agents });
       const specs = taskSpecs(plan, agents);
       const checkpoint = { store: checkpointStore(store.pool, runId), runId };
-      const options = { checkpoint, abortSignal: abort.signal, maxTokenBudget: settings.runTokenBudget };
+      const options = { checkpoint, abortSignal: abort.signal };
       const resumable = (await checkpoint.store.list()).length > 0;
       const work = (resumable ? oma.restore(team, specs, options) : oma.runTasks(team, specs, options))
         .then(value => ({ value }), error => ({ error }));
@@ -229,6 +242,7 @@ export function createEngine(store, settings, { adapter, onStall, onAbandoned } 
       // The gateway's CNY budget is the usual reason a healthy team stops; say so plainly.
       if (error && Object.values(states).some(t => /provider_budget_exceeded/.test(t.output ?? ''))) error = 'model_budget_exhausted';
       if (stalled) status = done ? 'partial' : 'failed';
+      else if (overBudget) { status = done ? 'partial' : 'failed'; error = 'run_token_budget'; }
       else if (abort.signal.aborted) { status = 'cancelled'; error = null; }
       if (failure && !abort.signal.aborted) log('run_failed', { run_id: runId, error_code: error });
       await store.transaction(async c => {
