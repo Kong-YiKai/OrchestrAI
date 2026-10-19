@@ -127,10 +127,20 @@ index 9efa44f..c1ee774 100644
  
  /**
 diff --git a/api/server/index.js b/api/server/index.js
-index 8477c3b..73bc6bb 100644
+index 8477c3b..2dc0fa1 100644
 --- a/api/server/index.js
 +++ b/api/server/index.js
-@@ -419,6 +419,12 @@ const startServer = async () => {
+@@ -401,6 +401,9 @@ const startServer = async () => {
+    * The reverse proxy / auth gateway sets `X-Tenant-Id` header for multi-tenant deployments. */
+   app.use('/oauth', preAuthTenantMiddleware, routes.oauth);
+   /* API Endpoints */
++  const orchestraGuest = require('./services/OrchestraGuest');
++  app.post('/api/orchestra/guest', preAuthTenantMiddleware, orchestraGuest.createGuest);
++  app.post('/api/auth/logout', orchestraGuest.purgeOnLogout);
+   app.use('/api/auth', preAuthTenantMiddleware, routes.auth);
+   app.use('/api/insights', routes.insights);
+   app.use('/api/admin', routes.adminAuth);
+@@ -419,6 +422,12 @@ const startServer = async () => {
    app.use('/api/api-keys', routes.apiKeys);
    app.use('/api/user', routes.user);
    app.use('/api/search', routes.search);
@@ -143,6 +153,14 @@ index 8477c3b..73bc6bb 100644
    app.use('/api/messages', routes.messages);
    app.use('/api/convos', routes.convos);
    app.use('/api/traces', routes.traces);
+@@ -471,6 +480,7 @@ const startServer = async () => {
+   app.use(ErrorController);
+ 
+   configureGenerationStreams();
++  orchestraGuest.startGuestSweep();
+ 
+   const server = app.listen(port, host, async (err) => {
+     if (err) {
 diff --git a/packages/api/src/agents/load.ts b/packages/api/src/agents/load.ts
 index 7ae1633..6a2fe61 100644
 --- a/packages/api/src/agents/load.ts
@@ -233,10 +251,10 @@ index f6a5e1d..9285160 100644
      toolResource: metadata.tool_resource,
      mimeType: file.mimetype,
 diff --git a/packages/api/src/index.ts b/packages/api/src/index.ts
-index c84b2d2..1aaba05 100644
+index c84b2d2..f8051eb 100644
 --- a/packages/api/src/index.ts
 +++ b/packages/api/src/index.ts
-@@ -130,3 +130,11 @@ export type { OpenApiRouterDeps } from './openapi/router';
+@@ -130,3 +130,12 @@ export type { OpenApiRouterDeps } from './openapi/router';
  export type * from './mcp/types';
  export type * from './flow/types';
  export type * from './types';
@@ -248,3 +266,4 @@ index c84b2d2..1aaba05 100644
 +  orchestraResearchContext,
 +} from './orchestra/research';
 +export { createOrchestraTurnRouter } from './orchestra/turns';
++export { purgeOrchestraServices } from './orchestra/guest';

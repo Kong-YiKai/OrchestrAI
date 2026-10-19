@@ -20,6 +20,8 @@ python scripts/test-product.py --start --research
 
 Open `http://localhost:3088`. Registration defaults closed; the smoke account is written to ignored `deploy/private/candidate-account.json`. For a custom loopback port set `PRODUCT_PORT` and `PRODUCT_URL` in private `product.env`, then pass the same URL to `test-product.py --url`.
 
+The login page offers **guest mode** ("skip login"): a temporary account with the same abilities as a member. Nothing is kept: signing out, or 24 hours after creation, deletes the guest's chats, files, agent teams and research records. Guest creation is limited per IP and in total; set `ORCHESTRA_GUESTS=false` on the chat service to turn it off.
+
 TXT, text-based PDF, PNG, JPEG and WebP are supported. File limits are 10 MiB each, five per message, 25 MiB total. PDF is limited to 200 pages; scanned documents without extractable text return a failure until OCR is added. Text chat, image understanding, embeddings and Tavily calls share one gateway and atomic daily/monthly CNY budget. Tavily also has separate credit limits.
 
 The globe icon in the composer is the single web-search switch for ordinary chat (highlighted when on) and retains your choice. The sidebar's **联网研究** opens owned independent records using the same research service. Questions use Tavily search, supplied public URLs use extraction; a known direct-page extraction failure can make one anonymous Jina Reader attempt. Unknown provider operations are fenced without retry. BM25 ranks actual retrieved text, with source links, exact evidence quotes and read/unread states. Tasks, cancellation and history persist. Independent research can be appended to a draft before you send it.
