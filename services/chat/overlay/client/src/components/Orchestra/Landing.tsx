@@ -28,14 +28,10 @@ export default function Landing() {
     },
     {
       icon: Workflow,
-      title: '推进一项工作',
-      description: '从目标开始，梳理行动计划',
+      title: '做出一个东西',
+      description: '说出想做的，问清需求后自动组建团队',
       action: () => {
-        setValue(
-          'text',
-          '我想推进一项工作，请先帮我明确目标和需要补充的信息，再一起梳理行动计划。',
-          { shouldValidate: true },
-        );
+        setValue('text', '我想做一个', { shouldValidate: true });
         document.getElementById(mainTextareaId)?.focus();
       },
     },

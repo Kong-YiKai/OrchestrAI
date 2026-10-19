@@ -32,6 +32,7 @@ import Landing from '~/components/Orchestra/Landing';
 import Header from '~/components/Orchestra/Header';
 import OrchestraContext from '~/components/Orchestra/Context';
 import Research from '~/components/Orchestra/Research';
+import Dashboard from '~/components/Orchestra/Dashboard';
 import { useWorkbench } from '~/components/Orchestra/Workbench';
 import { cn } from '~/utils';
 import store from '~/store';
@@ -173,11 +174,13 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                   <TraceSurface conversationId={conversationId}>
                     <div className="orchestra-work-area">
                       <div className="orchestra-centre-column">
-                        <Header
-                          key={conversationId}
-                          parentConversationId={parentConversationId}
-                          readOnly={isSubagentThreadReadOnly}
-                        />
+                        {view !== 'dashboard' && (
+                          <Header
+                            key={conversationId}
+                            parentConversationId={parentConversationId}
+                            readOnly={isSubagentThreadReadOnly}
+                          />
+                        )}
                         <div
                           className="orchestra-main-view"
                           hidden={view !== 'chat'}
@@ -251,6 +254,11 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                           </div>
                         )}
                         {view === 'context' && <OrchestraContext full />}
+                        {view === 'dashboard' && (
+                          <div className="orchestra-main-view">
+                            <Dashboard />
+                          </div>
+                        )}
                       </div>
                       {/* The canvas needs the full width; deliverables live on the canvas itself. */}
                       {view === 'chat' && <OrchestraContext />}

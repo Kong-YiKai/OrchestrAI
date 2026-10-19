@@ -76,7 +76,7 @@ function AuthLayout({
           <h2>
             {localize('com_orchestra_auth_title_first')}
             <br />
-            {localize('com_orchestra_auth_title_last')}
+            <em>{localize('com_orchestra_auth_title_last')}</em>
           </h2>
           <p>
             {localize('com_orchestra_auth_description_first')}
@@ -151,7 +151,7 @@ function GuestEntry() {
         return;
       }
       // The session cookie is set; the app signs in from it on load.
-      window.location.assign('/c/new');
+      window.location.assign('/c/new?view=dashboard');
     } catch {
       setError('网络连接失败，请稍后再试。');
       setBusy(false);
