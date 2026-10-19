@@ -1,6 +1,6 @@
 import { useLocalize } from '~/hooks';
 import { useEffect, useState } from 'react';
-import { MessageSquare, Workflow, Files, Plus, Search, X, LogOut, Globe } from 'lucide-react';
+import { MessageSquare, Workflow, Plus, Search, X, LogOut, Globe } from 'lucide-react';
 import { useMediaQuery, ThemeSelector } from '@librechat/client';
 import { SidebarChatProvider } from '~/components/UnifiedSidebar/UnifiedSidebar';
 import {
@@ -47,7 +47,6 @@ function Navigation() {
     { view: 'chat', icon: MessageSquare, label: '对话工作台' },
     { view: 'research', icon: Globe, label: '联网研究' },
     { view: 'canvas', icon: Workflow, label: '工作流画布' },
-    { view: 'results', icon: Files, label: '我的成果' },
   ] as const;
   return (
     <nav

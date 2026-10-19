@@ -16,7 +16,6 @@ x-app: &app
     # Agent teams call models only through the budgeted gateway (product stack).
     GATEWAY_KEY: ${GATEWAY_KEY:-}
     WORKFLOW_MODEL: ${WORKFLOW_MODEL:-deepseek-flash}
-    WORKFLOW_RUN_TOKENS: ${WORKFLOW_RUN_TOKENS:-400000}
   logging: &logs
     driver: json-file
     options: { max-size: 10m, max-file: '3' }
