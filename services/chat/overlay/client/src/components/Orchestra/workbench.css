@@ -163,6 +163,15 @@
 .orchestra-auth-card > p { font-size: 12px; color: rgb(var(--text-tertiary)); margin-bottom: 24px; }
 .orchestra-auth-card input { background: rgb(var(--surface-primary-alt)); border-radius: 11px; min-height: 50px; }
 .orchestra-auth-theme { position: fixed; left: 18px; bottom: 18px; }
+.orchestra-auth-guest { margin-top: 22px; text-align: center; }
+.orchestra-auth-divider { display: flex; align-items: center; gap: 12px; color: rgb(var(--text-tertiary)); font-size: 12px; margin-bottom: 16px; }
+.orchestra-auth-divider::before, .orchestra-auth-divider::after { content: ''; flex: 1; height: 1px; background: rgb(var(--border-light)); }
+:is(.orchestra-app, .orchestra-auth) .orchestra-dark-pill { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 46px; padding: 10px 22px; border-radius: 999px; background: #1d1a17; color: #fff; font-size: 14px; font-weight: 500; transition: transform .15s, box-shadow .15s; }
+:is(.orchestra-app, .orchestra-auth) .orchestra-dark-pill:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 8px 22px rgba(29, 26, 23, .22); }
+:is(.orchestra-app, .orchestra-auth) .orchestra-dark-pill:disabled { opacity: .6; cursor: wait; }
+.dark :is(.orchestra-app, .orchestra-auth) .orchestra-dark-pill { background: #f4ede4; color: #1d1a17; }
+.orchestra-auth-guest > p { margin-top: 10px; font-size: 12px; color: rgb(var(--text-tertiary)); line-height: 1.6; }
+.orchestra-auth-guest > p[role="alert"] { color: rgb(var(--text-warning, 185 28 28)); }
 @media (min-width: 1600px) { .orchestra-sidebar-column { width: 240px; } .orchestra-context { width: 310px; } }
 @media (max-width: 1199px) { .orchestra-context:not(.orchestra-context-full) { display: none; } .orchestra-view-tabs button:last-child { display: block; } }
 @media (max-width: 768px) {
