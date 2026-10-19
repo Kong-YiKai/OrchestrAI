@@ -6,7 +6,8 @@ const sha = value => createHash('sha256').update(value).digest('hex');
 
 export const publicProject = (row, runs, extra = {}) => ({ id: row.id, goal: row.goal, workspace_name: row.workspace_name,
   status: row.status, plan: row.plan, plan_version: row.plan_version, error_code: row.error_code,
-  budget_cny: Number(row.budget_cny), created_at: row.created_at, updated_at: row.updated_at,
+  budget_cny: Number(row.budget_cny), conversation_id: row.conversation_id ?? null,
+  created_at: row.created_at, updated_at: row.updated_at,
   ...(runs ? { runs: runs.map(r => publicRun(r)) } : {}), ...extra });
 export const publicRun = (row, withPlan = false) => ({ id: row.id, project_id: row.project_id, status: row.status,
   plan_version: row.plan_version, task_states: row.task_states, error_code: row.error_code,
@@ -47,10 +48,10 @@ export class Store {
   async createProject(who, key, input, plan) {
     const hash = sha(JSON.stringify(input));
     return this.transaction(async c => {
-      const inserted = await c.query(`INSERT INTO team_projects(id,tenant_id,user_id,idempotency_key,input_hash,goal,workspace_name,status,plan,plan_version,budget_cny)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT(tenant_id,user_id,idempotency_key) DO NOTHING RETURNING *`,
+      const inserted = await c.query(`INSERT INTO team_projects(id,tenant_id,user_id,idempotency_key,input_hash,goal,workspace_name,status,plan,plan_version,budget_cny,conversation_id)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT(tenant_id,user_id,idempotency_key) DO NOTHING RETURNING *`,
       [randomUUID(), who.tenant, who.user, key, hash, input.goal, input.workspace_name,
-        plan ? 'ready' : 'planning', plan ?? null, plan ? 1 : 0, input.budget_cny]);
+        plan ? 'ready' : 'planning', plan ?? null, plan ? 1 : 0, input.budget_cny, input.conversation_id ?? null]);
       if (inserted.rowCount) return inserted.rows[0];
       const old = (await c.query('SELECT * FROM team_projects WHERE tenant_id=$1 AND user_id=$2 AND idempotency_key=$3',
         [who.tenant, who.user, key])).rows[0];
@@ -65,9 +66,20 @@ export class Store {
     return rows[0];
   }
   async projects(who) {
-    const { rows } = await this.pool.query(`SELECT * FROM team_projects WHERE tenant_id=$1 AND user_id=$2
-      ORDER BY updated_at DESC LIMIT 50`, [who.tenant, who.user]);
-    return rows.map(r => ({ ...publicProject(r), plan: undefined }));
+    // The listing carries a summary of each team's live run for the dashboard and chat panel.
+    const { rows } = await this.pool.query(`SELECT p.*, r.id AS run_id, r.status AS run_status, r.task_states AS run_states,
+        r.spent_cny AS run_spent, r.tokens AS run_tokens, r.updated_at AS run_updated
+      FROM team_projects p LEFT JOIN LATERAL (SELECT * FROM team_runs WHERE project_id=p.id ORDER BY created_at DESC LIMIT 1) r ON true
+      WHERE p.tenant_id=$1 AND p.user_id=$2 ORDER BY p.updated_at DESC LIMIT 50`, [who.tenant, who.user]);
+    return rows.map(r => {
+      const states = Object.values(r.run_states ?? {});
+      return { ...publicProject(r), plan: undefined, task_count: r.plan?.tasks?.length ?? 0,
+        latest_run: r.run_id ? { id: r.run_id, status: r.run_status, spent_cny: Number(r.run_spent ?? 0),
+          tokens: r.run_tokens, updated_at: r.run_updated,
+          completed: states.filter(t => t.status === 'completed').length,
+          active: states.filter(t => ['queued', 'running', 'pausing'].includes(t.status)).length,
+          failed: states.filter(t => t.status === 'failed').length } : null };
+    });
   }
   async projectRuns(id) {
     return (await this.pool.query('SELECT * FROM team_runs WHERE project_id=$1 ORDER BY created_at DESC LIMIT 10', [id])).rows;

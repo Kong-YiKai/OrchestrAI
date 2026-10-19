@@ -166,6 +166,12 @@ test('readiness, least-privilege database identity and tenant isolation', { skip
   assert.ok(!(await request('/projects', { who: { user: 'bob' } })).body.projects.some(p => p.id === mine.id));
   assert.equal((await request('/projects', { method: 'POST', key: randomUUID(), body: { goal: 'x', workspace_name: '../etc' } })).status, 400);
   assert.equal((await request('/projects', { method: 'POST', key: randomUUID(), body: { goal: 'x', workspace_name: 'x', budget_cny: 0 } })).status, 400);
+  assert.equal((await request('/projects', { method: 'POST', key: randomUUID(), body: { goal: 'x', workspace_name: 'x', conversation_id: 'a b' } })).status, 400);
+  const linked = await project({}, { conversation_id: 'convo-1' });
+  assert.equal(linked.conversation_id, 'convo-1');
+  const row = (await request('/projects')).body.projects.find(p => p.id === linked.id);
+  assert.equal(row.conversation_id, 'convo-1');
+  assert.equal(row.latest_run, null, 'a team that never ran has no run summary');
   const bad = await request('/projects', { method: 'POST', key: randomUUID(), body: { goal: 'x', workspace_name: 'x', plan: { ...PLAN, tasks: [] } } });
   assert.equal(bad.status, 422);
   assert.ok(bad.body.detail.length);
@@ -249,6 +255,10 @@ test('single nodes run on their own once upstream is done; the team finishes the
   assert.equal(row.status, 'idle');
   assert.equal(row.task_states.outline.status, 'completed');
   assert.equal(row.task_states.page.status, 'pending');
+  const listed = (await request('/projects', { who })).body.projects.find(p => p.id === mine.id);
+  assert.equal(listed.task_count, plan.tasks.length);
+  assert.equal(listed.latest_run.completed, 1, 'the listing summarises the live run');
+  assert.ok(listed.latest_run.spent_cny > 0);
   assert.equal((await control(mine.id, { action: 'run' }, who)).status, 200);
   row = await work(mine.id, model, who);
   assert.equal(row.status, 'completed');

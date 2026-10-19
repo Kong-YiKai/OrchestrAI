@@ -95,8 +95,24 @@ export type Project = {
   error_code: string | null;
   budget_cny: number;
   estimate?: Estimate;
+  /** The chat conversation whose clarified requirements created this team. */
+  conversation_id?: string | null;
+  created_at: string;
   updated_at: string;
   runs?: Run[];
+  /** Listing only: node count and a summary of the latest run. */
+  task_count?: number;
+  latest_run?: RunSummary | null;
+};
+export type RunSummary = {
+  id: string;
+  status: string;
+  spent_cny: number;
+  tokens?: { input: number; output: number };
+  updated_at: string;
+  completed: number;
+  active: number;
+  failed: number;
 };
 export type TeamFile = { id: string; path: string; task_id: string | null; media_type: string; size: number; sha256: string };
 export type FileContent = TeamFile & { encoding: 'utf8' | 'base64'; content: string };

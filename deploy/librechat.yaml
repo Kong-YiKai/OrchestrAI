@@ -31,7 +31,7 @@ interface:
   fileSearch: true
 endpoints:
   agents:
-    capabilities: [file_search, web_search, context]
+    capabilities: [file_search, web_search, context, ask_user_question]
   custom:
     - name: DeepSeek
       apiKey: '${GATEWAY_KEY}'
