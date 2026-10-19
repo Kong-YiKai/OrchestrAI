@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { Queue } from 'bullmq';
 import { authenticate, HttpError } from './auth.mjs';
 import { Store, publicProject, publicRun } from './store.mjs';
-import { requirePlan } from './plan.mjs';
+import { checkRunnable, estimate, lockViolations, requirePlan } from './plan.mjs';
 import { config, log } from './config.mjs';
 import { queueName } from './worker.mjs';
 
@@ -16,10 +16,10 @@ const ROUTES = [
   ['DELETE', new RegExp(`^/projects/(${UUID})$`, 'i'), 'deleteProject'],
   ['PUT', new RegExp(`^/projects/(${UUID})/plan$`, 'i'), 'savePlan'],
   ['POST', new RegExp(`^/projects/(${UUID})/design$`, 'i'), 'redesign'],
-  ['POST', new RegExp(`^/projects/(${UUID})/runs$`, 'i'), 'startRun'],
+  ['PUT', new RegExp(`^/projects/(${UUID})/budget$`, 'i'), 'setBudget'],
+  ['POST', new RegExp(`^/projects/(${UUID})/control$`, 'i'), 'control'],
   ['GET', new RegExp(`^/runs/(${UUID})$`, 'i'), 'getRun'],
   ['GET', new RegExp(`^/runs/(${UUID})/events$`, 'i'), 'events'],
-  ['POST', new RegExp(`^/runs/(${UUID})/cancel$`, 'i'), 'cancel'],
   ['GET', new RegExp(`^/runs/(${UUID})/files$`, 'i'), 'files'],
   ['GET', new RegExp(`^/runs/(${UUID})/files/(${UUID})$`, 'i'), 'file'],
 ];
@@ -50,6 +50,11 @@ const folder = value => {
     throw new HttpError(400, 'invalid_workspace_name');
   return value.trim();
 };
+const budget = value => {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0.1 || value > 10000) throw new HttpError(400, 'invalid_budget');
+  return Math.round(value * 100) / 100;
+};
+const TASK_ID = /^[a-z][a-z0-9-]{0,39}$/;
 const idempotency = req => {
   const key = req.headers['idempotency-key'];
   if (typeof key !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(key)) throw new HttpError(400, 'invalid_idempotency_key');
@@ -62,40 +67,55 @@ export function createApi(settings) {
   const queue = new Queue(queueName, { connection: { ...settings.redis, maxRetriesPerRequest: 1 } });
   queue.on('error', () => log('queue_unavailable'));
 
+  // The estimate uses the same price table the run is billed with.
+  const priced = () => settings.prices?.[settings.gateway?.model ?? 'deepseek-flash'] ?? { input: 0, output: 0 };
+  const detailed = async row => publicProject(row, await store.projectRuns(row.id), row.plan ? { estimate: estimate(row.plan, priced) } : {});
+
   const handlers = {
     listProjects: async ({ who }) => [200, { projects: await store.projects(who) }],
     createProject: async ({ who, req }) => {
-      const input = only(await body(req, 262144), ['goal', 'workspace_name', 'plan']);
-      const value = { goal: goal(input.goal), workspace_name: folder(input.workspace_name) };
+      const input = only(await body(req, 262144), ['goal', 'workspace_name', 'budget_cny', 'plan']);
+      const value = { goal: goal(input.goal), workspace_name: folder(input.workspace_name),
+        budget_cny: input.budget_cny === undefined ? 5 : budget(input.budget_cny) };
       const plan = input.plan === undefined ? undefined : requirePlan(input.plan);
       const row = await store.createProject(who, idempotency(req), { ...value, plan: plan ?? null }, plan);
       return [202, publicProject(row)];
     },
-    getProject: async ({ who }, id) => {
-      const row = await store.project(store.pool, id, who);
-      return [200, publicProject(row, await store.projectRuns(id))];
-    },
+    getProject: async ({ who }, id) => [200, await detailed(await store.project(store.pool, id, who))],
     deleteProject: async ({ who }, id) => { await store.deleteProject(id, who); return [200, { deleted: true }]; },
     savePlan: async ({ who, req }, id) => {
       const input = only(await body(req, 262144), ['version', 'plan']);
       if (!Number.isInteger(input.version)) throw new HttpError(400, 'invalid_version');
-      return [200, publicProject(await store.savePlan(id, who, input.version, requirePlan(input.plan)))];
+      return [200, await detailed(await store.savePlan(id, who, input.version, requirePlan(input.plan), lockViolations))];
+    },
+    setBudget: async ({ who, req }, id) => {
+      const input = only(await body(req), ['budget_cny']);
+      return [200, await detailed(await store.setBudget(id, who, budget(input.budget_cny)))];
     },
     redesign: async ({ who, req }, id) => {
-      const input = only(await body(req), ['goal']);
-      return [202, publicProject(await store.redesign(id, who, input.goal === undefined ? undefined : goal(input.goal)))];
+      const input = only(await body(req), ['goal', 'instructions']);
+      const note = input.instructions === undefined ? undefined : goal(input.instructions);
+      return [202, publicProject(await store.redesign(id, who, input.goal === undefined ? undefined : goal(input.goal), note))];
     },
-    startRun: async ({ who, req }, id) => [202, publicRun(await store.startRun(id, who, idempotency(req)), true)],
+    // Run or pause the whole team, or one node (`task`).
+    control: async ({ who, req }, id) => {
+      const input = only(await body(req), ['action', 'task']);
+      if (!['run', 'pause'].includes(input.action)) throw new HttpError(400, 'invalid_action');
+      if (input.task !== undefined && (typeof input.task !== 'string' || !TASK_ID.test(input.task))) throw new HttpError(400, 'invalid_task');
+      return [200, publicRun(await store.control(id, who, input.action, input.task, checkRunnable), true)];
+    },
     getRun: async ({ who }, id) => [200, publicRun(await store.run(store.pool, id, who), true)],
+    // `task` narrows the stream to one node's work record.
     events: async ({ who, url }, id) => {
       await store.run(store.pool, id, who);
       const after = url.searchParams.get('after') || '0';
       if (!/^\d{1,15}$/.test(after)) throw new HttpError(400, 'invalid_cursor');
+      const task = url.searchParams.get('task');
+      if (task !== null && !TASK_ID.test(task)) throw new HttpError(400, 'invalid_task');
       const { rows } = await store.pool.query(`SELECT seq,type,task_id,data,created_at FROM team_events
-        WHERE run_id=$1 AND seq>$2 ORDER BY seq LIMIT 200`, [id, after]);
+        WHERE run_id=$1 AND seq>$2 AND ($3::text IS NULL OR task_id=$3) ORDER BY seq LIMIT 200`, [id, after, task]);
       return [200, { events: rows, next_cursor: String(rows.at(-1)?.seq ?? after) }];
     },
-    cancel: async ({ who }, id) => [200, publicRun(await store.cancel(id, who))],
     files: async ({ who }, id) => { await store.run(store.pool, id, who); return [200, { files: await store.files(id) }]; },
     // Content is returned inside JSON (never served as a page), so an agent-written HTML
     // file cannot run on the product origin; the client previews it in a sandbox.
@@ -119,7 +139,7 @@ export function createApi(settings) {
       if (req.method === 'GET' && url.pathname === '/health/live') return send(200, { status: 'ok', service: 'workflow' });
       if (req.method === 'GET' && url.pathname === '/health/ready') {
         try {
-          const r = await store.pool.query("SELECT version FROM schema_migrations WHERE version='002_teams.sql'");
+          const r = await store.pool.query("SELECT version FROM schema_migrations WHERE version='003_nodes.sql'");
           if (!r.rowCount) throw new Error('migration_missing');
           await (await queue.client).ping(); return send(200, { status: 'ready' });
         } catch { return send(503, { status: 'unavailable' }); }

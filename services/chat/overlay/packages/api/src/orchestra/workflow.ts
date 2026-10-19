@@ -6,8 +6,8 @@ import type { Request, Response } from 'express';
 const ID = '[0-9a-f-]{36}';
 const ROUTES: Record<string, RegExp | undefined> = {
   GET: new RegExp(`^/(?:projects(?:/${ID})?|runs/${ID}(?:/(?:events|files(?:/${ID})?))?)$`),
-  POST: new RegExp(`^/(?:projects(?:/${ID}/(?:design|runs))?|runs/${ID}/cancel)$`),
-  PUT: new RegExp(`^/projects/${ID}/plan$`),
+  POST: new RegExp(`^/projects(?:/${ID}/(?:design|control))?$`),
+  PUT: new RegExp(`^/projects/${ID}/(?:plan|budget)$`),
   DELETE: new RegExp(`^/projects/${ID}$`),
 };
 
@@ -38,8 +38,11 @@ export function createOrchestraWorkflowRouter(): Router {
     const headers: Record<string, string> = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
     const key = req.get('Idempotency-Key');
     if (key && key.length <= 128) { headers['Idempotency-Key'] = key; }
-    const cursor = typeof req.query.after === 'string' && /^\d+$/.test(req.query.after)
-      ? `?after=${req.query.after}` : '';
+    // Only the event cursor and the node filter are forwarded, both strictly shaped.
+    const query = new URLSearchParams();
+    if (typeof req.query.after === 'string' && /^\d{1,15}$/.test(req.query.after)) query.set('after', req.query.after);
+    if (typeof req.query.task === 'string' && /^[a-z][a-z0-9-]{0,39}$/.test(req.query.task)) query.set('task', req.query.task);
+    const cursor = query.toString() ? `?${query}` : '';
     try {
       const upstream = await fetch(`${base}${req.path}${cursor}`, { method: req.method, headers,
         ...(req.method === 'POST' || req.method === 'PUT' ? { body: JSON.stringify(req.body ?? {}) } : {}),
