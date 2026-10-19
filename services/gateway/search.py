@@ -191,3 +191,4 @@ def install():
     app.add_api_route('/providers/tavily/{action}', proxy, methods=['POST'], include_in_schema=False)
     app.add_api_route('/providers/jina/read', reader, methods=['POST'], include_in_schema=False)
     app.add_api_route('/providers/{provider}/operations/{operation}', receipt, methods=['GET'], include_in_schema=False)
+    app.add_api_route('/orchestrai/models', budget.catalog, methods=['GET'], include_in_schema=False)

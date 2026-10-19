@@ -23,7 +23,7 @@ const text = messages => messages.flatMap(m => m.content).filter(b => b.type ===
  */
 export function fakeModel({ crashOn, slow = {}, usage = { input_tokens: 10, output_tokens: 5 } } = {}) {
   let active = 0, peak = 0, judged = 0, n = 0;
-  const counts = new Map(), seen = new Set(), prompts = new Map();
+  const counts = new Map(), seen = new Set(), prompts = new Map(), models = new Map(), webResults = new Map();
   const reply = (content, stop = 'end_turn') => ({ id: `r${++n}`, model: 'test-model', stop_reason: stop,
     usage, content });
   const adapter = {
@@ -40,9 +40,14 @@ export function fakeModel({ crashOn, slow = {}, usage = { input_tokens: 10, outp
       const ws = system.match(/团队共享工作目录是 (\S+?)。/)[1];
       const [, id, file] = prompt.match(/TASK:([a-z-]+) FILE:(\S+)/);
       for (const path of ['docs/outline.md']) if (existsSync(join(ws, path))) seen.add(path);
-      if (messages.at(-1).content.some(b => b.type === 'tool_result')) {
+      const used = name => messages.some(m => m.content.some(b => b.type === 'tool_use' && b.name === name));
+      // A node with web access searches once before writing.
+      if (tools.includes('web_search') && !used('web_search')) {
+        return reply([{ type: 'tool_use', id: `w${n}`, name: 'web_search', input: { query: `about ${id}` } }], 'tool_use');
+      }
+      if (used('file_write')) {
         // A final node registers its file plus the page another node wrote.
-        const delivered = messages.some(m => m.content.some(b => b.type === 'tool_use' && b.name === 'deliver'));
+        const delivered = used('deliver');
         if (tools.includes('deliver') && !delivered) {
           const paths = [file, ...(existsSync(join(ws, 'site/index.html')) ? ['site/index.html'] : [])];
           return reply([{ type: 'tool_use', id: `d${n}`, name: 'deliver', input: { paths } }], 'tool_use');
@@ -51,6 +56,9 @@ export function fakeModel({ crashOn, slow = {}, usage = { input_tokens: 10, outp
       }
       counts.set(id, (counts.get(id) ?? 0) + 1);
       prompts.set(id, prompt);
+      const searched = messages.flatMap(m => m.content).find(b => b.type === 'tool_result');
+      if (searched) webResults.set(id, JSON.stringify(searched.content));
+      models.set(id, options.model);
       if (id === crashOn) { await new Promise(r => setTimeout(r, 800)); process.exit(73); }
       active++; peak = Math.max(peak, active);
       // A slow task stays in flight until it is aborted (pause) or its delay passes.
@@ -67,5 +75,5 @@ export function fakeModel({ crashOn, slow = {}, usage = { input_tokens: 10, outp
     },
   };
   return { adapter, overlap: () => peak, judged: () => judged, calls: id => counts.get(id) ?? 0, sawFile: path => seen.has(path),
-    prompt: id => prompts.get(id) ?? '' };
+    prompt: id => prompts.get(id) ?? '', modelOf: id => models.get(id), webOf: id => webResults.get(id) ?? '' };
 }

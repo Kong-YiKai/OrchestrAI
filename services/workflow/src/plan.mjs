@@ -28,6 +28,10 @@ const task = z.object({
   }).strict().nullable().default(null),
   // The commander's size guess drives the cost estimate shown before anything runs.
   size: z.enum(['s', 'm', 'l']).default('m'),
+  // A catalog model id (gateway models.json); absent means the team's default model.
+  model: z.string().regex(/^[a-z0-9][a-z0-9.-]{0,39}$/).optional(),
+  // Capabilities beyond reading and writing workspace files.
+  tools: z.object({ web: z.boolean() }).strict().optional(),
   position: z.object({ x: z.number().finite(), y: z.number().finite() }).strict().optional(),
 }).strict();
 

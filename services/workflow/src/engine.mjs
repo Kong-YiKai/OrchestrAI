@@ -5,6 +5,7 @@ import { dirname, join, relative, sep } from 'node:path';
 import { OpenMultiAgent, createAdapter, defineTool } from '@open-multi-agent/core';
 import { z } from 'zod';
 import { log } from './config.mjs';
+import { createCatalog } from './models.mjs';
 
 const FILE_LIMIT = 2 * 1024 * 1024;
 const RUN_FILE_LIMIT = 20 * 1024 * 1024;
@@ -12,7 +13,7 @@ const MAX_FILES = 200;
 const TYPES = { md: 'text/markdown', txt: 'text/plain', html: 'text/html', htm: 'text/html', css: 'text/css',
   js: 'text/javascript', json: 'application/json', csv: 'text/csv', svg: 'image/svg+xml', xml: 'application/xml',
   yaml: 'text/yaml', yml: 'text/yaml', py: 'text/x-python', ts: 'text/plain', tsx: 'text/plain' };
-const mediaType = path => TYPES[path.split('.').pop()?.toLowerCase()] ?? 'application/octet-stream';
+export const mediaType = path => TYPES[path.split('.').pop()?.toLowerCase()] ?? 'application/octet-stream';
 const sha = buffer => createHash('sha256').update(buffer).digest('hex');
 const clip = (value, max) => (value.length > max ? `${value.slice(0, max)}…` : value);
 
@@ -55,6 +56,43 @@ const verdict = z.object({ accept: z.boolean(), critique: z.string().max(4000) }
 const FINAL = '\n\n## 交付\n你负责团队的最后一步。完成后调用 deliver 工具，登记要交给用户的最终文件（可以包括其他角色写的文件，' +
   '路径相对于工作目录，例如 site/index.html）；草稿、过程记录和中间文件不要登记。';
 
+const WEB = '\n\n## 联网\n你可以用 web_search 搜索、用 web_read 阅读网页正文。每次调用都按次计费，只在任务确实需要最新或外部信息时使用，' +
+  '引用网上的内容时在文件里注明来源链接。';
+
+/** Metered web access through the gateway's Tavily transport (same budget and credit limits as research). */
+function webTools(settings) {
+  const call = async (action, body) => {
+    if (!settings.searchKey || !settings.gateway) return { data: '联网搜索未配置。', isError: true };
+    const base = settings.gateway.url.replace(/\/v1\/?$/, '');
+    const response = await fetch(`${base}/providers/tavily/${action}?operation_id=${randomUUID()}-${action}`, {
+      method: 'POST', headers: { authorization: `Bearer ${settings.searchKey}`, 'content-type': 'application/json' },
+      body: JSON.stringify(body), signal: AbortSignal.timeout(20000) }).catch(() => null);
+    if (!response?.ok) return { data: `联网${action === 'search' ? '搜索' : '读取'}失败（${response?.status ?? '网络错误'}）。`, isError: true };
+    return { value: await response.json(), isError: false };
+  };
+  return [
+    defineTool({
+      name: 'web_search', description: '用搜索引擎查找网页，返回标题、链接和摘要（最多 5 条）。',
+      inputSchema: z.object({ query: z.string().min(1).max(400) }),
+      execute: async ({ query }) => {
+        const result = await call('search', { query, max_results: 5 });
+        if (result.isError) return result;
+        return { data: result.value.results.map((r, i) => `${i + 1}. ${r.title}\n${r.url}\n${clip(String(r.content ?? ''), 500)}`).join('\n\n') || '没有结果。', isError: false };
+      },
+    }),
+    defineTool({
+      name: 'web_read', description: '读取一个公开网页的正文（Markdown）。',
+      inputSchema: z.object({ url: z.string().url().max(2000) }),
+      execute: async ({ url }) => {
+        const result = await call('extract', { urls: [url], format: 'markdown' });
+        if (result.isError) return result;
+        const page = result.value.results[0];
+        return page ? { data: clip(String(page.raw_content ?? ''), 12000), isError: false } : { data: '没有读到正文。', isError: true };
+      },
+    }),
+  ];
+}
+
 /** The final node names the files the user receives; paths must exist in the workspace. */
 function deliverTool(workspace, chosen) {
   return defineTool({
@@ -74,8 +112,11 @@ function deliverTool(workspace, chosen) {
   });
 }
 
-/** Everything an agent needs about one node: its task, what upstream nodes produced, the goal. */
-export function nodeBrief(plan, task, states, owned) {
+/**
+ * Everything an agent needs about one node: its task, what upstream nodes produced, the
+ * files the user attached to it, what the user said about it in the node chat, the goal.
+ */
+export function nodeBrief(plan, task, states, owned, { inputs = [], chat = [] } = {}) {
   const roles = new Map(plan.roles.map(r => [r.id, r.name]));
   const byId = new Map(plan.tasks.map(t => [t.id, t]));
   const upstream = task.depends_on.map(id => {
@@ -86,6 +127,8 @@ export function nodeBrief(plan, task, states, owned) {
   });
   return `## 你的任务：${task.title}\n${task.description}` +
     (upstream.length ? `\n\n## 前置节点的成果（需要时用 file_read 打开这些文件）\n${upstream.join('\n\n')}` : '') +
+    (inputs.length ? `\n\n## 用户为这个任务提供的资料\n${inputs.join('、')}（用 file_read 打开）` : '') +
+    (chat.length ? `\n\n## 你和用户关于这个任务的讨论（用户的补充要求以此为准）\n${clip(chat.map(m => `${m.role === 'user' ? '用户' : '你'}：${m.content}`).join('\n'), 6000)}` : '') +
     (states[task.id]?.resumed ? '\n\n这个任务之前被暂停过，工作区里可能已有写了一半的文件：先查看，再在其基础上继续完成。' : '') +
     `\n\n## 团队目标\n${plan.summary}`;
 }
@@ -94,6 +137,7 @@ export function createEngine(store, settings, { adapter, onStall, onAbandoned } 
   const stallMs = settings.stallMs ?? 8 * 60 * 1000;
   const abandonMs = settings.abandonMs ?? 60 * 1000;
   const concurrency = settings.concurrency ?? 2;
+  const catalog = createCatalog(adapter ? { defaultModel: 'test-model', ...settings } : settings);
   let gateway;
   async function baseAdapter() {
     if (adapter) return { adapter, model: 'test-model' };
@@ -158,7 +202,10 @@ export function createEngine(store, settings, { adapter, onStall, onAbandoned } 
       });
       await store.recoverNodes(runId);
       const owners = await rehydrate(runId, workspace);
-      const owned = id => [...owners].filter(([, owner]) => owner === id).map(([path]) => path).sort();
+      const models = await catalog.list();
+      // Files a node wrote; what the user attached to a node lives under inputs/<node>/.
+      const owned = id => [...owners].filter(([path, owner]) => owner === id && !path.startsWith('inputs/')).map(([path]) => path).sort();
+      const inputs = id => [...owners.keys()].filter(path => path.startsWith(`inputs/${id}/`)).sort();
       // Work records are written one after another so their order matches what happened.
       let chain = Promise.resolve();
       const record = (taskId, data) => {
@@ -181,7 +228,10 @@ export function createEngine(store, settings, { adapter, onStall, onAbandoned } 
       /** One agent turn sequence, recorded under the node and billed to the run. */
       async function agentRun(task, role, phase, prompt, signal, { judge = false, delivered } = {}) {
         const label = role.id;
-        const priced = settings.prices?.[model.model] ?? { input: 0, output: 0 };
+        // Each node may use its own catalog model; the gateway routes and bills by this id.
+        const modelId = task.model ?? model.model;
+        const web = !judge && task.tools?.web === true;
+        const priced = catalog.priceOf(models, modelId);
         const replies = recording(model.adapter, reply => {
           progress = Date.now();
           const text = reply.content.filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
@@ -199,16 +249,19 @@ export function createEngine(store, settings, { adapter, onStall, onAbandoned } 
           const local = typeof trace.input?.path === 'string' ? relative(workspace, trace.input.path).split(sep).join('/') : '';
           const path = local && !local.startsWith('..') ? local.slice(0, 200) : undefined;
           if (path && !trace.isError && ['file_write', 'file_edit'].includes(trace.tool)) owners.set(path, task.id);
-          const entry = { kind: 'tool', agent: label, phase, tool: trace.tool, ...(path ? { path } : {}), ...(trace.isError ? { error: true } : {}) };
+          const detail = typeof trace.input?.query === 'string' ? trace.input.query : typeof trace.input?.url === 'string' ? trace.input.url : undefined;
+          const entry = { kind: 'tool', agent: label, phase, tool: trace.tool, ...(path ? { path } : {}),
+            ...(detail ? { detail: clip(detail, 300) } : {}), ...(trace.isError ? { error: true } : {}) };
           record(task.id, entry);
           pending.push(store.activity(runId, task.id, entry).catch(() => log('activity_unavailable', { run_id: runId })));
         };
         const oma = new OpenMultiAgent({ defaultCwd: workspace, onTrace });
-        const agent = { name: `${task.id}-${label}-${phase}`, ...LIMITS, model: model.model, adapter: replies,
+        const agent = { name: `${task.id}-${label}-${phase}`, ...LIMITS, model: modelId, adapter: replies,
           systemPrompt: `你是团队中的「${role.name}」。${role.description}\n\n${role.instructions}${RULES(workspace)}` +
-            (judge ? `\n\n${JUDGE[task.review.mode]}` : '') + (delivered ? FINAL : ''),
-          tools: judge ? ['file_read', 'glob'] : ['file_read', 'file_write', 'file_edit', 'glob', ...(delivered ? ['deliver'] : [])],
-          ...(delivered ? { customTools: [deliverTool(workspace, delivered)] } : {}),
+            (judge ? `\n\n${JUDGE[task.review.mode]}` : '') + (delivered ? FINAL : '') + (web ? WEB : ''),
+          tools: judge ? ['file_read', 'glob'] : ['file_read', 'file_write', 'file_edit', 'glob', ...(delivered ? ['deliver'] : []),
+            ...(web ? ['web_search', 'web_read'] : [])],
+          customTools: [...(delivered ? [deliverTool(workspace, delivered)] : []), ...(web ? webTools(settings) : [])],
           maxTurns: judge ? 6 : 12, ...(judge ? { outputSchema: verdict } : {}) };
         record(task.id, { kind: 'start', agent: label, phase });
         const result = await oma.runAgent(agent, prompt, { abortSignal: signal });
@@ -220,7 +273,8 @@ export function createEngine(store, settings, { adapter, onStall, onAbandoned } 
       /** Author works, reviewers judge, the author revises on dissent, up to max_rounds. */
       async function runNode(plan, task, states, signal, delivered) {
         const roles = new Map(plan.roles.map(r => [r.id, r]));
-        const brief = nodeBrief(plan, task, states, owned);
+        const chat = await store.chats(run.project_id, task.id);
+        const brief = nodeBrief(plan, task, states, owned, { inputs: inputs(task.id), chat });
         let result = await agentRun(task, roles.get(task.role), 'work', brief, signal, { delivered });
         for (let round = 1; task.review && round <= task.review.max_rounds; round++) {
           const opinions = [];
@@ -252,7 +306,9 @@ export function createEngine(store, settings, { adapter, onStall, onAbandoned } 
             catch (failure) {
               if (abort.signal.aborted) { status = abort.signal.reason === 'stalled' ? 'failed' : 'paused'; error = abort.signal.reason === 'stalled' ? 'stalled' : null; break; }
               // The gateway's CNY limit is the usual reason a healthy team stops; never retry it.
-              const code = /provider_budget_exceeded/.test(String(failure?.message)) ? 'model_budget_exhausted' : 'agent_failed';
+              const message = String(failure?.message);
+              const code = /provider_budget_exceeded/.test(message) ? 'model_budget_exhausted'
+                : /model_not_allowed/.test(message) ? 'model_unavailable' : 'agent_failed';
               if (attempt === 0 && code === 'agent_failed') { record(task.id, { kind: 'retry' }); continue; }
               status = 'failed'; error = code;
               log('node_failed', { run_id: runId, task_id: task.id, error_code: error });

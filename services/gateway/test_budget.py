@@ -1,4 +1,5 @@
 """Deterministic tests: no provider traffic or paid calls."""
+import json
 import math
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
@@ -16,7 +17,8 @@ class BudgetTests(unittest.TestCase):
     def setUp(self):
         self.directory = TemporaryDirectory()
         self.settings = patch.dict(os.environ, {'MODEL_DAILY_LIMIT_CNY': '0.50',
-                                               'MODEL_MONTHLY_LIMIT_CNY': '1'})
+                                               'MODEL_MONTHLY_LIMIT_CNY': '1',
+                                               'DEEPSEEK_API_KEY': 'test-only', 'GATEWAY_KEY': 'test-only-gateway-key'})
         self.settings.start()
         self.path = patch.object(budget, 'PATH', Path(self.directory.name) / 'budget.sqlite')
         self.path.start()
@@ -73,6 +75,47 @@ class BudgetTests(unittest.TestCase):
         self.assertLessEqual(small, 4)
         self.assertGreaterEqual(large, math.ceil(150000 * 0.00024 + 8192 * 0.00096))
         self.assertLess(large, 60)
+
+    def test_only_keyed_catalog_models_route_and_each_is_billed_at_its_price(self):
+        os.environ.pop('OPENAI_API_KEY', None)
+        with self.assertRaises(HTTPException) as refused:
+            budget.bound({'model': 'gpt', 'messages': [{'role': 'user', 'content': 'hi'}]}, 'acompletion')
+        self.assertEqual(refused.exception.detail, 'model_not_allowed')
+        with patch.dict(os.environ, {'MODEL_DAILY_LIMIT_CNY': '100', 'MODEL_MONTHLY_LIMIT_CNY': '100'}):
+            flash = budget.bound({'model': 'deepseek-flash', 'max_tokens': 1000, 'messages': [{'role': 'user', 'content': 'x' * 10000}]}, 'acompletion')
+            pro = budget.bound({'model': 'deepseek-pro', 'max_tokens': 1000, 'messages': [{'role': 'user', 'content': 'x' * 10000}]}, 'acompletion')
+            self.assertGreater(pro, flash)
+            data = {'model': 'deepseek-pro', 'thinking': {'type': 'enabled'}, 'messages': [{'role': 'user', 'content': 'hi'}]}
+            budget.bound(data, 'acompletion')
+            self.assertEqual(data['thinking'], {'type': 'disabled'}, 'callers cannot switch on reasoning')
+            callback = budget.Budget()
+            result = asyncio.run(callback.async_pre_call_hook(None, None, data, 'acompletion'))
+            asyncio.run(callback.async_log_success_event(
+                {'model': 'deepseek/deepseek-v4-pro', 'litellm_params': {'metadata': result['metadata']}},
+                SimpleNamespace(usage=SimpleNamespace(prompt_tokens=1_000_000, completion_tokens=0)), None, None))
+            with budget.connect() as db:
+                self.assertEqual(db.execute("SELECT charged_fen FROM calls WHERE state='settled'").fetchone(), (1060,))
+        with self.assertRaises(HTTPException):
+            budget.bound({'model': 'deepseek-pro', 'messages': [{'role': 'user', 'content': [
+                {'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,AAAA'}}]}]}, 'acompletion')
+
+    def test_catalog_lists_every_model_with_availability_and_requires_the_gateway_key(self):
+        def ask(header):
+            return asyncio.run(budget.catalog(SimpleNamespace(headers={'authorization': header})))
+        with self.assertRaises(HTTPException):
+            ask('Bearer wrong')
+        models = {m['id']: m for m in json.loads(ask('Bearer test-only-gateway-key').body)['models']}
+        self.assertTrue(models['deepseek-flash']['available'])
+        self.assertFalse(models['gpt']['available'] and not os.getenv('OPENAI_API_KEY'))
+        self.assertEqual(models['seedream']['category'], 'image')
+        self.assertFalse(models['seedream']['available'], 'generation models are not routed yet')
+
+    def test_rendered_config_routes_only_models_with_keys(self):
+        import render
+        names = [m['model_name'] for m in render.render({'DEEPSEEK_API_KEY': 'k'})['model_list']]
+        self.assertEqual(names, ['text-embedding-v4', 'deepseek-flash', 'deepseek-pro'])
+        names = [m['model_name'] for m in render.render({'DEEPSEEK_API_KEY': 'k', 'MOONSHOT_API_KEY': 'k'})['model_list']]
+        self.assertIn('kimi', names)
 
     def test_search_and_models_share_atomic_cny_budget_and_separate_credits(self):
         with patch.dict(os.environ, {'SEARCH_DAILY_CREDITS': '2', 'SEARCH_MONTHLY_CREDITS': '2'}):

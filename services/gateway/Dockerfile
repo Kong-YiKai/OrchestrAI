@@ -6,8 +6,8 @@ LABEL org.opencontainers.image.source="https://github.com/Kong-YiKai/OrchestrAI"
 COPY requirements.txt ./
 RUN --mount=type=cache,target=/root/.cache/pip pip install -r requirements.txt
 RUN useradd --uid 10001 --create-home app && mkdir /data && chown app:app /data
-COPY budget.py search.py config.yaml ./
+COPY budget.py search.py render.py config.yaml models.json ./
 USER app
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 LITELLM_TELEMETRY=False LITELLM_WORKER_STARTUP_HOOKS=search:install
 EXPOSE 4000
-CMD ["litellm", "--config", "/app/config.yaml", "--host", "0.0.0.0", "--port", "4000", "--num_workers", "1"]
+CMD ["sh", "-c", "python render.py /tmp/config.yaml && exec litellm --config /tmp/config.yaml --host 0.0.0.0 --port 4000 --num_workers 1"]

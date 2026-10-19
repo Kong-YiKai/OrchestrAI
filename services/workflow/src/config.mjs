@@ -13,9 +13,8 @@ export function config(env = process.env) {
     // still serves plans and files, and model work fails with model_not_configured.
     gateway: env.GATEWAY_KEY ? { url: env.GATEWAY_URL || 'http://gateway:4000/v1', key: env.GATEWAY_KEY,
       model: env.WORKFLOW_MODEL || 'deepseek-flash' } : null,
-    // CNY per million tokens, matching the gateway's conservative accounting (peak price,
-    // FX ceiling, no cache discount), so estimates and team budgets use the same numbers.
-    prices: { 'deepseek-flash': { input: 2.4, output: 9.6 } },
+    // Optional: lets nodes with web access use the gateway's metered Tavily transport.
+    searchKey: env.RESEARCH_GATEWAY_KEY || null,
     delegationSecret: env.DELEGATION_SECRET,
     port,
     redis: {
