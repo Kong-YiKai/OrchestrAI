@@ -111,6 +111,32 @@
 .orchestra-context-link-text strong { font-size: 13px; font-weight: 600; }
 .orchestra-context-link-text span { font-size: 11px; color: rgb(var(--text-tertiary)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .orchestra-context-full { width: 100%; max-width: 850px; border-left: 0; margin: 0 auto; }
+.orchestra-project-cards { display: flex; flex-direction: column; gap: 12px; margin-top: 18px; }
+.orchestra-project-card { --tone: 148 163 184; --tile: 241 245 249; --ink: 71 85 105; border: 1px solid rgb(var(--tone) / .35); border-radius: 16px; background: rgb(var(--surface-primary)); overflow: hidden; transition: box-shadow .15s, border-color .15s; }
+.orchestra-project-card[data-tone="rose"] { --tone: 244 114 182; --tile: 253 232 240; --ink: 219 39 119; }
+.orchestra-project-card[data-tone="amber"] { --tone: 245 180 60; --tile: 254 243 214; --ink: 196 120 20; }
+.dark .orchestra-project-card { --tile: var(--tone); }
+.dark .orchestra-project-card .orchestra-project-icon { background: rgb(var(--tone) / .18); }
+.orchestra-project-card:hover { border-color: rgb(var(--tone) / .7); box-shadow: 0 6px 18px rgb(var(--tone) / .14); }
+.orchestra-project-card > button { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto auto; align-items: center; gap: 12px; width: 100%; padding: 14px; text-align: left; }
+.orchestra-project-icon { display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 12px; background: rgb(var(--tile)); color: rgb(var(--ink)); }
+.orchestra-project-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.orchestra-project-text strong { font-size: 13px; font-weight: 600; }
+.orchestra-project-text span { font-size: 11.5px; line-height: 1.5; color: rgb(var(--text-tertiary)); }
+.orchestra-project-badge { min-width: 22px; padding: 2px 8px; border-radius: 999px; background: rgb(var(--tile)); color: rgb(var(--ink)); font-size: 11px; font-weight: 600; text-align: center; border: 1px solid rgb(var(--tone) / .4); }
+.orchestra-project-card[data-live] .orchestra-project-badge::before { content: ''; display: inline-block; width: 6px; height: 6px; margin-right: 5px; border-radius: 50%; background: rgb(var(--ink)); vertical-align: 1px; animation: orchestra-pulse 1.2s ease-in-out infinite; }
+.orchestra-project-card > button > svg { color: rgb(var(--text-tertiary)); }
+.orchestra-project-action { padding: 4px 10px; border-radius: 999px; background: #1d1a17; color: #fff; font-size: 11px; white-space: nowrap; }
+.dark .orchestra-project-action { background: #f4ede4; color: #1d1a17; }
+.orchestra-project-detail { padding: 0 14px 14px; }
+.orchestra-project-qa, .orchestra-project-history { display: flex; flex-direction: column; gap: 8px; }
+.orchestra-project-qa li { display: flex; flex-direction: column; gap: 2px; padding: 9px 11px; border-radius: 10px; background: rgb(var(--surface-primary-alt)); font-size: 12px; }
+.orchestra-project-qa span { color: rgb(var(--text-tertiary)); font-size: 11px; }
+.orchestra-project-qa strong { font-weight: 600; }
+.orchestra-project-qa strong[data-pending] { color: rgb(var(--ink)); font-weight: 500; }
+.orchestra-project-summary { margin-top: 10px; padding: 10px 12px; border-left: 3px solid rgb(var(--tone)); border-radius: 6px; background: rgb(var(--tile) / .5); font-size: 12px; line-height: 1.7; white-space: pre-wrap; }
+.orchestra-project-history li { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 8px; font-size: 12px; line-height: 1.5; }
+.orchestra-project-history time { color: rgb(var(--text-tertiary)); font-size: 11px; }
 .orchestra-research { min-height: 0; overflow-y: auto; padding: 34px clamp(18px, 4vw, 48px); }
 .orchestra-research-intro h2 { font-size: 27px; font-weight: 600; margin: 14px 0 10px; }
 .orchestra-research-intro > p:last-child { font-size: 13px; line-height: 1.8; color: rgb(var(--text-tertiary)); }
