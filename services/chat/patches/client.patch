@@ -475,6 +475,46 @@ index 22b6f70..c7f3f92 100644
    const chatHelpers = useChatHelpers(0);
    const sidebarFormMethods = useForm<ChatFormValues>({ defaultValues: { text: '' } });
    return (
+diff --git a/client/src/hooks/AuthContext.tsx b/client/src/hooks/AuthContext.tsx
+index 9995d46..287a30b 100644
+--- a/client/src/hooks/AuthContext.tsx
++++ b/client/src/hooks/AuthContext.tsx
+@@ -144,7 +144,7 @@ const AuthContextProvider = ({
+         return;
+       }
+       setError(undefined);
+-      setUserContext({ token, isAuthenticated: true, user, redirect: '/c/new' });
++      setUserContext({ token, isAuthenticated: true, user, redirect: '/c/new?view=dashboard' });
+     },
+     onError: (error: TResError | unknown) => {
+       const resError = error as TResError;
+diff --git a/client/src/hooks/Input/useQueryParams.ts b/client/src/hooks/Input/useQueryParams.ts
+index 4c13ddf..d3be33a 100644
+--- a/client/src/hooks/Input/useQueryParams.ts
++++ b/client/src/hooks/Input/useQueryParams.ts
+@@ -80,6 +80,13 @@ export default function useQueryParams({
+     if (projectId) {
+       preservedParams.set(PROJECT_ID_SEARCH_PARAM, projectId);
+     }
++    /** OrchestrAI workbench view and team deep links are presentation state, not chat settings. */
++    for (const key of ['view', 'team']) {
++      const value = searchParams.get(key);
++      if (value) {
++        preservedParams.set(key, value);
++      }
++    }
+     return preservedParams;
+   }, [searchParams]);
+ 
+@@ -255,6 +262,8 @@ export default function useQueryParams({
+       delete queryParams.q;
+       delete queryParams.submit;
+       delete queryParams[PROJECT_ID_SEARCH_PARAM];
++      delete queryParams.view;
++      delete queryParams.team;
+       const validSettings = processValidSettings(queryParams);
+ 
+       return { decodedPrompt, validSettings, shouldAutoSubmit };
 diff --git a/client/src/locales/en/translation.json b/client/src/locales/en/translation.json
 index 2d81936..d52308b 100644
 --- a/client/src/locales/en/translation.json
@@ -562,7 +602,7 @@ index 2d81936..d52308b 100644
 +  "com_orchestra_teams_latest": "Latest: {{name}}"
  }
 diff --git a/client/src/locales/zh-Hans/translation.json b/client/src/locales/zh-Hans/translation.json
-index 6e8b80d..34545be 100644
+index 6e8b80d..bd81775 100644
 --- a/client/src/locales/zh-Hans/translation.json
 +++ b/client/src/locales/zh-Hans/translation.json
 @@ -1,4 +1,7 @@
@@ -573,7 +613,7 @@ index 6e8b80d..34545be 100644
    "chat_direction_left_to_right": "从左到右",
    "chat_direction_right_to_left": "从右到左",
    "com_a11y_ai_composing": "AI 仍在撰写中。",
-@@ -1444,5 +1447,93 @@
+@@ -1444,5 +1447,95 @@
    "com_ui_zoom_in": "放大",
    "com_ui_zoom_level": "缩放级别",
    "com_ui_zoom_out": "缩小",
@@ -666,8 +706,23 @@ index 6e8b80d..34545be 100644
 +  "com_ui_submitting": "正在提交…",
 +  "com_ui_question_unanswered": "没有回答",
 +  "com_ui_question_number": "第 {{0}} 题",
-+  "com_ui_answer_questions_above": "先回答上面的问题"
++  "com_ui_answer_questions_above": "先回答上面的问题",
++  "com_ui_questions_remaining_one": "还有 {{0}} 个问题没回答",
++  "com_ui_questions_remaining": "还有 {{0}} 个问题没回答"
  }
+diff --git a/client/src/routes/Layouts/Startup.tsx b/client/src/routes/Layouts/Startup.tsx
+index 16e5d6f..f48210d 100644
+--- a/client/src/routes/Layouts/Startup.tsx
++++ b/client/src/routes/Layouts/Startup.tsx
+@@ -34,7 +34,7 @@ export default function StartupLayout({ isAuthenticated }: { isAuthenticated?: b
+       const hasPendingRedirect =
+         new URLSearchParams(window.location.search).has(REDIRECT_PARAM) || hasStoredRedirect();
+       if (!hasPendingRedirect) {
+-        navigate('/c/new', { replace: true });
++        navigate('/c/new?view=dashboard', { replace: true });
+       }
+     }
+     if (data) {
 diff --git a/client/src/routes/index.tsx b/client/src/routes/index.tsx
 index 78f2e98..d85aa19 100644
 --- a/client/src/routes/index.tsx

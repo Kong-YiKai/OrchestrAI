@@ -1,6 +1,6 @@
 import { useLocalize } from '~/hooks';
 import { useEffect, useState } from 'react';
-import { MessageSquare, Workflow, Plus, Search, X, LogOut, Globe } from 'lucide-react';
+import { MessageSquare, Workflow, Plus, Search, X, LogOut, Globe, LayoutDashboard } from 'lucide-react';
 import { useMediaQuery, ThemeSelector } from '@librechat/client';
 import { SidebarChatProvider } from '~/components/UnifiedSidebar/UnifiedSidebar';
 import {
@@ -45,9 +45,10 @@ function Navigation() {
     if (isSmallScreen && expanded) document.getElementById('close-sidebar-button')?.focus();
   }, [isSmallScreen, expanded]);
   const links = [
-    { view: 'chat', icon: MessageSquare, label: '对话工作台' },
-    { view: 'research', icon: Globe, label: '联网研究' },
-    { view: 'canvas', icon: Workflow, label: '工作流画布' },
+    { view: 'dashboard', icon: LayoutDashboard, label: '总览', tone: 'orange' },
+    { view: 'chat', icon: MessageSquare, label: '对话工作台', tone: 'brown' },
+    { view: 'canvas', icon: Workflow, label: '工作流画布', tone: 'green' },
+    { view: 'research', icon: Globe, label: '联网研究', tone: 'red' },
   ] as const;
   return (
     <nav
@@ -62,7 +63,15 @@ function Navigation() {
       }}
     >
       <div className="orchestra-sidebar-brand">
-        <a href="/c/new" onClick={handleNewChatClick} aria-label="OrchestrAI 工作台">
+        <a
+          href="/c/new?view=dashboard"
+          onClick={(e) => {
+            e.preventDefault();
+            setView('dashboard');
+            close();
+          }}
+          aria-label="OrchestrAI 总览"
+        >
           <Brand />
         </a>
         {isSmallScreen && (
@@ -95,15 +104,18 @@ function Navigation() {
           aria-describedby="task-filter-scope"
         />
       </label>
-      <p id="task-filter-scope" className="orchestra-small-note">
-        {localize('com_orchestra_filter_scope')}
-      </p>
+      {search && (
+        <p id="task-filter-scope" className="orchestra-small-note">
+          {localize('com_orchestra_filter_scope')}
+        </p>
+      )}
       <p className="orchestra-nav-label">{localize('com_orchestra_workspace')}</p>
       <div className="orchestra-workspace-links">
-        {links.map(({ view: key, icon: Icon, label }) => (
+        {links.map(({ view: key, icon: Icon, label, tone }) => (
           <button
             key={key}
             type="button"
+            data-tone={tone}
             aria-current={
               view === key || (key === 'chat' && view === 'context') ? 'page' : undefined
             }
