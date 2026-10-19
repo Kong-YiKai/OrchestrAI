@@ -36,8 +36,10 @@ export default function WorkLog({
   const roles = new Map(plan.roles.map((r) => [r.id, r.name]));
   const titles = new Map(plan.tasks.map((t) => [t.id, t.title]));
   const who = (id?: string) => roles.get(id ?? '') ?? id ?? '';
-  const upstream = task.depends_on.map((id) => ({ id, state: stateOf(run, id), files: all.list.filter((f) => f.task_id === id) }));
-  const produced = all.list.filter((f) => f.task_id === taskId);
+  const output = (id: string) => all.list.filter((f) => f.task_id === id && !f.path.startsWith('inputs/'));
+  const upstream = task.depends_on.map((id) => ({ id, state: stateOf(run, id), files: output(id) }));
+  const produced = output(taskId);
+  const attached = all.list.filter((f) => f.path.startsWith(`inputs/${taskId}/`));
 
   return (
     <aside className="orchestra-team-log" aria-label={`「${task.title}」的工作记录`}>
@@ -54,7 +56,13 @@ export default function WorkLog({
       <div className="orchestra-team-log-body">
         <section>
           <h4>用到的资料</h4>
-          {!upstream.length && <p className="orchestra-small-note">这是起点节点，只依据它自己的要求工作。</p>}
+          {!upstream.length && !attached.length && <p className="orchestra-small-note">这是起点节点，只依据它自己的要求工作。</p>}
+          {attached.length > 0 && (
+            <details className="orchestra-team-log-input" open>
+              <summary>你给这个节点的资料</summary>
+              <FileGroups files={attached} all={all} onOpen={onOpen} />
+            </details>
+          )}
           {upstream.map((u) => (
             <details key={u.id} className="orchestra-team-log-input">
               <summary>
@@ -105,7 +113,7 @@ function Step({ entry, who }: { entry: LogEntry; who: (id?: string) => string })
       return (
         <li className="is-tool" data-error={d.error || undefined}>
           {['file_write', 'file_edit'].includes(d.tool ?? '') ? <FilePen size={13} /> : <FileSearch size={13} />}
-          {who(d.agent)} {toolLabel(d.tool)} {d.path && <code>{d.path}</code>}
+          {who(d.agent)} {toolLabel(d.tool)} {d.path && <code>{d.path}</code>}{d.detail && <code>{d.detail}</code>}
           {d.error && '（失败）'}
         </li>
       );

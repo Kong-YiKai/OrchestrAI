@@ -1,13 +1,5 @@
+# Chat models are added at startup from models.json by render.py (only those with a key).
 model_list:
-  - model_name: deepseek-flash
-    litellm_params:
-      model: deepseek/deepseek-flash
-      api_key: os.environ/DEEPSEEK_API_KEY
-      api_base: https://api.deepseek.com
-      timeout: 180
-      max_retries: 0
-      max_parallel_requests: 4
-      thinking: {type: disabled}
   - model_name: text-embedding-v4
     litellm_params:
       model: openai/text-embedding-v4

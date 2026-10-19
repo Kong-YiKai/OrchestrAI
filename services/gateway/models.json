@@ -1,0 +1,25 @@
+{
+  "_comment": "Single model catalog. Prices are CNY per million tokens at the conservative rate used for budgets (peak price, FX ceiling 8 CNY/USD, no cache discount); check each provider's official price page and edit here. A text model becomes selectable when its key variable is set on the gateway. Image, video and 3D entries are listed for planning; their generation tools arrive with R6.",
+  "models": [
+    {"id": "deepseek-flash", "label": "DeepSeek V4.1 Flash", "vendor": "DeepSeek", "category": "text", "model": "deepseek/deepseek-flash", "api_base": "https://api.deepseek.com", "key": "DEEPSEEK_API_KEY", "price": {"input": 2.4, "output": 9.6}, "params": {"thinking": {"type": "disabled"}}},
+    {"id": "deepseek-pro", "label": "DeepSeek V4 Pro", "vendor": "DeepSeek", "category": "text", "model": "deepseek/deepseek-v4-pro", "api_base": "https://api.deepseek.com", "key": "DEEPSEEK_API_KEY", "price": {"input": 10.6, "output": 31.7}, "params": {"thinking": {"type": "disabled"}}},
+    {"id": "qwen-max", "label": "通义千问 Qwen3 Max", "vendor": "阿里云百炼", "category": "text", "model": "openai/qwen3-max", "api_base": "https://dashscope.aliyuncs.com/compatible-mode/v1", "key": "DASHSCOPE_API_KEY", "price": {"input": 10, "output": 40}},
+    {"id": "kimi", "label": "Kimi K2.6", "vendor": "月之暗面", "category": "text", "model": "openai/kimi-k2.6", "api_base": "https://api.moonshot.cn/v1", "key": "MOONSHOT_API_KEY", "price": {"input": 8, "output": 32}},
+    {"id": "glm", "label": "智谱 GLM-5", "vendor": "智谱", "category": "text", "model": "openai/glm-5", "api_base": "https://open.bigmodel.cn/api/paas/v4", "key": "ZHIPU_API_KEY", "price": {"input": 8, "output": 32}},
+    {"id": "doubao-pro", "label": "豆包 Seed 2.1 Pro", "vendor": "火山方舟", "category": "text", "model": "openai/doubao-seed-2.1-pro", "api_base": "https://ark.cn-beijing.volces.com/api/v3", "key": "ARK_API_KEY", "price": {"input": 6, "output": 30}},
+    {"id": "gpt", "label": "GPT-5.5", "vendor": "OpenAI", "category": "text", "model": "openai/gpt-5.5", "key": "OPENAI_API_KEY", "price": {"input": 40, "output": 240}},
+    {"id": "claude-sonnet", "label": "Claude Sonnet 5.5", "vendor": "Anthropic", "category": "text", "model": "anthropic/claude-sonnet-5-5", "key": "ANTHROPIC_API_KEY", "price": {"input": 24, "output": 120}},
+    {"id": "gemini-flash", "label": "Gemini 3.5 Flash", "vendor": "Google", "category": "text", "model": "gemini/gemini-3.5-flash", "key": "GEMINI_API_KEY", "price": {"input": 12, "output": 72}},
+    {"id": "seedream", "label": "豆包 Seedream（画图）", "vendor": "火山方舟", "category": "image", "key": "ARK_API_KEY"},
+    {"id": "wanx-image", "label": "通义万相 / Qwen-Image（画图）", "vendor": "阿里云百炼", "category": "image", "key": "DASHSCOPE_API_KEY"},
+    {"id": "gpt-image", "label": "GPT Image（画图）", "vendor": "OpenAI", "category": "image", "key": "OPENAI_API_KEY"},
+    {"id": "gemini-image", "label": "Gemini 图像（画图）", "vendor": "Google", "category": "image", "key": "GEMINI_API_KEY"},
+    {"id": "seedance", "label": "豆包 Seedance（视频）", "vendor": "火山方舟", "category": "video", "key": "ARK_API_KEY"},
+    {"id": "kling", "label": "可灵 Kling（视频）", "vendor": "快手", "category": "video", "key": "KLING_API_KEY"},
+    {"id": "wan-video", "label": "通义万相 Wan（视频）", "vendor": "阿里云百炼", "category": "video", "key": "DASHSCOPE_API_KEY"},
+    {"id": "veo", "label": "Veo（视频）", "vendor": "Google", "category": "video", "key": "GEMINI_API_KEY"},
+    {"id": "hunyuan-3d", "label": "混元 3D", "vendor": "腾讯云", "category": "3d", "key": "TENCENT_HUNYUAN_API_KEY"},
+    {"id": "tripo", "label": "Tripo 3D", "vendor": "Tripo AI", "category": "3d", "key": "TRIPO_API_KEY"},
+    {"id": "meshy", "label": "Meshy 3D", "vendor": "Meshy", "category": "3d", "key": "MESHY_API_KEY"}
+  ]
+}

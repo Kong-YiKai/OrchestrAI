@@ -37,6 +37,14 @@ services:
     environment: &gateway-env
       GATEWAY_KEY: ${GATEWAY_KEY:?required}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?required}
+      # Optional providers from services/gateway/models.json; a model is offered once its key is set.
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      MOONSHOT_API_KEY: ${MOONSHOT_API_KEY:-}
+      ZHIPU_API_KEY: ${ZHIPU_API_KEY:-}
+      ARK_API_KEY: ${ARK_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:?required}
       EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:?required}
       MODEL_DAILY_LIMIT_CNY: ${MODEL_DAILY_LIMIT_CNY:-5}

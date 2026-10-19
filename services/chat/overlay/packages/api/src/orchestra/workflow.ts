@@ -5,10 +5,10 @@ import type { Request, Response } from 'express';
 
 const ID = '[0-9a-f-]{36}';
 const ROUTES: Record<string, RegExp | undefined> = {
-  GET: new RegExp(`^/(?:projects(?:/${ID})?|runs/${ID}(?:/(?:events|files(?:/${ID})?))?)$`),
-  POST: new RegExp(`^/projects(?:/${ID}/(?:design|control))?$`),
+  GET: new RegExp(`^/(?:models|projects(?:/${ID}(?:/chat)?)?|runs/${ID}(?:/(?:events|files(?:/${ID})?))?)$`),
+  POST: new RegExp(`^/projects(?:/${ID}/(?:design|control|inputs|chat))?$`),
   PUT: new RegExp(`^/projects/${ID}/(?:plan|budget)$`),
-  DELETE: new RegExp(`^/projects/${ID}$`),
+  DELETE: new RegExp(`^/projects/${ID}(?:/inputs/${ID})?$`),
 };
 
 /** Forward only verified chat identity and the workflow protocol, never client credentials. */
@@ -46,7 +46,8 @@ export function createOrchestraWorkflowRouter(): Router {
     try {
       const upstream = await fetch(`${base}${req.path}${cursor}`, { method: req.method, headers,
         ...(req.method === 'POST' || req.method === 'PUT' ? { body: JSON.stringify(req.body ?? {}) } : {}),
-        signal: AbortSignal.timeout(15000) });
+        // A node chat waits for one model reply; everything else is quick.
+        signal: AbortSignal.timeout(req.method === 'POST' && req.path.endsWith('/chat') ? 100000 : 15000) });
       res.status(upstream.status).type('application/json').send(await upstream.text());
     } catch {
       res.status(502).json({ error: 'workflow_unavailable' });

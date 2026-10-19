@@ -83,6 +83,16 @@
 .orchestra-team-modal .orchestra-team-preview iframe { height: min(75vh, 760px); }
 .orchestra-team-modal .orchestra-team-preview pre { max-height: 75vh; }
 .orchestra-team-modal .orchestra-team-preview img { max-height: 75vh; object-fit: contain; }
+.orchestra-team-upload { position: relative; cursor: pointer; }
+.orchestra-team-upload input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.orchestra-team-chat { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; font-size: 13px; }
+.orchestra-team-chat li { max-width: 88%; padding: 10px 12px; border-radius: 12px; background: rgb(var(--surface-primary-alt)); }
+.orchestra-team-chat li[data-role=user] { align-self: flex-end; background: rgb(var(--surface-active)); }
+.orchestra-team-chat li span { font-size: 10px; color: rgb(var(--text-tertiary)); }
+.orchestra-team-chat li p { margin-top: 2px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; }
+.orchestra-team-chat-form { display: flex; align-items: flex-end; gap: 8px; padding: 12px 18px; border-top: 1px solid rgb(var(--border-light)); }
+.orchestra-team-chat-form textarea { flex: 1; resize: none; }
+.orchestra-team-chat-form .orchestra-primary { min-height: 40px; padding: 8px 12px; }
 .orchestra-team-files h4 { display: flex; align-items: center; gap: 6px; margin: 8px 0 4px; font-size: 11px; color: rgb(var(--text-tertiary)); }
 .orchestra-team-canvas .react-flow { --xy-background-color: rgb(var(--surface-chat)); --xy-edge-stroke: rgb(var(--border-heavy)); --xy-edge-stroke-selected: rgb(var(--accent-primary)); --xy-controls-button-background-color: rgb(var(--surface-primary)); --xy-controls-button-color: rgb(var(--text-primary)); --xy-controls-button-border-color: rgb(var(--border-light)); --xy-handle-background-color: rgb(var(--accent-primary)); }
 .orchestra-team-node { width: 220px; padding: 12px 14px; border: 1px solid rgb(var(--border-light)); border-radius: 14px; background: rgb(var(--surface-primary)); color: rgb(var(--text-primary)); box-shadow: 0 1px 3px color-mix(in srgb, rgb(var(--border-medium)) 40%, transparent); }

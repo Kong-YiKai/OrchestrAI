@@ -12,11 +12,26 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-from fastapi import HTTPException
+import hmac
+
+from fastapi import HTTPException, Request
+from fastapi.responses import JSONResponse
 from litellm.integrations.custom_logger import CustomLogger
 
 SCHEMA = 1
 PATH = Path(os.getenv('BUDGET_DATABASE', '/data/budget.sqlite'))
+CATALOG = json.loads((Path(__file__).parent / 'models.json').read_text(encoding='utf-8'))['models']
+
+
+def chat_models():
+    """Text models whose provider key is configured; only these are routed and billed."""
+    return {m['id']: m for m in CATALOG if m['category'] == 'text' and os.getenv(m['key'])}
+
+
+def fen(model, input_tokens, output_tokens):
+    """Catalog prices are CNY per million tokens, i.e. 1e-4 fen per token per yuan."""
+    price = chat_models()[model]['price']
+    return (input_tokens * price['input'] + output_tokens * price['output']) * 1e-4
 DDL = '''
 CREATE TABLE schema_version(version INTEGER NOT NULL);
 INSERT INTO schema_version VALUES (1);
@@ -128,7 +143,7 @@ def settle(request_id, amount, credits=None, response=None):
 
 
 def bound(data, call_type):
-    if data.get('model') not in {'deepseek-flash', 'text-embedding-v4'}:
+    if data.get('model') != 'text-embedding-v4' and data.get('model') not in chat_models():
         raise HTTPException(400, 'model_not_allowed')
     if any(data.get(k) for k in ['api_key', 'api_base', 'base_url', 'azure_endpoint', 'mock_response', 'fallbacks']):
         raise HTTPException(400, 'provider_override_not_allowed')
@@ -155,7 +170,9 @@ def bound(data, call_type):
     if data['max_tokens'] < 1:
         raise HTTPException(400, 'invalid_output_limit')
     data.pop('max_completion_tokens', None)
-    data['thinking'] = {'type': 'disabled'}
+    # Callers cannot switch on paid reasoning; the catalog fixes per-model parameters.
+    data.pop('thinking', None)
+    data.update(chat_models()[data['model']].get('params', {}))
     images, texts = 0, []
     for message in data.get('messages', []):
         content = message.get('content', '')
@@ -187,14 +204,15 @@ def bound(data, call_type):
     size = sum(len(t.encode()) for t in texts)
     if images > 5 or size > 200000:
         raise HTTPException(413, 'context_limit')
-    # Flash peak price: $0.3/$1.2 per million input/output; FX ceiling 8 CNY/USD,
-    # i.e. 0.00024 fen per input token and 0.00096 fen per output token. For images
-    # reserve for the entire 1M-token model context, not a guessed image token count.
+    # Images (chat attachments) are reserved for the model's entire 1M-token context,
+    # not a guessed image token count, so they stay on the default model only.
     # Text is reserved for this request's own worst case: never more tokens than UTF-8
     # bytes, plus the full output limit, so small calls stay usable near the daily cap.
     if images:
-        return 250
-    return math.ceil(size * 0.00024 + data['max_tokens'] * 0.00096) + 1
+        if data['model'] != 'deepseek-flash':
+            raise HTTPException(400, 'images_not_supported_for_model')
+        return math.ceil(fen('deepseek-flash', 1_000_000, 0)) + 10
+    return math.ceil(fen(data['model'], size, data['max_tokens'])) + 1
 
 
 class Budget(CustomLogger):
@@ -206,23 +224,33 @@ class Budget(CustomLogger):
             raise
         except Exception:
             raise HTTPException(503, 'budget_store_unavailable')
-        data.setdefault('metadata', {})['orchestrai_reservation'] = reservation
+        data.setdefault('metadata', {}).update(orchestrai_reservation=reservation, orchestrai_model=data['model'])
         return data
 
     async def async_log_success_event(self, kwargs, response_obj, start_time, end_time):
-        reservation = kwargs.get('litellm_params', {}).get('metadata', {}).get('orchestrai_reservation')
+        metadata = kwargs.get('litellm_params', {}).get('metadata', {})
+        reservation, model = metadata.get('orchestrai_reservation'), metadata.get('orchestrai_model')
         usage = getattr(response_obj, 'usage', None)
         if not reservation or not usage:
             return  # Unknown/stream interrupted usage retains the full reservation.
-        model = kwargs.get('model', '')
-        if 'text-embedding-v4' in model:
+        if model == 'text-embedding-v4':
             amount = math.ceil(usage.prompt_tokens * 0.0000006 * 100)
         else:
-            amount = math.ceil((usage.prompt_tokens * 0.0000024 + usage.completion_tokens * 0.0000096) * 100)
+            amount = math.ceil(fen(model, usage.prompt_tokens, usage.completion_tokens))
         settle(reservation, max(1, amount))
 
 
 proxy_handler_instance = Budget()
+
+
+async def catalog(request: Request):
+    """The model list for workflow nodes: labels, prices and whether a key is configured."""
+    key = os.getenv('GATEWAY_KEY', '')
+    if len(key) < 16 or not hmac.compare_digest(request.headers.get('authorization', ''), 'Bearer ' + key):
+        raise HTTPException(401, 'gateway_authentication_required')
+    ready = chat_models()
+    return JSONResponse({'models': [{k: m[k] for k in ('id', 'label', 'vendor', 'category') }
+                                    | {'price': m.get('price'), 'available': m['id'] in ready} for m in CATALOG]})
 
 if __name__ == '__main__':
     import sys

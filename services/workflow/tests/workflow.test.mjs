@@ -2,6 +2,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
+import http from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { SignJWT } from 'jose';
 import { authenticate } from '../src/auth.mjs';
@@ -11,6 +12,7 @@ import { Store } from '../src/store.mjs';
 import { checkPlan, checkRunnable, estimate, lockViolations } from '../src/plan.mjs';
 import { createEngine, nodeBrief } from '../src/engine.mjs';
 import { createApi } from '../src/api.mjs';
+import { createCatalog } from '../src/models.mjs';
 import { startWorker, publish } from '../src/worker.mjs';
 import { fakeModel, PLAN } from './fake-model.mjs';
 
@@ -21,6 +23,30 @@ async function token({ user = 'alice', tenant = 'team', scope = ['runs:read', 'r
     .setExpirationTime(expired ? Math.floor(Date.now() / 1000) - 60 : '2m').sign(new TextEncoder().encode(key));
 }
 const clone = value => structuredClone(value);
+const CATALOG = [
+  { id: 'test-model', label: '测试模型', vendor: 'test', category: 'text', price: { input: 1, output: 1 }, available: true },
+  { id: 'test-pro', label: '贵的模型', vendor: 'test', category: 'text', price: { input: 10, output: 10 }, available: true },
+  { id: 'paint', label: '画图', vendor: 'test', category: 'image', price: null, available: false },
+];
+
+test('the catalog comes from the gateway, is cached, and falls back to the default model', async () => {
+  let calls = 0;
+  const gateway = { url: 'http://gw:4000/v1', key: 'k', model: 'deepseek-flash' };
+  const ok = createCatalog({ gateway }, async (url, init) => {
+    calls++;
+    assert.equal(url, 'http://gw:4000/orchestrai/models');
+    assert.equal(init.headers.authorization, 'Bearer k');
+    return { ok: true, json: async () => ({ models: [{ id: 'deepseek-flash', price: { input: 2.4, output: 9.6 } }, { id: 'gpt', price: { input: 40, output: 240 } }] }) };
+  });
+  const models = await ok.list();
+  await ok.list();
+  assert.equal(calls, 1, 'cached');
+  assert.deepEqual(ok.priceOf(models, 'gpt'), { input: 40, output: 240 });
+  assert.deepEqual(ok.priceOf(models, undefined), { input: 2.4, output: 9.6 }, 'no model means the default');
+  assert.deepEqual(ok.priceOf(models, 'unknown'), { input: 2.4, output: 9.6 }, 'unknown models bill like the default');
+  const down = createCatalog({ gateway }, async () => { throw new Error('offline'); });
+  assert.equal((await down.list())[0].id, 'deepseek-flash');
+});
 
 test('delegation rejects missing, forged, expired and wrong-audience tokens', async () => {
   for (const bearer of [undefined, 'Bearer nope', `Bearer ${await token({}, 'wrong-key')}`, `Bearer ${await token({ expired: true })}`, `Bearer ${await token({ audience: 'other' })}`]) {
@@ -36,7 +62,7 @@ test('configuration requires secrets and only enables models with a gateway key'
   const base = { DATABASE_URL: 'x', REDIS_URL: 'redis://localhost', DELEGATION_SECRET: secret };
   assert.equal(config(base).gateway, null);
   assert.deepEqual(config({ ...base, GATEWAY_KEY: 'k' }).gateway, { url: 'http://gateway:4000/v1', key: 'k', model: 'deepseek-flash' });
-  assert.deepEqual(config(base).prices['deepseek-flash'], { input: 2.4, output: 9.6 });
+  assert.equal(config(base).prices, undefined, 'prices come from the gateway catalog');
 });
 
 test('plans reject unknown references, self review, duplicate titles and cycles', () => {
@@ -72,6 +98,9 @@ test('runnable workflows are connected; started nodes are frozen; costs are esti
   const removed = clone(PLAN); removed.tasks = removed.tasks.filter(t => t.id !== 'style');
   assert.deepEqual(lockViolations(PLAN, removed, states), ['「视觉样式」正在运行，不能删除']);
   const cost = estimate(PLAN, () => ({ input: 2.4, output: 9.6 }));
+  const pricier = estimate({ ...PLAN, tasks: PLAN.tasks.map(t => (t.id === 'outline' ? { ...t, model: 'pro' } : t)) },
+    t => (t.model === 'pro' ? { input: 24, output: 96 } : { input: 2.4, output: 9.6 }));
+  assert.deepEqual([cost.tasks[0].cost_cny, pricier.tasks[0].cost_cny], [0.19, 1.92], 'a node is priced by its own model');
   assert.equal(cost.tasks.length, 4);
   assert.equal(cost.tasks[0].input_tokens, 60000);
   assert.ok(cost.tasks[2].cost_cny > cost.tasks[0].cost_cny, 'review costs more');
@@ -89,12 +118,13 @@ test('a node brief carries upstream summaries and the files they wrote', () => {
 
 const integration = process.env.INTEGRATION === '1';
 let settings, store, api, base;
+const said = [];
 before(async () => {
   if (!integration) return;
-  settings = { ...config({ ...process.env, DELEGATION_SECRET: secret }), prices: { 'test-model': { input: 1, output: 1 } } };
+  settings = { ...config({ ...process.env, DELEGATION_SECRET: secret }), catalog: CATALOG };
   await migrate(settings.databaseUrl); await migrate(settings.databaseUrl);
   store = new Store(settings.databaseUrl);
-  api = createApi(settings);
+  api = createApi(settings, { complete: async args => { said.push(args); return { text: '好的，我先列大纲，再按你说的风格写。', usage: { input: 120, output: 30 } }; } });
   await new Promise(resolve => api.server.listen(0, '127.0.0.1', resolve));
   base = `http://127.0.0.1:${api.server.address().port}`;
 });
@@ -204,7 +234,11 @@ test('the commander designs, the whole team runs in parallel with review, and ev
 });
 
 test('single nodes run on their own once upstream is done; the team finishes the rest', { skip: !integration }, async () => {
-  const mine = await project({ user: 'ivy' });
+  const plan = clone(PLAN); plan.tasks[0].model = 'test-pro';
+  const mine = await project({ user: 'ivy' }, { plan });
+  const priced = (await request(`/projects/${mine.id}`, { who: { user: 'ivy' } })).body.estimate;
+  assert.deepEqual([priced.tasks[0].cost_cny, priced.tasks[1].cost_cny], [0.65, 0.19], 'the estimate uses each node model price');
+  assert.deepEqual((await request('/models')).body, { models: CATALOG, default: 'deepseek-flash' });
   const who = { user: 'ivy' };
   const early = await control(mine.id, { action: 'run', task: 'page' }, who);
   assert.equal(early.status, 409);
@@ -219,6 +253,8 @@ test('single nodes run on their own once upstream is done; the team finishes the
   row = await work(mine.id, model, who);
   assert.equal(row.status, 'completed');
   assert.equal(model.calls('outline'), 1, 'finished node was not run again');
+  assert.equal(model.modelOf('outline'), 'test-pro', 'the node used its own model');
+  assert.equal(model.modelOf('page'), 'test-model', 'other nodes use the default');
 });
 
 test('pausing a running node keeps its files; continuing resumes it with that context', { skip: !integration }, async () => {
@@ -269,6 +305,66 @@ test('a redesign follows the user and keeps finished nodes exactly as they were'
     assert.equal(ready.status, 'ready');
     assert.equal(ready.plan.tasks.find(t => t.id === 'outline').description, 'TASK:outline FILE:docs/kept.md');
   } finally { await close(); }
+});
+
+test('attachments and the node chat reach the agent; started nodes accept neither', { skip: !integration }, async () => {
+  const who = { user: 'mia' };
+  const mine = await project(who);
+  const upload = (name, text, task = 'outline') => request(`/projects/${mine.id}/inputs`, { method: 'POST', who,
+    body: { task, name, content: Buffer.from(text).toString('base64') } });
+  const file = await upload('notes.md', '# 要点\n像素风、复古');
+  assert.equal(file.status, 201, JSON.stringify(file.body));
+  assert.equal(file.body.path, 'inputs/outline/notes.md');
+  assert.equal((await upload('../x.md', 'x')).status, 400);
+  assert.equal((await upload('photo.png', 'x')).status, 400);
+  const extra = await upload('drop.txt', 'remove me');
+  assert.equal((await request(`/projects/${mine.id}/inputs/${extra.body.id}`, { method: 'DELETE', who })).status, 200);
+  const talk = await request(`/projects/${mine.id}/chat`, { method: 'POST', who, body: { task: 'outline', message: '大纲要突出灯塔守夜人的孤独感' } });
+  assert.equal(talk.status, 200, JSON.stringify(talk.body));
+  assert.deepEqual(talk.body.messages.map(m => m.role), ['user', 'assistant']);
+  assert.match(said.at(-1).messages[0].content, /你现在不能读写文件/);
+  assert.match(said.at(-1).messages[0].content, /inputs\/outline\/notes\.md/);
+  assert.equal(said.at(-1).model, 'deepseek-flash');
+  await control(mine.id, { action: 'run', task: 'outline' }, who);
+  const model = fakeModel();
+  const row = await work(mine.id, model, who);
+  assert.ok(row.spent_cny > 0, 'the chat is billed to the team');
+  assert.match(model.prompt('outline'), /用户为这个任务提供的资料\ninputs\/outline\/notes\.md/);
+  assert.match(model.prompt('outline'), /用户：大纲要突出灯塔守夜人的孤独感/);
+  const files = (await request(`/runs/${row.id}/files`, { who })).body.files;
+  assert.ok(files.some(f => f.path === 'inputs/outline/notes.md' && f.task_id === 'outline'));
+  assert.equal((await upload('late.md', 'x')).body.error, 'task_locked');
+  assert.equal((await request(`/projects/${mine.id}/chat`, { method: 'POST', who, body: { task: 'outline', message: '再改改' } })).body.error, 'task_locked');
+  assert.equal((await request(`/projects/${mine.id}/chat?task=outline`, { who })).body.messages.length, 2);
+});
+
+test('a node with web access searches through the metered gateway transport', { skip: !integration }, async () => {
+  const seen = [];
+  const gateway = http.createServer((req, res) => {
+    let raw = '';
+    req.on('data', c => { raw += c; });
+    req.on('end', () => {
+      seen.push({ url: req.url, auth: req.headers.authorization, body: JSON.parse(raw) });
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ results: [{ title: '灯塔的历史', url: 'https://example.org/lighthouse', content: '灯塔守夜人的工作' }] }));
+    });
+  });
+  await new Promise(resolve => gateway.listen(0, '127.0.0.1', resolve));
+  try {
+    const who = { user: 'noa' };
+    const plan = clone(PLAN); plan.tasks[0].tools = { web: true };
+    const mine = await project(who, { plan });
+    await control(mine.id, { action: 'run', task: 'outline' }, who);
+    const model = fakeModel();
+    const row = await work(mine.id, model, who, { searchKey: 'search-key', gateway: { url: `http://127.0.0.1:${gateway.address().port}/v1`, key: 'g', model: 'test-model' } });
+    assert.equal(row.task_states.outline.status, 'completed');
+    assert.match(seen[0].url, /^\/providers\/tavily\/search\?operation_id=[0-9a-f-]{36}-search$/);
+    assert.equal(seen[0].auth, 'Bearer search-key');
+    assert.deepEqual(seen[0].body, { query: 'about outline', max_results: 5 });
+    assert.match(model.webOf('outline'), /https:\/\/example\.org\/lighthouse/);
+    const log = (await request(`/runs/${row.id}/events?task=outline`, { who })).body.events;
+    assert.ok(log.some(e => e.data.tool === 'web_search' && e.data.detail === 'about outline'));
+  } finally { gateway.close(); }
 });
 
 test('a worker crash mid-run requeues the in-flight node without redoing finished ones', { skip: !integration }, async () => {

@@ -1,32 +1,131 @@
 import { useState } from 'react';
-import { FileClock, Pause, Play, Plus, Trash2, X } from 'lucide-react';
-import { NODE_LABELS, describeNodeError, isActive, isEditable, yuan } from './api';
+import { useQuery } from '@tanstack/react-query';
+import { FileClock, MessageCircle, Paperclip, Pause, Play, Plus, Trash2, X } from 'lucide-react';
+import { NODE_LABELS, TeamError, describeNodeError, isActive, isEditable, useTeamApi, yuan } from './api';
+import { FileGroups } from './Deliverables';
+import type { RunFiles } from './Deliverables';
 import { freshId, removeTask, roleInUse, stateOf, updateTask } from './plan';
-import type { Estimate, Plan, Review, Role, Run, Size } from './api';
+import type { Estimate, ModelInfo, Plan, Review, Role, Run, Size, TeamFile } from './api';
 
 const SIZES: Record<Size, string> = { s: '小', m: '中', l: '大' };
+const ATTACHABLE = /\.(md|txt|csv|json|html|htm|css|js|svg|py|yaml|yml|xml)$/i;
+const base64 = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',', 2)[1] ?? '');
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+
+/** Text files the user gives this node; the agent sees them under inputs/<node>/. */
+function Attachments({ project, taskId, editable, files, onOpen, onChanged }: {
+  project: string; taskId: string; editable: boolean; files: RunFiles; onOpen: (f: TeamFile) => void; onChanged: () => void;
+}) {
+  const call = useTeamApi();
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState('');
+  const mine = files.list.filter((f) => f.path.startsWith(`inputs/${taskId}/`));
+  const upload = async (list: FileList | null) => {
+    setNotice('');
+    for (const file of Array.from(list ?? [])) {
+      if (!ATTACHABLE.test(file.name)) { setNotice(`「${file.name}」不是文本格式（支持 md、txt、csv、json、html、css、js、svg、py、yaml、xml）。`); continue; }
+      if (file.size > 2 * 1024 * 1024) { setNotice(`「${file.name}」超过 2 MB。`); continue; }
+      setBusy(true);
+      try {
+        await call(`/projects/${project}/inputs`, 'POST', { task: taskId, name: file.name, content: await base64(file) });
+      } catch (failure) {
+        setNotice(failure instanceof TeamError ? failure.message : '上传失败。');
+      } finally {
+        setBusy(false);
+      }
+    }
+    onChanged();
+  };
+  return (
+    <fieldset>
+      <legend>资料</legend>
+      {mine.length > 0 ? <FileGroups files={mine} all={files} onOpen={onOpen} /> : <p className="orchestra-small-note">没有专门给这个节点的资料。</p>}
+      {editable && (
+        <div className="orchestra-team-node-actions">
+          <label className="orchestra-secondary orchestra-team-upload">
+            <Paperclip size={14} /> {busy ? '上传中…' : '添加文本资料'}
+            <input type="file" multiple disabled={busy} accept=".md,.txt,.csv,.json,.html,.htm,.css,.js,.svg,.py,.yaml,.yml,.xml" onChange={(e) => { upload(e.target.files); e.target.value = ''; }} />
+          </label>
+          {mine.map((f) => (
+            <button key={f.id} type="button" className="orchestra-secondary" onClick={async () => { await call(`/projects/${project}/inputs/${f.id}`, 'DELETE').catch(() => undefined); onChanged(); }}>
+              <Trash2 size={13} /> {f.path.split('/').pop()}
+            </button>
+          ))}
+        </div>
+      )}
+      {notice && <p className="orchestra-team-warning">{notice}</p>}
+    </fieldset>
+  );
+}
+const KINDS: [ModelInfo['category'], string][] = [['text', '文本模型'], ['image', '画图（R6 接入）'], ['video', '视频（R6 接入）'], ['3d', '3D（R6 接入）']];
+
+/** Per-node model choice from the gateway catalog; models without a key stay visible but disabled. */
+function ModelSelect({ value, disabled, onChange }: { value?: string; disabled: boolean; onChange: (id?: string) => void }) {
+  const call = useTeamApi();
+  const catalog = useQuery<{ models: ModelInfo[]; default: string }>(['orchestra-models'], ({ signal }) => call('/models', 'GET', undefined, undefined, signal), { staleTime: 60_000, retry: false });
+  const models = catalog.data?.models ?? [];
+  const fallback = models.find((m) => m.id === catalog.data?.default);
+  const chosen = models.find((m) => m.id === value);
+  return (
+    <label>
+      模型
+      <select value={value ?? ''} disabled={disabled} onChange={(e) => onChange(e.target.value || undefined)}>
+        <option value="">默认{fallback ? `（${fallback.label}）` : ''}</option>
+        {KINDS.map(([kind, title]) => {
+          const group = models.filter((m) => m.category === kind);
+          return group.length ? (
+            <optgroup key={kind} label={title}>
+              {group.map((m) => (
+                <option key={m.id} value={m.id} disabled={kind !== 'text' || !m.available}>
+                  {m.label} · {m.vendor}{kind === 'text' && !m.available ? '（未配置 key）' : ''}
+                  {kind === 'text' && m.price ? ` · ¥${m.price.input}/¥${m.price.output} 每百万 token` : ''}
+                </option>
+              ))}
+            </optgroup>
+          ) : null;
+        })}
+      </select>
+      {chosen && !chosen.available && <span className="orchestra-team-warning">这个模型还没有配置 key，运行会失败。</span>}
+    </label>
+  );
+}
 
 /** Side panel for the selected node: its actions, its settings, and the way to its work record. */
 export default function Inspector({
+  project,
   plan,
   run,
   selected,
   estimate,
   busy,
+  files,
   onChange,
   onSelect,
   onAction,
   onLog,
+  onChat,
+  onOpen,
+  onFilesChanged,
 }: {
+  project: string;
   plan: Plan;
   run?: Run;
   selected: string;
   estimate?: Estimate;
   busy: boolean;
+  files: RunFiles;
   onChange: (plan: Plan) => void;
   onSelect: (id?: string) => void;
   onAction: (action: 'run' | 'pause', task: string) => void;
   onLog: (task: string) => void;
+  onChat: (task: string) => void;
+  onOpen: (file: TeamFile) => void;
+  onFilesChanged: () => void;
 }) {
   const task = plan.tasks.find((t) => t.id === selected);
   if (!task) return null;
@@ -60,6 +159,9 @@ export default function Inspector({
             <Play size={14} /> {state.status === 'paused' ? '继续这个节点' : state.status === 'failed' ? '重新运行' : '运行这个节点'}
           </button>
         ) : null}
+        <button type="button" className="orchestra-secondary" onClick={() => onChat(task.id)}>
+          <MessageCircle size={14} /> 讨论
+        </button>
         <button type="button" className="orchestra-secondary" onClick={() => onLog(task.id)}>
           <FileClock size={14} /> 工作记录
         </button>
@@ -89,6 +191,7 @@ export default function Inspector({
         要求与产出
         <textarea value={task.description} maxLength={4000} rows={7} disabled={!editable} onChange={(e) => set({ description: e.target.value })} />
       </label>
+      <ModelSelect value={task.model} disabled={!editable} onChange={(model) => set({ model })} />
       <label>
         工作量{cost ? `（预估约 ${yuan(cost.cost_cny)}）` : ''}
         <select value={task.size ?? 'm'} disabled={!editable} onChange={(e) => set({ size: e.target.value as Size })}>
@@ -99,6 +202,17 @@ export default function Inspector({
           ))}
         </select>
       </label>
+      <fieldset disabled={!editable}>
+        <legend>能力</legend>
+        <p className="orchestra-small-note">读写团队工作区的文件：始终开启。</p>
+        <div className="orchestra-team-chips">
+          <label>
+            <input type="checkbox" checked={task.tools?.web === true} onChange={(e) => set({ tools: e.target.checked ? { web: true } : undefined })} />
+            联网搜索与阅读网页（按次计费）
+          </label>
+        </div>
+      </fieldset>
+      <Attachments project={project} taskId={task.id} editable={editable} files={files} onOpen={onOpen} onChanged={onFilesChanged} />
       <fieldset disabled={!editable}>
         <legend>把关方式</legend>
         <select value={review?.mode ?? 'none'} onChange={(e) => setReview(e.target.value === 'none' ? null : { mode: e.target.value as Review['mode'] })}>
