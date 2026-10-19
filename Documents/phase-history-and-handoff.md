@@ -6,7 +6,7 @@
 
 - **当前阶段：** R5 已验收，A/B/C 三批改进上线后，按用户 2026-10-19 晚的要求完成游客体验、需求澄清回归、原型画风与 Dashboard（见历史条目）。下一步 R6（画图/视频/3D 生成工具接入目录中已列出的模型、音视频与文档产物）。R4 待用户手动验收。
 - **查服务器：** 用户授权通过其电脑上的 Desktop Commander 执行 `ssh tarot-tencent "sudo -n …"`（日志、状态、OrchestrAI 镜像清理、同步 `/opt/orchestrai/deploy` 中的配置摘要文件；不读、不改 `secrets/`，不动 Tarot 和 BuddyUp）。PowerShell 引号复杂时，把脚本 base64 后在服务器端 `echo … | base64 -d | sudo -n bash` 执行。
-- **Git：** 生产版本为 main `28b8609`（release 128，C 批，PR #86/#87）；develop 与 main 内容一致。会话代理不允许删除远端分支，已合并的旧分支由用户在本机删除；建议在 GitHub 开启 “Automatically delete head branches”。
+- **Git：** 生产版本为 main `1dbb356`（游客体验 PR #90、需求澄清 PR #92、原型画风与 Dashboard PR #94）；develop 与 main 内容一致。会话代理不允许删除远端分支，已合并的旧分支由用户在本机删除；建议在 GitHub 开启 “Automatically delete head branches”。
 - **服务器：** 腾讯云 Ubuntu 22.04，2 核 / 4 GB，与 Tarot、BuddyUp、共享 Nginx（`/opt/shared-ingress`）同机。部署目录 `/opt/orchestrai`，Compose 项目 `orchestrai-production`，只绑定回环端口 `127.0.0.1:3088`。SSH 别名 `tarot-tencent` 在用户本机。
 - **本机：** Windows + Docker Desktop（context 为 `desktop-linux`）。候选环境 `http://localhost:3180`，Compose 项目 `orchestrai-r3`，账号在 `deploy/private/candidate-account.json`。本机 TUN/Fake-IP 会把公网域名解析成 198.18.x.x，research 的私网保护会拒绝这些地址，所以本机真实联网测试不可靠，联网验收以服务器为准。
 - **私有文件（Git 忽略，绝不提交或发到聊天里）：** `deploy/private/`，包括 `product.env`、`model.env`、`providers.json`、账号文件和 `age-recovery.key`。
@@ -17,6 +17,7 @@
 ## 历史（倒序）
 
 ### 2026-10-19 原型画风与 Dashboard
+- 生产验证（2026-10-20，main `1dbb356`）：游客进入后落在总览；总览、对话、画布、登录页在 1440 与 390 宽度显示正常。需求澄清用真实 DeepSeek 实测：3 轮共 6 项选择 → 确认卡片（项目名“天气预报页”、预算 ¥2）→ 自动建 5 节点团队、对话改名、面板显示进度；退出游客后记录清除。
 - 用户要求整站换回最初 Figma 原型（`M0gvY5Z8G6HgI1rGci6Ksq`）的画风并做 Dashboard。画风：`theme.ts` 调暖色令牌（强调色 #EC6C12），`workbench.css` 改为奶油渐变背景、中间区与右侧栏为浮起的大圆角卡片、黑色药丸“新建任务”与视图切换、橙色渐变主按钮、彩色侧栏图标与淡黄选中态、深色主视觉、深色用户气泡、问答卡片选项样式；登录页标题渐变、步骤图标彩色块。
 - Dashboard（`Orchestra/Dashboard.tsx`，视图 `?view=dashboard`，侧栏第一项“总览”，点品牌也回到总览）：深色主视觉 + 橙色光晕与轨道动画、四个真实数据卡（团队数/正在工作/团队花费/Token）、团队卡片（状态、进度条、花费/预算、打开工作流、需求对话）、最近对话、可视化工作流与联网研究入口。数据来自项目列表的运行摘要，有团队在工作时每 5 秒刷新。
 - 登录与游客进入后落在总览。修复了 `?view=`/`?team=` 被 LibreChat `useQueryParams` 清空的问题（`client.patch` 保留这两个参数），之前“深链接刷新后参数丢失”的已知限制随之解决；`Startup.tsx`、`AuthContext.tsx` 登录后跳转改为总览。落地页第三张卡改为“做出一个东西”（预填“我想做一个”）。
