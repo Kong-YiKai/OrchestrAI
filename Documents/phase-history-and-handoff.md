@@ -5,8 +5,8 @@
 ## 交接（随每次交付更新）
 
 - **当前阶段：** R5 智能体团队已完成（PR #64–#73 及收尾 PR），生产完整跑通，待用户手动验收：画布上改任务和连线后运行；用 Chrome/Edge 把成果保存到本地文件夹。下一阶段 R6（音视频与产物生成）。R4 待用户手动验收。
-- **查服务器：** 用户授权通过其电脑上的 Desktop Commander 执行 `ssh tarot-tencent "sudo -n docker …"`（只读：logs / stats / ps，必要时重启 workflow-worker）。PowerShell 引号复杂时，把脚本 base64 后在服务器端 `base64 -d | docker exec -i … python -` 执行。
-- **Git：** 生产版本为 main `38903fd`（R5 收尾，PR #74/#75），develop 与 main 内容一致。会话代理不允许删除远端分支，已合并的旧分支由用户在本机删除；建议在 GitHub 开启 “Automatically delete head branches”。
+- **查服务器：** 用户授权通过其电脑上的 Desktop Commander 执行 `ssh tarot-tencent "sudo -n …"`（日志、状态、OrchestrAI 镜像清理、同步 `/opt/orchestrai/deploy` 中的配置摘要文件；不读、不改 `secrets/`，不动 Tarot 和 BuddyUp）。PowerShell 引号复杂时，把脚本 base64 后在服务器端 `echo … | base64 -d | sudo -n bash` 执行。
+- **Git：** 生产版本为 main `b5eade5`（release 116，PR #78/#79），develop 与 main 内容一致。会话代理不允许删除远端分支，已合并的旧分支由用户在本机删除；建议在 GitHub 开启 “Automatically delete head branches”。
 - **服务器：** 腾讯云 Ubuntu 22.04，2 核 / 4 GB，与 Tarot、BuddyUp、共享 Nginx（`/opt/shared-ingress`）同机。部署目录 `/opt/orchestrai`，Compose 项目 `orchestrai-production`，只绑定回环端口 `127.0.0.1:3088`。SSH 别名 `tarot-tencent` 在用户本机。
 - **本机：** Windows + Docker Desktop（context 为 `desktop-linux`）。候选环境 `http://localhost:3180`，Compose 项目 `orchestrai-r3`，账号在 `deploy/private/candidate-account.json`。本机 TUN/Fake-IP 会把公网域名解析成 198.18.x.x，research 的私网保护会拒绝这些地址，所以本机真实联网测试不可靠，联网验收以服务器为准。
 - **私有文件（Git 忽略，绝不提交或发到聊天里）：** `deploy/private/`，包括 `product.env`、`model.env`、`providers.json`、账号文件和 `age-recovery.key`。
@@ -18,7 +18,8 @@
 
 ### 2026-10-19 服务器磁盘清理与发布后自动清理镜像
 - 服务器磁盘 94%：OrchestrAI 每次发布按 digest 拉取 9 个镜像，旧的从不删除（161 个镜像、可回收 35.8 GB，chat 镜像每个数 GB）。手动保留在用镜像与当前/上一次发布镜像后删除 133 个旧镜像和闲置的 `mongo:8.0.20`，磁盘降到 32%；其他项目、数据卷、备份、构建缓存未动。
-- `deploy/release.py` 发布成功后自动执行同样的清理（只删 `ghcr.io/kong-yikai/orchestrai/` 下既不在用、也不属于当前或上一次发布的镜像，失败不影响发布），记录在 `release-N.json` 的 `pruned_images`。该文件参与配置摘要，已同步到服务器。
+- `deploy/release.py` 发布成功后自动执行同样的清理（只删 `ghcr.io/kong-yikai/orchestrai/` 下既不在用、也不属于当前或上一次发布的镜像，失败不影响发布），记录在 `release-N.json` 的 `pruned_images`。该文件参与配置摘要，已同步到服务器（旧版备份 `/opt/orchestrai/state/release.py.before-prune`）。
+- 同批修复 web 基础镜像新出的 libexpat、libx11 高危漏洞（`apk upgrade`）。验证：release 116 自动删除 9 个旧镜像（只留 116 与 109 两套），共 28 个镜像，磁盘 30%，所有容器运行正常，`/login` 200。
 
 ### 2026-10-16 R5 生产实测与加固（PR #66–#73 及收尾）
 - 实测：总指挥 20 秒组建团队；并行、互审、讨论、文件产出正常。问题与处理：成果多套一层文件夹（提示词 + 本地保存剥离）；HTML 预览图片不显示（内联相对图片）；汇总任务上下文不足（网关 200 KB、压缩阈值 16k）；任务卡片加实时进度（team_runs.task_states.activity + activity 事件）。
