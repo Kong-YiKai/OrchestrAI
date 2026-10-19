@@ -152,7 +152,7 @@ export default function Header({
           [
             ['chat', '对话'],
             ['canvas', '画布'],
-            ['context', '上下文'],
+            ['context', '概览'],
           ] as const
         ).map(([key, label]) => (
           <button
