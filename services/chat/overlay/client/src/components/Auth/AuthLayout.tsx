@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { ThemeSelector, Spinner } from '@librechat/client';
 import { MessageSquare, FileText, Workflow, ArrowRight } from 'lucide-react';
 import { TStartupConfig } from 'librechat-data-provider';
@@ -120,9 +121,52 @@ function AuthLayout({
             (pathname.includes('login') || pathname.includes('register')) && (
               <SocialLoginRender startupConfig={startupConfig} />
             )}
+          {pathname.includes('login') && !isFetching && <GuestEntry />}
         </section>
       </main>
       <Footer startupConfig={startupConfig} />
+    </div>
+  );
+}
+
+const GUEST_ERRORS: Record<string, string> = {
+  guest_rate_limited: '这台设备一小时内已经开了几次游客，请稍后再试或直接登录。',
+  guest_capacity: '同时体验的游客太多了，请稍后再试。',
+  guest_disabled: '游客体验暂未开放。',
+};
+
+/** "Skip login": a throwaway account; everything it does is deleted on sign-out or after 24 hours. */
+function GuestEntry() {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const enter = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      const response = await fetch('/api/orchestra/guest', { method: 'POST', credentials: 'include' });
+      const value = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setError(GUEST_ERRORS[value.message] ?? '暂时无法进入游客体验，请稍后再试。');
+        setBusy(false);
+        return;
+      }
+      // The session cookie is set; the app signs in from it on load.
+      window.location.assign('/c/new');
+    } catch {
+      setError('网络连接失败，请稍后再试。');
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="orchestra-auth-guest">
+      <div className="orchestra-auth-divider">
+        <span>或者</span>
+      </div>
+      <button type="button" className="orchestra-dark-pill" onClick={enter} disabled={busy}>
+        {busy ? <Spinner /> : '跳过登录，先体验一下'}
+      </button>
+      <p>游客不保存任何记录：退出或 24 小时后，对话、团队和文件全部清除。</p>
+      {error && <p role="alert">{error}</p>}
     </div>
   );
 }

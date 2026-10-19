@@ -16,6 +16,11 @@
 
 ## 历史（倒序）
 
+### 2026-10-19 游客体验（跳过登录）
+- 用户要求：登录页加“跳过登录”，游客能力与正式用户相同，不保存任何记录。实现：`overlay/api/server/services/OrchestraGuest.js`（`POST /api/orchestra/guest` 建临时账号 provider=guest 并签发会话；同一 IP 每小时 3 个、同时最多 100 个游客；退出登录后立即删除，未退出的 24 小时后由每 10 分钟的清理任务删除）；删除顺序：先暂停并删除 workflow 团队、取消并删除研究记录（`orchestra/guest.ts`），再走 LibreChat 自带的删除账号流程（对话、消息、文件、会话等）。`workflow.ts` 抽出 `workflowRequest` 供服务端复用。
+- 界面：登录卡片下方“跳过登录，先体验一下”；侧栏账号处显示“临时体验 · 退出即清除”。
+- 验证：本地 curl 建游客 → 建团队 → 退出后 Mongo 用户与 workflow 项目均已删除；Playwright 走完登录页进入、退出；补丁在原始上游上能干净应用，chat 契约测试 11 项通过。
+
 ### 2026-10-19 R5 改进 C 批：节点模型、联网、资料、讨论
 - 网关：`models.json` 作为唯一模型目录（DeepSeek Flash / Pro、通义千问、Kimi、GLM、豆包、GPT、Claude、Gemini，以及画图/视频/3D 待接入项）；`render.py` 启动时只为有 key 的文本模型生成 LiteLLM 路由，`budget.py` 按各模型价目预留和结算，`/orchestrai/models` 返回目录与可用状态。compose 给网关加了 7 个可选 key（`DASHSCOPE_API_KEY` 等，未设即不可选），已同步到服务器。
 - workflow：节点 `model`（按节点模型计价、估算）、`tools.web`（`web_search` / `web_read` 走网关 Tavily 计量通道，worker 增加 `RESEARCH_GATEWAY_KEY`）、节点资料（`POST/DELETE /projects/:id/inputs`，存为 `inputs/<节点>/`）、节点讨论（`GET/POST /projects/:id/chat`，迁移 `004_node_chats.sql`；讨论记录写进节点说明，花费计入团队预算）。

@@ -22,6 +22,7 @@ import Brand from './Brand';
 function Navigation() {
   const localize = useLocalize();
   const { user, logout, isAuthenticated } = useAuthContext();
+  const guest = (user as { provider?: string } | undefined)?.provider === 'guest';
   const { isSmallScreen, expanded } = useSidebarState();
   const { setSidebarOpen } = useSidebarToggle();
   const { view, setView } = useWorkbench();
@@ -175,13 +176,14 @@ function Navigation() {
         </span>
         <div className="min-w-0 flex-1">
           <p className="truncate">{user?.name || '我的工作台'}</p>
-          <span>{localize('com_orchestra_personal_workspace')}</span>
+          <span>{guest ? '临时体验 · 退出即清除' : localize('com_orchestra_personal_workspace')}</span>
         </div>
         <ThemeSelector returnThemeOnly />
         <button
           type="button"
           className="orchestra-icon-button"
-          aria-label="退出登录"
+          aria-label={guest ? '退出并清除游客记录' : '退出登录'}
+          title={guest ? '退出并清除游客记录' : '退出登录'}
           onClick={() => logout('/login')}
         >
           <LogOut size={17} />

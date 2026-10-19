@@ -48,14 +48,15 @@ export function orchestraResearchContext(text: unknown, enabled: boolean): strin
 }
 
 /** Shared delegation; neither the browser nor the model supplies identity or service credentials. */
-async function requestResearch(
+export async function requestResearch(
   req: Request,
   method: string,
   path: string,
   body?: unknown,
   operation?: string,
   signal?: AbortSignal,
-) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the research protocol's JSON
+): Promise<any> {
   const user = req.user as { id?: string; tenantId?: string } | undefined;
   if (!user?.id) throw Object.assign(new Error('authentication_required'), { status: 401 });
   const secret = process.env.RESEARCH_DELEGATION_SECRET;
