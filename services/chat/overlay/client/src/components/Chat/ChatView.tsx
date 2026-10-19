@@ -243,16 +243,17 @@ function ChatView({ index = 0, project }: { index?: number; project?: TChatProje
                             <Research canImport={!isSubagentThreadReadOnly} />
                           </div>
                         )}
-                        {(view === 'canvas' || view === 'results') && (
+                        {view === 'canvas' && (
                           <div className="orchestra-main-view">
                             <Suspense fallback={<LoadingSpinner />}>
-                              <Teams mode={view} />
+                              <Teams />
                             </Suspense>
                           </div>
                         )}
                         {view === 'context' && <OrchestraContext full />}
                       </div>
-                      {view !== 'context' && <OrchestraContext />}
+                      {/* The canvas needs the full width; deliverables live on the canvas itself. */}
+                      {view === 'chat' && <OrchestraContext />}
                     </div>
                   </TraceSurface>
                 </Presentation>

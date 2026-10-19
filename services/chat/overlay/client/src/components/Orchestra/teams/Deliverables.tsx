@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Download, FileText, FolderDown, FolderOpen } from 'lucide-react';
+import { Download, FileText, Folder, FolderDown, FolderOpen, X } from 'lucide-react';
 import { useTeamApi } from './api';
 import { canPickFolder, download, pickFolder, rememberFolder, savedFolder, writeFolder } from './local';
 import type { FileContent, TeamFile } from './api';
@@ -44,29 +44,14 @@ async function previewHtml(file: FileContent, files: TeamFile[], read: (f: TeamF
   return html;
 }
 
-export default function Deliverables({
-  runId,
-  project,
-  workspace,
-  live,
-}: {
-  runId: string;
-  project: string;
-  workspace: string;
-  live: boolean;
-}) {
+/** All files of a run, refreshed while the team works, with a content cache keyed by hash. */
+export function useRunFiles(runId: string | undefined, live: boolean) {
   const call = useTeamApi();
-  const [open, setOpen] = useState<FileContent>();
-  const [html, setHtml] = useState<string>();
-  const [folder, setFolder] = useState<FileSystemDirectoryHandle>();
-  const [message, setMessage] = useState('');
-  const [busy, setBusy] = useState(false);
   const files = useQuery<{ files: TeamFile[] }>(
     ['orchestra-team-files', runId],
     ({ signal }) => call(`/runs/${runId}/files`, 'GET', undefined, undefined, signal),
-    { refetchInterval: live ? 4000 : false },
+    { enabled: !!runId, refetchInterval: live ? 4000 : false },
   );
-  const list = files.data?.files ?? [];
   const cache = useRef(new Map<string, FileContent>()).current;
   const read = async (file: TeamFile) => {
     const key = `${file.id}:${file.sha256}`;
@@ -76,28 +61,127 @@ export default function Deliverables({
     cache.set(key, value);
     return value;
   };
+  return { list: files.data?.files ?? [], loading: files.isLoading && !!runId, read };
+}
+export type RunFiles = ReturnType<typeof useRunFiles>;
 
+/** Files grouped by folder; a click opens the preview, the arrow downloads. */
+export function FileGroups({ files, all, onOpen }: { files: TeamFile[]; all: RunFiles; onOpen: (file: TeamFile) => void }) {
+  const groups = new Map<string, TeamFile[]>();
+  for (const file of [...files].sort((a, b) => a.path.localeCompare(b.path))) {
+    const folder = file.path.includes('/') ? file.path.slice(0, file.path.lastIndexOf('/')) : '';
+    groups.set(folder, [...(groups.get(folder) ?? []), file]);
+  }
+  return (
+    <div className="orchestra-team-files">
+      {[...groups].map(([folder, list]) => (
+        <section key={folder || '.'}>
+          {folder && (
+            <h4>
+              <Folder size={13} /> {folder}/
+            </h4>
+          )}
+          <ul>
+            {list.map((file) => (
+              <li key={file.id}>
+                <button type="button" onClick={() => onOpen(file)}>
+                  <FileText size={14} />
+                  <span>{file.path.split('/').pop()}</span>
+                  <small>{size(file.size)}</small>
+                </button>
+                <button type="button" className="orchestra-icon-button" aria-label={`下载 ${file.path}`} onClick={async () => download(await all.read(file))}>
+                  <Download size={14} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+/** Large overlay preview, so a page or picture is seen at a useful size. */
+export function FilePreview({ file, all, onClose }: { file?: TeamFile; all: RunFiles; onClose: () => void }) {
+  const [open, setOpen] = useState<FileContent>();
+  const [html, setHtml] = useState<string>();
+  useEffect(() => {
+    let live = true;
+    setOpen(undefined);
+    setHtml(undefined);
+    if (!file) return;
+    (async () => {
+      const value = await all.read(file);
+      const page = value.media_type === 'text/html' ? await previewHtml(value, all.list, all.read) : undefined;
+      if (live) { setOpen(value); setHtml(page); }
+    })().catch(() => live && onClose());
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [file?.id, file?.sha256]);
+  useEffect(() => {
+    if (!file) return;
+    const close = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', close);
+    return () => window.removeEventListener('keydown', close);
+  }, [file, onClose]);
+  if (!file) return null;
+  return (
+    <div className="orchestra-team-modal" role="dialog" aria-label={file.path} onClick={onClose}>
+      <section className="orchestra-team-preview" onClick={(e) => e.stopPropagation()}>
+        <header>
+          <h4>{file.path}</h4>
+          <button type="button" className="orchestra-icon-button" aria-label="下载" onClick={async () => download(await all.read(file))}>
+            <Download size={16} />
+          </button>
+          <button type="button" className="orchestra-icon-button" aria-label="关闭预览" onClick={onClose}>
+            <X size={16} />
+          </button>
+        </header>
+        {!open ? (
+          <p className="orchestra-small-note">正在打开…</p>
+        ) : html !== undefined ? (
+          <iframe title={open.path} sandbox="allow-scripts" srcDoc={html} />
+        ) : open.media_type === 'image/svg+xml' ? (
+          <img alt={open.path} src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(open.content)}`} />
+        ) : open.encoding === 'utf8' ? (
+          <pre>{open.content}</pre>
+        ) : open.media_type.startsWith('image/') ? (
+          <img alt={open.path} src={`data:${open.media_type};base64,${open.content}`} />
+        ) : (
+          <p className="orchestra-small-note">二进制文件，请下载查看。</p>
+        )}
+      </section>
+    </div>
+  );
+}
+
+/** The team's final delivery: files of the final nodes, saved together to a local folder. */
+export default function Deliverables({
+  project,
+  workspace,
+  files,
+  all,
+  onOpen,
+}: {
+  project: string;
+  workspace: string;
+  files: TeamFile[];
+  all: RunFiles;
+  onOpen: (file: TeamFile) => void;
+}) {
+  const [folder, setFolder] = useState<FileSystemDirectoryHandle>();
+  const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
   useEffect(() => {
     savedFolder(project).then(setFolder);
   }, [project]);
-  useEffect(() => {
-    setOpen(undefined);
-    setHtml(undefined);
-  }, [runId]);
-
-  const show = async (file: TeamFile) => {
-    setMessage('');
-    const value = await read(file);
-    setOpen(value);
-    setHtml(value.media_type === 'text/html' ? await previewHtml(value, list, read) : undefined);
-  };
-  const saveAll = async (choose: boolean) => {
+  const save = async (choose: boolean) => {
     setBusy(true);
     setMessage('');
     try {
-      const all = await Promise.all(list.map(read));
+      const contents = await Promise.all(files.map(all.read));
       if (!canPickFolder()) {
-        all.forEach(download);
+        contents.forEach(download);
         setMessage('浏览器不支持直接写入文件夹，已逐个下载。建议用 Chrome 或 Edge。');
         return;
       }
@@ -107,60 +191,29 @@ export default function Deliverables({
         setFolder(root);
         await rememberFolder(project, root);
       }
-      const where = await writeFolder(root, workspace, all);
-      setMessage(`已保存 ${all.length} 个文件到 ${where}`);
+      const where = await writeFolder(root, workspace, contents);
+      setMessage(`已保存 ${contents.length} 个文件到 ${where}`);
     } catch (error) {
       if ((error as Error).name !== 'AbortError') setMessage('保存失败：没有拿到文件夹写入权限，或文件被占用。');
     } finally {
       setBusy(false);
     }
   };
-
-  if (files.isLoading) return <p className="orchestra-small-note">正在读取成果…</p>;
-  if (!list.length) return <p className="orchestra-small-note">这次运行还没有写出文件。</p>;
+  if (!files.length) return <p className="orchestra-small-note">最后的节点没有写出文件。</p>;
   return (
-    <div className="orchestra-team-files">
+    <>
       <div className="orchestra-team-files-actions">
-        <button type="button" className="orchestra-primary" disabled={busy} onClick={() => saveAll(false)}>
+        <button type="button" className="orchestra-primary" disabled={busy} onClick={() => save(false)}>
           <FolderDown size={15} /> {folder ? `保存到 ${folder.name}/${workspace}` : '保存到本地文件夹'}
         </button>
         {folder && (
-          <button type="button" className="orchestra-secondary" disabled={busy} onClick={() => saveAll(true)}>
+          <button type="button" className="orchestra-secondary" disabled={busy} onClick={() => save(true)}>
             <FolderOpen size={15} /> 换个位置
           </button>
         )}
       </div>
       {message && <p className="orchestra-small-note">{message}</p>}
-      <ul>
-        {list.map((file) => (
-          <li key={file.id}>
-            <button type="button" aria-pressed={open?.id === file.id} onClick={() => show(file)}>
-              <FileText size={14} />
-              <span>{file.path}</span>
-              <small>{size(file.size)}</small>
-            </button>
-            <button type="button" className="orchestra-icon-button" aria-label={`下载 ${file.path}`} onClick={async () => download(await read(file))}>
-              <Download size={14} />
-            </button>
-          </li>
-        ))}
-      </ul>
-      {open && (
-        <section className="orchestra-team-preview" aria-label={open.path}>
-          <h4>{open.path}</h4>
-          {html !== undefined ? (
-            <iframe title={open.path} sandbox="allow-scripts" srcDoc={html} />
-          ) : open.media_type === 'image/svg+xml' ? (
-            <img alt={open.path} src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(open.content)}`} />
-          ) : open.encoding === 'utf8' ? (
-            <pre>{open.content}</pre>
-          ) : open.media_type.startsWith('image/') ? (
-            <img alt={open.path} src={`data:${open.media_type};base64,${open.content}`} />
-          ) : (
-            <p className="orchestra-small-note">二进制文件，请下载查看。</p>
-          )}
-        </section>
-      )}
-    </div>
+      <FileGroups files={files} all={all} onOpen={onOpen} />
+    </>
   );
 }

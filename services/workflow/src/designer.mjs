@@ -22,21 +22,32 @@ const PROMPT = `你是多智能体团队的总指挥。根据用户目标组建�
 - 文件路径相对于团队工作目录的根，例如 brief.md、site/index.html；不要再套一层以项目命名的外层文件夹（用户保存时会自动放进成果文件夹）。
 
 ## 输出格式
-{"summary":"一句话说明团队如何完成目标","roles":[{"id":"planner","name":"策划","description":"…","instructions":"…"}],"tasks":[{"id":"outline","title":"…","description":"要做什么、写入哪些文件、验收标准","role":"planner","depends_on":[],"review":null}]}
+{"summary":"一句话说明团队如何完成目标","roles":[{"id":"planner","name":"策划","description":"…","instructions":"…"}],"tasks":[{"id":"outline","title":"…","description":"要做什么、写入哪些文件、验收标准","role":"planner","depends_on":[],"review":null,"size":"m"}]}
 - id 只用小写字母、数字和连字符，以字母开头；title 互不相同，不超过 80 字。
-- review 为 null 或 {"mode":"review"|"discussion","reviewers":["角色id"],"max_rounds":1}。`;
+- review 为 null 或 {"mode":"review"|"discussion","reviewers":["角色id"],"max_rounds":1}。
+- size 是任务工作量的估计："s"（小，一两个短文件）、"m"（中）、"l"（大，多个文件或长文档），用来在运行前估算花费。`;
 
+/**
+ * `current` and `note` turn a fresh design into a redesign: the commander changes the
+ * existing workflow as the user asked. Tasks in `locked` already started or finished, so
+ * they are put back exactly as they were whatever the model returns.
+ */
 export function createDesigner(settings, { adapter } = {}) {
-  async function design(goal) {
+  async function design(goal, { current, note, locked = [] } = {}) {
     const model = modelSettings(settings, adapter);
     const oma = new OpenMultiAgent({ maxConcurrency: 1 });
     const agent = { name: 'commander', systemPrompt: PROMPT, tools: [], maxTurns: 2, maxTokens: 8192,
       callTimeoutMs: 240000, outputSchema: planSchema, ...model };
+    const frozen = current ? current.tasks.filter(t => locked.includes(t.id)) : [];
     let input = `目标：${goal}`;
+    if (current) {
+      input += `\n\n## 现有工作流\n${JSON.stringify(current)}\n\n## 用户的修改要求\n${note || '按目标重新设计一个更合适的工作流。'}`;
+      if (frozen.length) input += `\n\n以下任务已经开始或完成，必须原样保留（id、内容和依赖都不能改）：${frozen.map(t => t.id).join('、')}。`;
+    }
     let last;
     for (let attempt = 0; attempt < 2; attempt++) {
       const result = await oma.runAgent(agent, input);
-      const checked = checkPlan(result.structured ?? parse(result.output));
+      const checked = checkPlan(keep(result.structured ?? parse(result.output), current, frozen));
       if (checked.ok) return { plan: checked.plan, tokens: result.tokenUsage };
       last = checked;
       input = `${input}\n\n上一次的方案不合格：${(checked.detail ?? [checked.error]).join('；')}。请修正后重新输出完整 JSON。\n上一次的输出：\n${String(result.output).slice(0, 12000)}`;
@@ -44,6 +55,15 @@ export function createDesigner(settings, { adapter } = {}) {
     throw Object.assign(new Error('plan_generation_failed'), { code: 'plan_generation_failed', detail: last?.detail });
   }
   return { design };
+}
+
+/** Puts started tasks (and the roles they use) back unchanged into a redesigned plan. */
+function keep(plan, current, frozen) {
+  if (!plan || !Array.isArray(plan.tasks) || !Array.isArray(plan.roles) || !frozen.length) return plan;
+  const roles = new Map(plan.roles.map(r => [r.id, r]));
+  for (const t of frozen) if (!roles.has(t.role)) roles.set(t.role, current.roles.find(r => r.id === t.role));
+  const tasks = plan.tasks.filter(t => !frozen.some(f => f.id === t.id));
+  return { ...plan, roles: [...roles.values()].filter(Boolean), tasks: [...frozen, ...tasks] };
 }
 
 function parse(text) {

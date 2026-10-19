@@ -30,7 +30,7 @@ export async function publish(store, queue) {
       const state = await existing.getState();
       if (state === 'failed') { await fail(store, row.kind, row.id, row.dispatch_version, null); continue; }
       // After restoring a database snapshot Redis may hold a newer completion: run again
-      // (execution resumes from the restored checkpoint).
+      // (finished nodes are kept; the rest resume).
       if (state !== 'completed') continue;
       await existing.remove();
     }
@@ -48,11 +48,7 @@ async function fail(store, kind, id, version, errorCode) {
     await store.designed(id, version, null, errorCode ?? 'design_failed');
     return;
   }
-  await store.transaction(async c => {
-    const r = await c.query(`UPDATE team_runs SET status='failed',error_code=$3,updated_at=now()
-      WHERE id=$1 AND dispatch_version=$2 AND status IN ('queued','running') RETURNING id`, [id, version, errorCode ?? 'execution_failed']);
-    if (r.rowCount) await store.event(c, id, 'failed', null, { error_code: errorCode ?? 'execution_failed' });
-  });
+  await store.settleRun(id, version, errorCode ?? 'execution_failed');
 }
 
 export function createProcessor(store, settings, options = {}) {
@@ -64,7 +60,10 @@ export function createProcessor(store, settings, options = {}) {
       if (job.name === 'execute') return await engine.execute(id, version);
       const project = (await store.pool.query('SELECT * FROM team_projects WHERE id=$1', [id])).rows[0];
       if (!project || project.status !== 'planning' || project.dispatch_version !== version) return;
-      const { plan, tokens } = await designer.design(project.goal);
+      // A redesign keeps nodes that already started; the commander sees the current plan.
+      const run = await store.latestRun(store.pool, id);
+      const locked = Object.entries(run?.task_states ?? {}).filter(([, t]) => t.status !== 'pending' && t.status !== 'paused' && t.status !== 'failed').map(([taskId]) => taskId);
+      const { plan, tokens } = await designer.design(project.goal, project.plan ? { current: project.plan, note: project.design_note, locked } : {});
       await store.designed(id, version, plan, null);
       log('plan_designed', { project_id: id, tasks: plan.tasks.length, tokens });
     } catch (error) {
@@ -117,8 +116,8 @@ export async function startWorker(settings, options = {}) {
       await new Promise(resolve => setTimeout(resolve, 500));
     }
   })();
-  // On SIGTERM an in-flight run is not awaited: its job stalls and the next worker resumes
-  // it from the Postgres checkpoint.
+  // On SIGTERM an in-flight run is not awaited: its job stalls and the next worker requeues
+  // the nodes that were running.
   return async (force = false) => { closing = true; await loop; await worker.close(force); await queue.close(); await watchdog?.close(); await store.close(); };
 }
 
