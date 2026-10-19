@@ -26,6 +26,18 @@ class PolicyTests(unittest.TestCase):
         finding['FixedVersion']='2'
         self.assertTrue(module.assess(report,'gateway',policy,date(2026,10,12))[0])
 
+    def test_prune_keeps_running_current_and_previous_images(self):
+        listing = '\n'.join([
+            'ghcr.io/kong-yikai/orchestrai/chat sha256:old1',
+            'ghcr.io/kong-yikai/orchestrai/chat sha256:prev',
+            'ghcr.io/kong-yikai/orchestrai/chat sha256:cur',
+            'ghcr.io/kong-yikai/orchestrai/web sha256:old2',
+            'multi-agent-tarot/backend sha256:other',
+            '<none> sha256:dangling',
+        ])
+        stale = release.stale_images(listing, {'sha256:prev', 'sha256:cur'}, 'ghcr.io/kong-yikai/orchestrai/')
+        self.assertEqual(stale, ['sha256:old1', 'sha256:old2'])
+
     def test_valid(self):
         release.validate(MANIFEST,POLICY,None,'c'*64)
         product=dict(MANIFEST,schema=2,**{service+'_image':'ghcr.io/kong-yikai/orchestrai/'+service+'@sha256:'+'d'*64 for service in ('chat','ingestion','gateway','web','mongo')})

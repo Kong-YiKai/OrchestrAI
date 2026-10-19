@@ -36,6 +36,13 @@ def config_digest(directory, schema=1):
         digest.update((directory.parent / 'scripts/test-product.py').read_bytes())
     return digest.hexdigest()
 
+def stale_images(listing, keep, prefix):
+    """Image IDs from `docker images` lines ('<repository> <id>') under our registry
+    prefix that are neither in use nor part of the current or previous release."""
+    ids = {line.split()[1] for line in listing.splitlines()
+           if len(line.split()) == 2 and line.split()[0].startswith(prefix)}
+    return sorted(ids - set(keep))
+
 def validate(manifest, policy, current, expected_config):
     fields = {'revision', 'image', 'postgres_image', 'redis_image', 'sequence', 'schema', 'config_digest'}
     if manifest.get('schema', 0) >= 2:
@@ -225,6 +232,27 @@ class Deployment:
             if status != '200':
                 raise RuntimeError('public_https_smoke_failed')
 
+    def prune_images(self, manifest, previous):
+        """Every release pulls a full image set by digest; without this the host keeps
+        all of them (161 images, 36 GB by release 109). Keep what containers use plus the
+        current and previous release (the rollback target); remove other OrchestrAI images.
+        Best effort: a failed prune never fails a deployed release."""
+        run = lambda *args: subprocess.run(['docker',*args],env=self.env,text=True,capture_output=True,timeout=120)
+        keep = set(run('ps','-aq').stdout.split())
+        keep = set(run('inspect','--format','{{.Image}}',*keep).stdout.split()) if keep else set()
+        for source in (manifest, previous or {}):
+            for key, ref in source.items():
+                if key.endswith('image'):
+                    found = run('image','inspect','--format','{{.Id}}',ref)
+                    if found.returncode == 0:
+                        keep.add(found.stdout.strip())
+        prefix = manifest['image'].split('@')[0].rsplit('/',1)[0] + '/'
+        listing = run('images','--no-trunc','--format','{{.Repository}} {{.ID}}').stdout
+        removed = 0
+        for image in stale_images(listing, keep, prefix):
+            removed += run('rmi','-f',image).returncode == 0
+        return removed
+
     def release(self, manifest, policy, current):
         record = dict(manifest, started_at=int(time.time()), previous=current, outcome='failed')
         stopped = False
@@ -266,6 +294,10 @@ class Deployment:
             temporary = self.root / 'state/current.tmp'
             temporary.write_text(json.dumps(manifest))
             temporary.replace(self.root / 'state/current.json')
+            try:
+                record['pruned_images'] = self.prune_images(manifest, current)
+            except Exception:
+                record['pruned_images'] = 'failed'
         except Exception:
             if stopped:
                 if current:
