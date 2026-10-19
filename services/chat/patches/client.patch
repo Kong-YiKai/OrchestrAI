@@ -562,7 +562,7 @@ index 2d81936..d52308b 100644
 +  "com_orchestra_teams_latest": "Latest: {{name}}"
  }
 diff --git a/client/src/locales/zh-Hans/translation.json b/client/src/locales/zh-Hans/translation.json
-index 6e8b80d..53f0831 100644
+index 6e8b80d..34545be 100644
 --- a/client/src/locales/zh-Hans/translation.json
 +++ b/client/src/locales/zh-Hans/translation.json
 @@ -1,4 +1,7 @@
@@ -573,7 +573,7 @@ index 6e8b80d..53f0831 100644
    "chat_direction_left_to_right": "从左到右",
    "chat_direction_right_to_left": "从右到左",
    "com_a11y_ai_composing": "AI 仍在撰写中。",
-@@ -1444,5 +1447,72 @@
+@@ -1444,5 +1447,93 @@
    "com_ui_zoom_in": "放大",
    "com_ui_zoom_level": "缩放级别",
    "com_ui_zoom_out": "缩小",
@@ -645,7 +645,28 @@ index 6e8b80d..53f0831 100644
 +  "com_orchestra_workspaces": "工作区",
 +  "com_orchestra_teams_title": "智能体团队",
 +  "com_orchestra_teams_empty": "在画布上组建团队并运行",
-+  "com_orchestra_teams_latest": "最近：{{name}}"
++  "com_orchestra_teams_latest": "最近：{{name}}",
++  "com_ui_expand": "展开",
++  "com_ui_question_failed": "问题没有显示出来",
++  "com_ui_question_step": "第 {{0}} / {{1}} 题",
++  "com_ui_asked": "已提问",
++  "com_ui_asked_one_question": "问了 1 个问题",
++  "com_ui_asked_n_questions": "问了 {{0}} 个问题",
++  "com_ui_asking": "需求澄清",
++  "com_ui_asking_one_question": "需求澄清 · 1 个问题",
++  "com_ui_asking_n_questions": "需求澄清 · {{0}} 个问题",
++  "com_ui_asking_questions_one": "需求澄清 · {{0}} 个问题",
++  "com_ui_asking_questions": "需求澄清 · {{0}} 个问题",
++  "com_ui_question_navigation": "问题导航",
++  "com_ui_question_failed_description": "助手没能显示这个问题，可能会自动重试。",
++  "com_ui_ask_move_to_composer": "在输入框里回答",
++  "com_ui_skip": "跳过",
++  "com_ui_approval_expired": "这个请求已过期或已处理。",
++  "com_ui_ask_answer_error": "回答没有发送成功，请重试。",
++  "com_ui_submitting": "正在提交…",
++  "com_ui_question_unanswered": "没有回答",
++  "com_ui_question_number": "第 {{0}} 题",
++  "com_ui_answer_questions_above": "先回答上面的问题"
  }
 diff --git a/client/src/routes/index.tsx b/client/src/routes/index.tsx
 index 78f2e98..d85aa19 100644

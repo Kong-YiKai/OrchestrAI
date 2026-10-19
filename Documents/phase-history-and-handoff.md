@@ -16,6 +16,13 @@
 
 ## 历史（倒序）
 
+### 2026-10-19 需求澄清（Clarification）回归
+- 用户要求：对话里说“我要做一个天气预报软件”时，不只输出文字，而是一步步澄清需求并自动生成工作流，过程可控、可管理、可记录。做法：复用 LibreChat 0.8.8 自带的 `ask_user_question`（人在回路、选项卡片、暂停与恢复、Mongo 检查点），不另建问答系统。
+- chat：`load.ts` 补丁在配置了 workflow 时给普通对话装上 `ask_user_question`，并加入 `orchestraClarifyContext()`（`orchestra/workflow.ts`）：模型自己判断是否为“做东西”的请求；是就分轮提问（含 id=budget 的预算题），最后用 id=`orchestra_confirm` 的问题给出需求摘要和项目名请用户确认。`librechat.yaml` 的 agents capabilities 加 `ask_user_question`（参与配置摘要，已同步服务器）。问答卡片补了中文文案。
+- 客户端：`Orchestra/clarify.ts` 从对话消息里读出问答、待回答数和已确认的摘要；用户确认后用该工具调用 id 作幂等键自动 `POST /projects`（目标 = 摘要 + 已澄清的选择，预算取 budget 题），把对话改名为项目名。右侧“项目概览”改为原型里的卡片：需求澄清（待决定数、问答列表）、构建进度（组建中/待运行/运行中 x/y，Live 时每 4 秒刷新，一键打开工作流）、历史（每次选择与团队进展），资料与工作区保留。画布顶部“需求对话”可回到原对话。
+- workflow：迁移 `005_project_links.sql` 增加 `team_projects.conversation_id`；项目列表带 `task_count` 和最近一次运行摘要（完成/进行/失败节点数、花费），供项目面板和 Dashboard 使用；readiness 改查 005。
+- 验证：workflow 19 个测试（INTEGRATION=1）通过；chat 契约测试 12 项通过（新增：配置 workflow 时装上提问工具和澄清说明）；本地用脚本化模型走完：发“帮我做一个天气预报网页”→ 两题卡片 → 确认卡片 → 自动建团队（预算 ¥5、名称“天气预报网页”、关联对话）→ 面板显示进度与历史 → 打开工作流。
+
 ### 2026-10-19 游客体验（跳过登录）
 - 用户要求：登录页加“跳过登录”，游客能力与正式用户相同，不保存任何记录。实现：`overlay/api/server/services/OrchestraGuest.js`（`POST /api/orchestra/guest` 建临时账号 provider=guest 并签发会话；同一 IP 每小时 3 个、同时最多 100 个游客；退出登录后立即删除，未退出的 24 小时后由每 10 分钟的清理任务删除）；删除顺序：先暂停并删除 workflow 团队、取消并删除研究记录（`orchestra/guest.ts`），再走 LibreChat 自带的删除账号流程（对话、消息、文件、会话等）。`workflow.ts` 抽出 `workflowRequest` 供服务端复用。
 - 界面：登录卡片下方“跳过登录，先体验一下”；侧栏账号处显示“临时体验 · 退出即清除”。

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, Crosshair, FolderOpen, LayoutGrid, Pause, Play, Plus, RefreshCw, Save, Trash2, Users, Wallet } from 'lucide-react';
+import { CheckCircle2, Crosshair, MessageSquare, FolderOpen, LayoutGrid, Pause, Play, Plus, RefreshCw, Save, Trash2, Users, Wallet } from 'lucide-react';
 import { useAuthContext } from '~/hooks';
 import TeamCanvas from './TeamCanvas';
 import Inspector, { Roster } from './Inspector';
@@ -296,6 +296,11 @@ function Board({
           <strong>{project.workspace_name}</strong>
           <span>{project.goal}</span>
         </div>
+        {project.conversation_id && (
+          <Link className="orchestra-secondary orchestra-team-source" to={`/c/${project.conversation_id}`} title="回到确认需求的那段对话">
+            <MessageSquare size={15} /> 需求对话
+          </Link>
+        )}
         <button type="button" className="orchestra-team-progress" disabled={!point.id} onClick={() => { setSelected(point.id); setFocus((n) => n + 1); }}>
           <span>{done}/{plan.tasks.length} 完成</span>
           {point.label && <em><Crosshair size={12} /> {point.label}</em>}

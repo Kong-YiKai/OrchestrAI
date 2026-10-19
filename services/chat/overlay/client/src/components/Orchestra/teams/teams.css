@@ -157,3 +157,4 @@
 @media (max-width: 768px) {
   .orchestra-team-projects, .orchestra-team-toolbar { padding: 10px 14px; }
 }
+.orchestra-team-source { min-height: 34px; padding: 6px 12px; font-size: 12px; }

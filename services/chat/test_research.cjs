@@ -177,3 +177,16 @@ test('deleting a turn removes the question and its replies and re-links the next
   assert.equal((await send(undefined, { conversationId: 'c1', messageId: 'u1' })).code, 401);
   assert.ok(rows.some((r) => r.messageId === 'x1'));
 });
+test('with agent teams configured, build requests are clarified with the question card first', async () => {
+  const previous = process.env.WORKFLOW_API_URL;
+  process.env.WORKFLOW_API_URL = 'http://workflow:8090';
+  try {
+    const request = { user: req.user, body: { text: '我要做一个天气预报软件', ephemeralAgent: { web_search: false } }, config: { endpoints: { custom: [{ name: 'DeepSeek' }] } } };
+    const agent = await loadEphemeralAgent({ req: request, endpoint: 'DeepSeek', model_parameters: { model: 'deepseek-flash' } }, {});
+    assert.ok(agent.tools.includes('ask_user_question'));
+    assert.match(agent.instructions, /orchestra_confirm/);
+    assert.match(agent.instructions, /id 为 budget/);
+  } finally {
+    if (previous == null) delete process.env.WORKFLOW_API_URL; else process.env.WORKFLOW_API_URL = previous;
+  }
+});

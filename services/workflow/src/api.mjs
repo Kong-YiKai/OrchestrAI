@@ -57,6 +57,10 @@ const folder = value => {
     throw new HttpError(400, 'invalid_workspace_name');
   return value.trim();
 };
+const conversation = value => {
+  if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(value)) throw new HttpError(400, 'invalid_conversation');
+  return value;
+};
 const budget = value => {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0.1 || value > 10000) throw new HttpError(400, 'invalid_budget');
   return Math.round(value * 100) / 100;
@@ -120,9 +124,10 @@ export function createApi(settings, { complete = gatewayCompletion(settings) } =
     models: async () => [200, { models: await catalog.list(), default: catalog.defaultModel }],
     listProjects: async ({ who }) => [200, { projects: await store.projects(who) }],
     createProject: async ({ who, req }) => {
-      const input = only(await body(req, 262144), ['goal', 'workspace_name', 'budget_cny', 'plan']);
+      const input = only(await body(req, 262144), ['goal', 'workspace_name', 'budget_cny', 'plan', 'conversation_id']);
       const value = { goal: goal(input.goal), workspace_name: folder(input.workspace_name),
-        budget_cny: input.budget_cny === undefined ? 5 : budget(input.budget_cny) };
+        budget_cny: input.budget_cny === undefined ? 5 : budget(input.budget_cny),
+        conversation_id: input.conversation_id === undefined ? null : conversation(input.conversation_id) };
       const plan = input.plan === undefined ? undefined : requirePlan(input.plan);
       const row = await store.createProject(who, idempotency(req), { ...value, plan: plan ?? null }, plan);
       return [202, publicProject(row)];
@@ -224,7 +229,7 @@ export function createApi(settings, { complete = gatewayCompletion(settings) } =
       if (req.method === 'GET' && url.pathname === '/health/live') return send(200, { status: 'ok', service: 'workflow' });
       if (req.method === 'GET' && url.pathname === '/health/ready') {
         try {
-          const r = await store.pool.query("SELECT version FROM schema_migrations WHERE version='004_node_chats.sql'");
+          const r = await store.pool.query("SELECT version FROM schema_migrations WHERE version='005_project_links.sql'");
           if (!r.rowCount) throw new Error('migration_missing');
           await (await queue.client).ping(); return send(200, { status: 'ready' });
         } catch { return send(503, { status: 'unavailable' }); }
