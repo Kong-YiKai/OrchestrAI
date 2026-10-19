@@ -14,7 +14,7 @@
 
 ## 2. 产品方向（已确认）
 
-- 品牌为 **OrchestrAI**（界面默认中文；回复只显示 OrchestrAI，不显示具体模型）：暖色奶咖主题、琥珀橙强调色、三栏工作台，画布特色保留。界面依据 2026-10-13 的 [Figma 设计](https://www.figma.com/design/eN0Gjqa8PggrWnYIUXDrLN) 合理适配。
+- 品牌为 **OrchestrAI**（界面默认中文；回复只显示 OrchestrAI，不显示具体模型）：2026-10-19 起整站采用最初原型（[Figma](https://www.figma.com/design/M0gvY5Z8G6HgI1rGci6Ksq)）的画风——奶油渐变背景、浮起的大圆角卡片、黑色药丸按钮、橙色渐变主按钮、彩色图标块、深色主视觉；登录后首页为“总览”Dashboard（真实数据：团队、运行、花费、Token、最近对话）。三栏工作台与画布保留。
 - 优先复用成熟开源实现：LibreChat 提供聊天产品内核，Open Multi-Agent（OMA，MIT）提供多智能体团队运行时（2026-10-16 起替换 LangGraph），React Flow 提供画布，LiteLLM 作为网关，RAG API 负责文档检索；Open WebUI、Dify、awwo-canvas 只作产品参考，不复制代码。
 - 按业务能力划分独立服务；CI 全部通过后自动部署生产，不设人工批准步骤。
 - 重型解析、模型和抓取优先调用外部 API；共享服务器为 2 核 / 4 GB，与 Tarot、BuddyUp 同机。
@@ -127,8 +127,7 @@
 - 联网研究的记录不会自动进入团队；团队节点要联网需在节点上勾选“联网搜索”（计入 Tavily 每日 30 / 每月 1000 credits）。
 - 模型目录里除 DeepSeek 外的模型 id 和价格来自第三方资料（2026-10），上线前以各家官方价目为准并在 `services/gateway/models.json` 修改；服务器在国内，OpenAI / Anthropic / Gemini 可能无法直连。画图、视频、3D 模型只列出，生成工具在 R6 接入。节点资料只支持文本格式（≤2 MB）。
 - 网关预算按保守价记账（高峰价、汇率上限、不计缓存折扣），记账数明显高于 DeepSeek 实际扣费；生产 `secrets/production.env` 现为 `MODEL_DAILY_LIMIT_CNY=10`（2026-10-16 临时调高，用户可改回 5）；`WORKFLOW_RUN_TOKENS` 已不再使用（团队预算取代），可从该文件删除。可选后续：按 DeepSeek 官方价目校准记账。
-- 团队界面待改进：`/c/new?view=canvas&team=…` 刷新后参数丢失（新对话路由重置查询串，刚登录后立刻点“工作流画布”偶尔也会被重置）。
-- 团队 worker 空转的根因已查明并修复：OMA 1.21.2 的运行级 token 上限在任务进行中被超出时，调度循环会死循环；现由我们自己统计 token、超限时走取消路径。看门狗保留作为保护，日志关键字 `stall_profile` / `worker_blocked`。深链接 `/c/new?view=canvas&team=…` 刷新后会丢失参数（LibreChat 新对话路由重置查询串）。
+- 团队 worker 空转的根因已查明并修复：OMA 1.21.2 的运行级 token 上限在任务进行中被超出时，调度循环会死循环；现由我们自己统计 token、超限时走取消路径。看门狗保留作为保护，日志关键字 `stall_profile` / `worker_blocked`。
 - 用户手动验收项：完整产品、故障恢复（隔离环境）、混合容量、许可证审核、30 条搜索质量集。
 
 ## 8. 验证命令

@@ -2,8 +2,8 @@ import { createContext, useContext, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { ReactNode } from 'react';
 
-export type WorkbenchView = 'chat' | 'canvas' | 'research' | 'context';
-const views: WorkbenchView[] = ['chat', 'canvas', 'research', 'context'];
+export type WorkbenchView = 'dashboard' | 'chat' | 'canvas' | 'research' | 'context';
+const views: WorkbenchView[] = ['dashboard', 'chat', 'canvas', 'research', 'context'];
 const WorkbenchContext = createContext<{
   view: WorkbenchView;
   setView: (view: WorkbenchView) => void;
