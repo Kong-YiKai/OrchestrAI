@@ -7,6 +7,7 @@ import TeamCanvas from './TeamCanvas';
 import Inspector, { Roster } from './Inspector';
 import Deliverables, { FilePreview, useRunFiles } from './Deliverables';
 import WorkLog from './WorkLog';
+import NodeChat from './NodeChat';
 import { addTask, finalTasks, flowProblems, layout, pointer, stateOf, withPositions } from './plan';
 import { canPickFolder, pickFolder, rememberFolder } from './local';
 import { TeamError, describeError, isActive, useTeamApi, workingRun, yuan } from './api';
@@ -210,6 +211,7 @@ function Board({
   const [base, setBase] = useState(project.plan_version);
   const [selected, setSelected] = useState<string>();
   const [log, setLog] = useState<string>();
+  const [chat, setChat] = useState<string>();
   const [preview, setPreview] = useState<TeamFile>();
   const [notice, setNotice] = useState('');
   const [focus, setFocus] = useState(0);
@@ -217,7 +219,7 @@ function Board({
   const [budget, setBudget] = useState(String(project.budget_cny));
   const [instructions, setInstructions] = useState('');
   const working = workingRun(run);
-  const files = useRunFiles(run?.id, working);
+  const files = useRunFiles(run?.id, working, run?.updated_at);
 
   // A newer server plan (first design, redesign) replaces the draft.
   useEffect(() => {
@@ -275,7 +277,10 @@ function Board({
   const left = (project.estimate?.tasks ?? []).filter((t) => status(t.id) !== 'completed').reduce((sum, t) => sum + t.cost_cny, 0);
   const finals = finalTasks(plan);
   const delivered = new Set(finals.flatMap((t) => stateOf(run, t.id).deliverables ?? []));
-  const deliverables = files.list.filter((f) => delivered.has(f.path) || (finals.some((t) => t.id === f.task_id) && !stateOf(run, f.task_id!).deliverables));
+  const deliverables = files.list.filter((f) => delivered.has(f.path) ||
+    (!f.path.startsWith('inputs/') && finals.some((t) => t.id === f.task_id) && !stateOf(run, f.task_id!).deliverables));
+  const openLog = (id: string) => { setChat(undefined); setLog(id); };
+  const openChat = (id: string) => { setLog(undefined); setChat(id); };
   const runTeam = (confirmed = false) => {
     const problems = flowProblems(plan);
     if (problems.length) return setNotice(`工作流有错误：${problems.join('；')}`);
@@ -379,18 +384,24 @@ function Board({
           onRefuse={setNotice}
         />
         {log && <WorkLog plan={plan} run={run} taskId={log} all={files} onOpen={setPreview} onClose={() => setLog(undefined)} />}
+        {chat && <NodeChat project={project.id} plan={plan} run={run} taskId={chat} onClose={() => setChat(undefined)} />}
         <div className="orchestra-team-side">
           {selected && plan.tasks.some((t) => t.id === selected) ? (
             <Inspector
+              project={project.id}
               plan={plan}
               run={run}
               selected={selected}
               estimate={project.estimate}
               busy={busy}
+              files={files}
               onChange={setDraft}
               onSelect={setSelected}
               onAction={(action, task) => control(action, task)}
-              onLog={setLog}
+              onLog={openLog}
+              onChat={(id) => act(async () => { await save(); openChat(id); })}
+              onOpen={setPreview}
+              onFilesChanged={() => act(async () => undefined)}
             />
           ) : (
             <>

@@ -12,7 +12,18 @@ export type Task = {
   depends_on: string[];
   review: Review | null;
   size?: Size;
+  /** Catalog model id; absent means the team default. */
+  model?: string;
+  tools?: { web: boolean };
   position?: { x: number; y: number };
+};
+export type ModelInfo = {
+  id: string;
+  label: string;
+  vendor: string;
+  category: 'text' | 'image' | 'video' | '3d';
+  price: { input: number; output: number } | null;
+  available: boolean;
 };
 export type Plan = { summary: string; roles: Role[]; tasks: Task[] };
 export type NodeStatus = 'pending' | 'queued' | 'running' | 'pausing' | 'paused' | 'completed' | 'failed';
@@ -50,6 +61,7 @@ export type LogEntry = {
     text?: string;
     tool?: string;
     path?: string;
+    detail?: string;
     error?: boolean | string;
     accept?: boolean;
     critique?: string;
@@ -71,6 +83,7 @@ export type Run = {
   spent_cny: number;
   tokens?: { input: number; output: number };
   created_at: string;
+  updated_at: string;
 };
 export type Project = {
   id: string;
@@ -88,7 +101,8 @@ export type Project = {
 export type TeamFile = { id: string; path: string; task_id: string | null; media_type: string; size: number; sha256: string };
 export type FileContent = TeamFile & { encoding: 'utf8' | 'base64'; content: string };
 
-const TOOLS: Record<string, string> = { file_read: '读取', file_write: '写入', file_edit: '修改', glob: '查看文件' };
+const TOOLS: Record<string, string> = { file_read: '读取', file_write: '写入', file_edit: '修改', glob: '查看文件',
+  web_search: '搜索', web_read: '阅读网页', deliver: '登记交付' };
 export const toolLabel = (tool?: string) => TOOLS[tool ?? ''] ?? tool ?? '';
 export const PHASES: Record<Phase, string> = { work: '工作', review: '审查', revise: '修改' };
 /** One short line for the latest model turn or tool call of a running node. */
@@ -117,6 +131,12 @@ const ERRORS: Record<string, string> = {
   invalid_workspace_name: '文件夹名不能包含 \\ / : * ? " < > | 等字符。',
   invalid_goal: '请填写内容（最多 4000 字）。',
   invalid_budget: '预算要在 ¥0.1 到 ¥10000 之间。',
+  invalid_attachment_name: '文件名不合法或不是文本格式。',
+  attachment_too_large: '文件超过 2 MB。',
+  attachment_not_text: '只能上传 UTF-8 文本文件。',
+  run_storage_full: '这个团队的文件总量已满（20 MB / 200 个）。',
+  invalid_message: '请输入要说的话（最多 4000 字）。',
+  model_failed: '模型暂时没有回应，请稍后再试。',
   budget_exhausted: '这个团队的预算已经用完，提高预算后可以继续。',
   tasks_failed: '有节点失败了，可以查看它的工作记录后重新运行。',
   execution_failed: '运行失败，请稍后重试。',
@@ -129,6 +149,7 @@ export const describeError = (code?: string | null, detail?: string[]) =>
 
 const NODE_ERRORS: Record<string, string> = {
   agent_failed: '模型调用失败，可以重新运行这个节点。',
+  model_unavailable: '这个节点选的模型没有配置 key，换一个模型或先在服务器配置 key。',
   stalled: '长时间没有进展，已停止。',
   model_budget_exhausted: '今天的模型总额度用完了，明天 0 点恢复。',
   upstream_not_ready: '前置节点没有完成，已退回等待。',

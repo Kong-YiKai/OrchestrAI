@@ -12,6 +12,10 @@ services:
       RESEARCH_GATEWAY_KEY: ${RESEARCH_GATEWAY_KEY:?required}
       SEARCH_DAILY_CREDITS: ${SEARCH_DAILY_CREDITS:-30}
       SEARCH_MONTHLY_CREDITS: ${SEARCH_MONTHLY_CREDITS:-1000}
+  workflow-worker:
+    environment:
+      # Team nodes with web access use the gateway's metered search transport.
+      RESEARCH_GATEWAY_KEY: ${RESEARCH_GATEWAY_KEY:?required}
   chat:
     environment:
       RESEARCH_API_URL: http://research:8091

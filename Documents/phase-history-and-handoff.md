@@ -4,17 +4,23 @@
 
 ## 交接（随每次交付更新）
 
-- **当前阶段：** R5 已由用户手动验收（2026-10-19，基本功能通过），正在按用户反馈做 R5 改进：A 批界面、B 批运行控制已完成；接下来 C 批节点能力（模型选择含图像/3D/视频模型、能力开关、节点聊天）（见历史条目 2026-10-19）。之后进入 R6（音视频与产物生成）。R4 待用户手动验收。
+- **当前阶段：** R5 已由用户手动验收（2026-10-19，基本功能通过），正在按用户反馈做 R5 改进：A、B、C 三批改进已全部上线；下一步 R6（画图/视频/3D 生成工具接入目录中已列出的模型、音视频与文档产物）（见历史条目 2026-10-19）。之后进入 R6（音视频与产物生成）。R4 待用户手动验收。
 - **查服务器：** 用户授权通过其电脑上的 Desktop Commander 执行 `ssh tarot-tencent "sudo -n …"`（日志、状态、OrchestrAI 镜像清理、同步 `/opt/orchestrai/deploy` 中的配置摘要文件；不读、不改 `secrets/`，不动 Tarot 和 BuddyUp）。PowerShell 引号复杂时，把脚本 base64 后在服务器端 `echo … | base64 -d | sudo -n bash` 执行。
-- **Git：** 生产版本为 main `b5eade5`（release 116，PR #78/#79），develop 与 main 内容一致。会话代理不允许删除远端分支，已合并的旧分支由用户在本机删除；建议在 GitHub 开启 “Automatically delete head branches”。
+- **Git：** 生产版本见最新 release（C 批上线后更新）；develop 与 main 内容一致。会话代理不允许删除远端分支，已合并的旧分支由用户在本机删除；建议在 GitHub 开启 “Automatically delete head branches”。
 - **服务器：** 腾讯云 Ubuntu 22.04，2 核 / 4 GB，与 Tarot、BuddyUp、共享 Nginx（`/opt/shared-ingress`）同机。部署目录 `/opt/orchestrai`，Compose 项目 `orchestrai-production`，只绑定回环端口 `127.0.0.1:3088`。SSH 别名 `tarot-tencent` 在用户本机。
 - **本机：** Windows + Docker Desktop（context 为 `desktop-linux`）。候选环境 `http://localhost:3180`，Compose 项目 `orchestrai-r3`，账号在 `deploy/private/candidate-account.json`。本机 TUN/Fake-IP 会把公网域名解析成 198.18.x.x，research 的私网保护会拒绝这些地址，所以本机真实联网测试不可靠，联网验收以服务器为准。
 - **私有文件（Git 忽略，绝不提交或发到聊天里）：** `deploy/private/`，包括 `product.env`、`model.env`、`providers.json`、账号文件和 `age-recovery.key`。
-- **Key：** DeepSeek、Tavily、百炼都已配置，目前不需要新增 Key 或充值。
+- **Key：** DeepSeek、Tavily、百炼（embedding）已配置。其他模型在服务器 `secrets/production.env` 里加对应 key（见 `services/gateway/models.json` 的 `key` 字段，如 `DASHSCOPE_API_KEY`、`MOONSHOT_API_KEY`）后重新发布或重启网关即可在节点里选择。
 - **改 chat 的方式：** 直接编辑 `services/chat/overlay/` 下的源码；只有上游文件的接入点才改 `services/chat/patches/*.patch`。`.build/` 会自动重建，不要手动编辑。
 - **CI 耗时：** 调整前 main 全流程约 32 分钟。调整后只改 chat 时约 16 分钟（PR CI 约 10–13 分钟），未改动的服务直接复用 main 发布的 `inputs-<hash>` 镜像；纯文档改动不构建、不发布。
 
 ## 历史（倒序）
+
+### 2026-10-19 R5 改进 C 批：节点模型、联网、资料、讨论
+- 网关：`models.json` 作为唯一模型目录（DeepSeek Flash / Pro、通义千问、Kimi、GLM、豆包、GPT、Claude、Gemini，以及画图/视频/3D 待接入项）；`render.py` 启动时只为有 key 的文本模型生成 LiteLLM 路由，`budget.py` 按各模型价目预留和结算，`/orchestrai/models` 返回目录与可用状态。compose 给网关加了 7 个可选 key（`DASHSCOPE_API_KEY` 等，未设即不可选），已同步到服务器。
+- workflow：节点 `model`（按节点模型计价、估算）、`tools.web`（`web_search` / `web_read` 走网关 Tavily 计量通道，worker 增加 `RESEARCH_GATEWAY_KEY`）、节点资料（`POST/DELETE /projects/:id/inputs`，存为 `inputs/<节点>/`）、节点讨论（`GET/POST /projects/:id/chat`，迁移 `004_node_chats.sql`；讨论记录写进节点说明，花费计入团队预算）。
+- 画布：节点面板加模型选择（未配 key 的灰掉，画图/视频/3D 标注 R6 接入）、能力开关、资料上传与删除、「讨论」抽屉；工作记录显示用户给的资料和搜索词。
+- 验证：网关 16 个单测通过，本地真起 LiteLLM 验证路由与拒绝未配置模型；workflow 19 个测试（含 INTEGRATION=1）通过；Playwright 走完选模型、开联网、上传资料、讨论、运行节点、查看工作记录。
 
 ### 2026-10-19 R5 改进 B 批：运行控制、工作记录、团队预算
 - 后台（`services/workflow`）：不再让 OMA 跑整张图，改为自己按节点调度（每个节点一次 `runAgent`，互审/讨论由我们自己的循环实现），每个项目一个“活的”运行；`POST /projects/:id/control {action: run|pause, task?}` 运行或暂停整个团队/单个节点；已开始或完成的节点锁定（`lockViolations`）；“运行团队”前检查工作流连通（`checkRunnable`，错误码 `workflow_invalid`）；总指挥按用户的修改要求重新设计并原样保留已开始的节点（`design_note`）；节点工作记录写入 team_events（type=log）；包装模型适配器记录模型说明和用量，按价目表记账到 `spent_cny`，超出团队预算自动暂停（`budget_exhausted`）；最后的节点用 `deliver` 工具登记交付文件。迁移 `003_nodes.sql`。`WORKFLOW_RUN_TOKENS` 删除（compose.yml 已同步到服务器）。

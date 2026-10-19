@@ -45,12 +45,13 @@ async function previewHtml(file: FileContent, files: TeamFile[], read: (f: TeamF
 }
 
 /** All files of a run, refreshed while the team works, with a content cache keyed by hash. */
-export function useRunFiles(runId: string | undefined, live: boolean) {
+export function useRunFiles(runId: string | undefined, live: boolean, version?: string) {
   const call = useTeamApi();
+  // `version` (the run's updated_at) refreshes the list when a node finishes or a file is attached.
   const files = useQuery<{ files: TeamFile[] }>(
-    ['orchestra-team-files', runId],
+    ['orchestra-team-files', runId, version],
     ({ signal }) => call(`/runs/${runId}/files`, 'GET', undefined, undefined, signal),
-    { enabled: !!runId, refetchInterval: live ? 4000 : false },
+    { enabled: !!runId, refetchInterval: live ? 4000 : false, keepPreviousData: true },
   );
   const cache = useRef(new Map<string, FileContent>()).current;
   const read = async (file: TeamFile) => {

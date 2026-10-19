@@ -172,11 +172,7 @@ export class Store {
       } else {
         for (const [id, state] of Object.entries(states)) if (!STARTED.includes(state.status)) states[id] = { ...state, status: 'queued', error: null };
       }
-      if (!run) {
-        run = (await c.query(`INSERT INTO team_runs(id,project_id,tenant_id,user_id,idempotency_key,plan,plan_version,task_states)
-          VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-        [randomUUID(), projectId, who.tenant, who.user, randomUUID(), plan, project.plan_version, states])).rows[0];
-      }
+      run ??= await this.newRun(c, project, who, states);
       // A new dispatch version wakes the worker; it waits for any job still holding the run.
       const row = (await c.query(`UPDATE team_runs SET task_states=$2,status='queued',error_code=NULL,plan=$3,plan_version=$4,
         dispatch_version=dispatch_version+1,updated_at=now() WHERE id=$1 RETURNING *`, [run.id, states, plan, project.plan_version])).rows[0];
@@ -184,6 +180,52 @@ export class Store {
       await c.query('UPDATE team_projects SET updated_at=now() WHERE id=$1', [projectId]);
       return row;
     });
+  }
+  async newRun(c, project, who, states) {
+    return (await c.query(`INSERT INTO team_runs(id,project_id,tenant_id,user_id,idempotency_key,plan,plan_version,task_states,status)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,'idle') RETURNING *`,
+    [randomUUID(), project.id, who.tenant, who.user, randomUUID(), project.plan, project.plan_version, states ?? normalize(project.plan)])).rows[0];
+  }
+  /** A node the user may still change: it exists and has not started or finished. */
+  async editableNode(c, projectId, who, taskId) {
+    const project = await this.project(c, projectId, who, true);
+    if (project.status !== 'ready') throw new HttpError(409, 'plan_not_ready');
+    if (!project.plan.tasks.some(t => t.id === taskId)) throw new HttpError(404, 'task_not_found');
+    const run = await this.latestRun(c, projectId, true);
+    const status = normalize(project.plan, run?.task_states)[taskId].status;
+    if (!['pending', 'paused', 'failed'].includes(status)) throw new HttpError(409, 'task_locked');
+    return { project, run };
+  }
+  /** Files the user attaches to a node live under inputs/<node>/ in the project's live run. */
+  async addInput(projectId, who, taskId, name, content, mediaType) {
+    return this.transaction(async c => {
+      const { project } = await this.editableNode(c, projectId, who, taskId);
+      const run = (await this.latestRun(c, projectId, true)) ?? await this.newRun(c, project, who);
+      const path = `inputs/${taskId}/${name}`;
+      const used = (await c.query('SELECT COALESCE(sum(size),0)::int AS n, count(*)::int AS files FROM team_files WHERE run_id=$1 AND path<>$2', [run.id, path])).rows[0];
+      if (used.n + content.length > 20 * 1024 * 1024 || used.files >= 200) throw new HttpError(413, 'run_storage_full');
+      const row = (await c.query(`INSERT INTO team_files(id,run_id,path,task_id,media_type,size,sha256,content) VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+        ON CONFLICT(run_id,path) DO UPDATE SET content=EXCLUDED.content,size=EXCLUDED.size,sha256=EXCLUDED.sha256,media_type=EXCLUDED.media_type,updated_at=now()
+        RETURNING id,path,task_id,media_type,size,sha256`, [randomUUID(), run.id, path, taskId, mediaType, content.length, sha(content), content])).rows[0];
+      await this.event(c, run.id, 'input', taskId, { path });
+      return { ...row, run_id: run.id };
+    });
+  }
+  async removeInput(projectId, who, fileId) {
+    return this.transaction(async c => {
+      const run = await this.latestRun(c, (await this.project(c, projectId, who, true)).id, true);
+      const file = run && (await c.query('SELECT path,task_id FROM team_files WHERE run_id=$1 AND id=$2', [run.id, fileId])).rows[0];
+      if (!file || !file.path.startsWith('inputs/')) throw new HttpError(404, 'file_not_found');
+      await this.editableNode(c, projectId, who, file.task_id);
+      await c.query('DELETE FROM team_files WHERE run_id=$1 AND id=$2', [run.id, fileId]);
+    });
+  }
+  async chats(projectId, taskId) {
+    return (await this.pool.query('SELECT role,content,created_at FROM team_chats WHERE project_id=$1 AND task_id=$2 ORDER BY seq LIMIT 200',
+      [projectId, taskId])).rows;
+  }
+  async addChat(projectId, taskId, role, content) {
+    await this.pool.query('INSERT INTO team_chats(project_id,task_id,role,content) VALUES($1,$2,$3,$4)', [projectId, taskId, role, content]);
   }
   /** Worker restart: nodes a dead worker was running go back to the queue (or to paused). */
   async recoverNodes(runId) {

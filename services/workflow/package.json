@@ -11,7 +11,7 @@
     "worker": "node src/worker.mjs",
     "migrate": "node src/migrate.mjs",
     "test": "node --test --test-concurrency=1 tests/*.test.mjs",
-    "check": "node --check src/api.mjs && node --check src/worker.mjs && node --check src/store.mjs && node --check src/engine.mjs && node --check src/plan.mjs && node --check src/designer.mjs"
+    "check": "node --check src/models.mjs && node --check src/api.mjs && node --check src/worker.mjs && node --check src/store.mjs && node --check src/engine.mjs && node --check src/plan.mjs && node --check src/designer.mjs"
   },
   "dependencies": {
     "@open-multi-agent/core": "1.21.2",
