@@ -1,20 +1,20 @@
 # OrchestrAI — 项目总览
 
-> 更新：2026-10-16（Asia/Singapore）。本文件只记录**当前状态、架构、阶段计划和下一步**；过程细节与历史见 `phase-history-and-handoff.md`，执行规则见根目录 `AGENTS.md`。2026-10-14 之前的完整长版 overview 保留在 Git 历史中（`Documents/project-overview.md` 在提交 `867e76d` 及更早版本）。
+> 更新：2026-10-19（Asia/Singapore）。本文件只记录**当前状态、架构、阶段计划和下一步**；过程细节与历史见 `phase-history-and-handoff.md`，执行规则见根目录 `AGENTS.md`。2026-10-14 之前的完整长版 overview 保留在 Git 历史中（`Documents/project-overview.md` 在提交 `867e76d` 及更早版本）。
 
 ## 1. 当前状态一览
 
 | 项目 | 状态 |
 | --- | --- |
 | 生产入口 | `https://orchestrai.elysiumgrid.space/login`，公开注册关闭；账号在本机忽略文件 `deploy/private/production-account.json` |
-| 生产版本 | main `ca04da3`（Actions #38782172802 全部成功，含部署），发布清单 schema=3：9 种镜像、10 个常驻进程 |
-| 当前阶段 | **R5 智能体团队已完成（待用户手动验收）**：2026-10-16 生产 DeepSeek 完整跑通 5 角色团队（含并行、讨论、互审，约 3 分钟，8 个文件）。R4 已完成，待用户统一手动验收；下一阶段 R6 |
+| 生产版本 | main `b5eade5`（release 116），发布清单 schema=3：9 种镜像、10 个常驻进程；发布后自动清理旧镜像，只保留当前和上一次 |
+| 当前阶段 | **R5 改进**：用户 2026-10-19 验收 R5 基本功能通过并提出改进，分 A（界面，已完成）、B（运行控制与预算预估）、C（节点能力）三批。R4 待用户统一手动验收；之后 R6 |
 | 工程结构调整 | 2026-10-14 完成：拆分 LibreChat 巨型补丁、CI 按输入复用镜像、文档与规则精简（见第 5 节） |
 | 预算 | 模型与搜索共用原子人民币预算：每日 ¥5、每月 ¥100；Tavily 另限每日 30、每月 1,000 credits |
 
 ## 2. 产品方向（已确认）
 
-- 品牌为 **OrchestrAI**：暖色奶咖主题、琥珀橙强调色、三栏工作台，画布特色保留。界面依据 2026-10-13 的 [Figma 设计](https://www.figma.com/design/eN0Gjqa8PggrWnYIUXDrLN) 合理适配。
+- 品牌为 **OrchestrAI**（界面默认中文；回复只显示 OrchestrAI，不显示具体模型）：暖色奶咖主题、琥珀橙强调色、三栏工作台，画布特色保留。界面依据 2026-10-13 的 [Figma 设计](https://www.figma.com/design/eN0Gjqa8PggrWnYIUXDrLN) 合理适配。
 - 优先复用成熟开源实现：LibreChat 提供聊天产品内核，Open Multi-Agent（OMA，MIT）提供多智能体团队运行时（2026-10-16 起替换 LangGraph），React Flow 提供画布，LiteLLM 作为网关，RAG API 负责文档检索；Open WebUI、Dify、awwo-canvas 只作产品参考，不复制代码。
 - 按业务能力划分独立服务；CI 全部通过后自动部署生产，不设人工批准步骤。
 - 重型解析、模型和抓取优先调用外部 API；共享服务器为 2 核 / 4 GB，与 Tarot、BuddyUp 同机。
@@ -55,7 +55,7 @@
 | R2 微服务与交付基础 | 已完成（待用户手动验收） | workflow 服务、CI/CD、受限部署身份、加密异地备份 |
 | R3 聊天与附件 | 已完成（待用户手动验收） | 登录、历史、图片/PDF/TXT、文档问答、六份协调备份 |
 | R4 Web Research | 已完成（待用户手动验收） | 普通聊天中天气查询和网页总结都真实调用 research，并展示来源或具体失败；Reader 回退上线；必要 CI 和部署烟测通过 |
-| R5 智能体团队 | 已完成（待用户手动验收） | 总指挥组建团队、画布编辑、串行/并行/互审/讨论、取消、重启恢复、成果库与本地保存；生产 DeepSeek 端到端实测 |
+| R5 智能体团队 | 已完成（用户已验收，改进进行中：A 界面已完成，B 运行控制、C 节点能力待做） | 总指挥组建团队、画布编辑、串行/并行/互审/讨论、取消、重启恢复、成果库与本地保存；生产 DeepSeek 端到端实测 |
 | R6 音视频与产物生成 | 未完成 | 转写、视频摘要、PPT/文档、图片生成，独立 worker |
 | R7 运行质量 | 未完成 | 评测回归、成本看板、依赖升级机制、观测 |
 | R8 桌面与扩展 | 未完成 | Windows 执行端、子对话、团队等 |

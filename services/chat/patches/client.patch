@@ -223,6 +223,72 @@ index 5f28684..835e6a4 100644
              </span>
            </button>
          }
+diff --git a/client/src/components/Chat/Input/ToolsDropdown.tsx b/client/src/components/Chat/Input/ToolsDropdown.tsx
+index 64fc779..615af22 100644
+--- a/client/src/components/Chat/Input/ToolsDropdown.tsx
++++ b/client/src/components/Chat/Input/ToolsDropdown.tsx
+@@ -194,59 +194,8 @@ const ToolsDropdown = ({ disabled }: ToolsDropdownProps) => {
+     });
+   }
+ 
+-  if (canUseWebSearch && webSearchEnabled) {
+-    dropdownItems.push({
+-      onClick: handleWebSearchToggle,
+-      hideOnClick: false,
+-      render: (props) => (
+-        <div {...props}>
+-          <div className="flex items-center gap-2">
+-            <Globe className="icon-md" aria-hidden="true" />
+-            <span>{localize('com_ui_web_search')}</span>
+-          </div>
+-          <div className="flex items-center gap-1">
+-            {showWebSearchSettings && (
+-              <button
+-                type="button"
+-                onClick={(e) => {
+-                  e.stopPropagation();
+-                  setIsSearchDialogOpen?.(true);
+-                }}
+-                className={cn(
+-                  'rounded p-1 transition-all duration-200',
+-                  'hover:bg-surface-secondary hover:shadow-sm',
+-                  'text-text-secondary hover:text-text-primary',
+-                )}
+-                aria-label="Configure web search"
+-                ref={searchMenuTriggerRef}
+-              >
+-                <div className="h-4 w-4">
+-                  <Settings className="h-4 w-4" aria-hidden="true" />
+-                </div>
+-              </button>
+-            )}
+-            <button
+-              type="button"
+-              onClick={(e) => {
+-                e.stopPropagation();
+-                setIsSearchPinned?.(!isSearchPinned);
+-              }}
+-              className={cn(
+-                'rounded p-1 transition-all duration-200',
+-                'hover:bg-surface-secondary hover:shadow-sm',
+-                !isSearchPinned && 'text-text-secondary hover:text-text-primary',
+-              )}
+-              aria-label={isSearchPinned ? 'Unpin' : 'Pin'}
+-            >
+-              <div className="h-4 w-4">
+-                <PinIcon unpin={isSearchPinned} />
+-              </div>
+-            </button>
+-          </div>
+-        </div>
+-      ),
+-    });
+-  }
++  // OrchestrAI: the composer's globe is the only web-search switch (always visible), so the
++  // menu entry and its pin would only duplicate it.
+ 
+   if (canUseSkills && skillsEnabled) {
+     dropdownItems.push({
 diff --git a/client/src/components/Chat/Input/WebSearch.tsx b/client/src/components/Chat/Input/WebSearch.tsx
 index a991d6e..defa0fc 100644
 --- a/client/src/components/Chat/Input/WebSearch.tsx
@@ -336,35 +402,32 @@ index 0dc465d..d156646 100644
        {/* Feedback Buttons */}
        {!error && !isActiveStreamingMessage && !isCreatedByUser && handleFeedback != null && (
          <Feedback handleFeedback={handleFeedback} feedback={message.feedback} isLast={isLast} />
-diff --git a/client/src/components/Chat/Messages/ui/MessageRender.tsx b/client/src/components/Chat/Messages/ui/MessageRender.tsx
-index 35f98a2..de92b8e 100644
---- a/client/src/components/Chat/Messages/ui/MessageRender.tsx
-+++ b/client/src/components/Chat/Messages/ui/MessageRender.tsx
-@@ -19,6 +19,7 @@ import SiblingSwitch from '~/components/Chat/Messages/SiblingSwitch';
- import HoverButtons from '~/components/Chat/Messages/HoverButtons';
- import MessageRow from '~/components/Chat/Messages/ui/MessageRow';
- import MessageIcon from '~/components/Chat/Messages/MessageIcon';
+diff --git a/client/src/components/Chat/Messages/ui/MessageRow.tsx b/client/src/components/Chat/Messages/ui/MessageRow.tsx
+index a6a1add..7b894d4 100644
+--- a/client/src/components/Chat/Messages/ui/MessageRow.tsx
++++ b/client/src/components/Chat/Messages/ui/MessageRow.tsx
+@@ -2,6 +2,7 @@ import { Zap } from 'lucide-react';
+ import type { ReactNode } from 'react';
+ import MessageTimestamp from './MessageTimestamp';
+ import HeaderLabel from './HeaderLabel';
 +import Brand from '~/components/Orchestra/Brand';
- import Wakeup from '~/components/Chat/Messages/Content/Wakeup';
- import SubRow from '~/components/Chat/Messages/SubRow';
- import { MessageContext } from '~/Providers';
-@@ -161,8 +162,14 @@ const MessageRender = memo(function MessageRender({
-   return (
-     <MessageRow
-       id={msg.messageId}
--      icon={<MessageIcon iconData={iconData} assistant={assistant} agent={agent} />}
--      label={messageLabel ?? ''}
-+      icon={
-+        msg.isCreatedByUser ? (
-+          <MessageIcon iconData={iconData} assistant={assistant} agent={agent} />
-+        ) : (
-+          <Brand compact />
-+        )
-+      }
-+      label={msg.isCreatedByUser ? (messageLabel ?? '') : 'OrchestrAI'}
-       hoverLabel={getHeaderHoverLabel(
-         hasConfiguredSender,
-         agent?.model,
+ import { cn } from '~/utils';
+ 
+ type MessageRowProps = {
+@@ -108,10 +109,11 @@ export default function MessageRow({
+                 aria-hidden="true"
+                 className="flex size-6 flex-shrink-0 items-center justify-center overflow-hidden rounded-full"
+               >
+-                {icon}
++                {/* OrchestrAI: every reply speaks as the product, never as the model behind it. */}
++                <Brand compact />
+               </span>
+               <span className="sr-only">{headerPrefix}</span>
+-              <HeaderLabel label={label} hoverLabel={hoverLabel} />
++              <HeaderLabel label="OrchestrAI" />
+               <MessageTimestamp value={timestamp} className="ml-auto shrink-0 font-normal" />
+             </h2>
+           ))}
 diff --git a/client/src/components/Conversations/Convo.tsx b/client/src/components/Conversations/Convo.tsx
 index 40dd746..7573664 100644
 --- a/client/src/components/Conversations/Convo.tsx
@@ -413,7 +476,7 @@ index 22b6f70..c7f3f92 100644
    const sidebarFormMethods = useForm<ChatFormValues>({ defaultValues: { text: '' } });
    return (
 diff --git a/client/src/locales/en/translation.json b/client/src/locales/en/translation.json
-index 2d81936..b44e9af 100644
+index 2d81936..d52308b 100644
 --- a/client/src/locales/en/translation.json
 +++ b/client/src/locales/en/translation.json
 @@ -1,4 +1,7 @@
@@ -424,41 +487,20 @@ index 2d81936..b44e9af 100644
    "com_ui_background_tasks": "Background tasks",
    "com_ui_background_tasks_cancel_disabled": "Stopping background tools is not enabled on this server",
    "com_ui_background_tasks_checked": "Checked background tasks",
-@@ -3057,5 +3060,80 @@
+@@ -3057,5 +3060,72 @@
    "com_insights_invalid_date_range": "Choose an end date after the start date, within {{days}} days.",
    "com_insights_sparkline_accessibility": "{{label}} over time",
    "com_nav_mobile_drawer_strip": "Show chat beside the sidebar on mobile",
 -  "com_nav_mobile_drawer_strip_info": "The sidebar stops short of the edge so a strip of the conversation stays visible. Tapping it closes the sidebar."
 +  "com_nav_mobile_drawer_strip_info": "The sidebar stops short of the edge so a strip of the conversation stays visible. Tapping it closes the sidebar.",
-+  "com_orchestra_context": "工作上下文",
-+  "com_orchestra_hint": "OrchestrAI · 对话与工作流，保持同一份上下文。",
-+  "com_orchestra_session": "当前会话",
-+  "com_orchestra_files": "我的文件",
-+  "com_orchestra_empty": "还没有上传文件",
-+  "com_orchestra_canvas": "打开 / 收起工作流画布",
-+  "com_orchestra_badge": "预览",
 +  "com_orchestra_brand": "OrchestrAI",
-+  "com_orchestra_title": "Orchestra",
-+  "com_orchestra_trial": "OrchestrAI",
-+  "com_orchestra_task_context": "Task context",
-+  "com_orchestra_context_eyebrow": "CONTEXT",
-+  "com_orchestra_context_intro": "Give every step a clear basis.",
-+  "com_orchestra_context_hint": "Keep this conversation’s goals and materials in view.",
-+  "com_orchestra_current_goal": "Starting point",
-+  "com_orchestra_goal_hint": "Describe your goal and refine it as you go.",
-+  "com_orchestra_context_error": "Could not load the context.",
++  "com_orchestra_task_context": "Overview",
++  "com_orchestra_context_error": "Could not load this conversation.",
 +  "com_orchestra_retry": "Retry",
-+  "com_orchestra_work_status": "Work status",
-+  "com_orchestra_workflow_status_hint": "Build a team on the canvas, run it, and find deliverables here",
-+  "com_orchestra_view_canvas": "View workflow canvas",
-+  "com_orchestra_reference_files": "Reference materials",
-+  "com_orchestra_no_files": "No materials added yet",
-+  "com_orchestra_upload_hint": "Upload files from the conversation composer",
-+  "com_orchestra_file_types": "PDF / TXT / PNG / JPG / WebP",
-+  "com_orchestra_file_limits": "10 MB per file · Up to 5 files · 25 MB total",
-+  "com_orchestra_public_sources": "Public sources",
-+  "com_orchestra_research_context_hint": "Research has separate records. You can add results to your conversation.",
-+  "com_orchestra_open_research": "Open web research",
++  "com_orchestra_reference_files": "Materials",
++  "com_orchestra_no_files": "No materials yet. Attach files from the message box.",
++  "com_orchestra_file_limits": "PDF, TXT, PNG, JPG or WebP · 10 MB each · up to 5 per message",
++  "com_orchestra_research_context_hint": "Separate records; add results to the chat",
 +  "com_orchestra_task_header_hint": "Move your work forward through conversation, materials and research",
 +  "com_orchestra_landing_eyebrow": "ORCHESTRA / YOUR WORKBENCH",
 +  "com_orchestra_landing_title_first": "Turn ideas",
@@ -468,7 +510,7 @@ index 2d81936..b44e9af 100644
 +  "com_orchestra_try_label": "Try this",
 +  "com_orchestra_try_example": "“Use this brief to research opportunities for a new product and suggest next steps.”",
 +  "com_orchestra_research_eyebrow": "RESEARCH / PUBLIC SOURCES",
-+  "com_orchestra_research_title": "Find the evidence. Then form a view.",
++  "com_orchestra_research_title": "Web research",
 +  "com_orchestra_research_intro": "Search, read and cite in one workbench.",
 +  "com_orchestra_research_prompt": "What would you like to research?",
 +  "com_orchestra_research_failure_hint": "Restricted pages are marked unread. No evidence means no conclusion.",
@@ -502,12 +544,25 @@ index 2d81936..b44e9af 100644
 +  "com_orchestra_auth_hint": "Continue the work you started.",
 +  "com_orchestra_connecting": "Connecting to your workbench…",
 +  "com_orchestra_composer_hint": "Send your materials and goal together",
-+  "com_orchestra_goal_origin": "From your first message in this conversation",
 +  "com_orchestra_filter_task_titles": "Filter task titles",
-+  "com_orchestra_filter_scope": "Filters loaded titles only. Load more to include older tasks."
++  "com_orchestra_filter_scope": "Filters loaded titles only. Load more to include older tasks.",
++  "com_orchestra_conversation": "This conversation",
++  "com_orchestra_new_conversation": "New conversation",
++  "com_orchestra_message_count": "{{count}} messages",
++  "com_orchestra_status_waiting": "Waiting for your goal",
++  "com_orchestra_status_loading": "Loading",
++  "com_orchestra_status_replying": "Replying",
++  "com_orchestra_status_saved": "Saved",
++  "com_orchestra_file_untitled": "Attachment",
++  "com_orchestra_file_draft": "Not sent",
++  "com_orchestra_file_sent": "Sent",
++  "com_orchestra_workspaces": "Workspaces",
++  "com_orchestra_teams_title": "Agent team",
++  "com_orchestra_teams_empty": "Build a team on the canvas and run it",
++  "com_orchestra_teams_latest": "Latest: {{name}}"
  }
 diff --git a/client/src/locales/zh-Hans/translation.json b/client/src/locales/zh-Hans/translation.json
-index 6e8b80d..0690999 100644
+index 6e8b80d..53f0831 100644
 --- a/client/src/locales/zh-Hans/translation.json
 +++ b/client/src/locales/zh-Hans/translation.json
 @@ -1,4 +1,7 @@
@@ -518,32 +573,20 @@ index 6e8b80d..0690999 100644
    "chat_direction_left_to_right": "从左到右",
    "chat_direction_right_to_left": "从右到左",
    "com_a11y_ai_composing": "AI 仍在撰写中。",
-@@ -1444,5 +1447,71 @@
+@@ -1444,5 +1447,72 @@
    "com_ui_zoom_in": "放大",
    "com_ui_zoom_level": "缩放级别",
    "com_ui_zoom_out": "缩小",
 -  "com_user_message": "您"
 +  "com_user_message": "您",
 +  "com_orchestra_brand": "OrchestrAI",
-+  "com_orchestra_task_context": "任务上下文",
-+  "com_orchestra_context_eyebrow": "CONTEXT",
-+  "com_orchestra_context_intro": "让每一步都有依据。",
-+  "com_orchestra_context_hint": "当前对话的目标与资料，在这里保持清晰。",
-+  "com_orchestra_current_goal": "任务起点",
-+  "com_orchestra_goal_hint": "描述目标，逐步完善信息。",
-+  "com_orchestra_context_error": "上下文读取失败。",
++  "com_orchestra_task_context": "对话概览",
++  "com_orchestra_context_error": "对话读取失败。",
 +  "com_orchestra_retry": "重试",
-+  "com_orchestra_work_status": "工作状态",
-+  "com_orchestra_workflow_status_hint": "在画布里组建团队并运行，进度与成果会显示在这里",
-+  "com_orchestra_view_canvas": "查看工作流画布",
-+  "com_orchestra_reference_files": "参考资料",
-+  "com_orchestra_no_files": "还没有添加资料",
-+  "com_orchestra_upload_hint": "通过对话输入区上传文件",
-+  "com_orchestra_file_types": "PDF / TXT / PNG / JPG / WebP",
-+  "com_orchestra_file_limits": "单个 10 MB · 每条最多 5 个 · 合计 25 MB",
-+  "com_orchestra_public_sources": "公开来源",
-+  "com_orchestra_research_context_hint": "联网研究保留独立记录，结果可手动带入对话。",
-+  "com_orchestra_open_research": "打开联网研究",
++  "com_orchestra_reference_files": "资料",
++  "com_orchestra_no_files": "还没有资料，可以在输入框上传文件。",
++  "com_orchestra_file_limits": "支持 PDF、TXT、PNG、JPG、WebP · 单个 10 MB · 每条最多 5 个",
++  "com_orchestra_research_context_hint": "独立记录，结果可以带入对话",
 +  "com_orchestra_task_header_hint": "对话、资料与研究，让工作逐步展开",
 +  "com_orchestra_landing_eyebrow": "ORCHESTRA / 你的工作台",
 +  "com_orchestra_landing_title_first": "把想法，",
@@ -553,7 +596,7 @@ index 6e8b80d..0690999 100644
 +  "com_orchestra_try_label": "试试看",
 +  "com_orchestra_try_example": "“结合这份简报，帮我调研新品的机会，并给出行动建议。”",
 +  "com_orchestra_research_eyebrow": "RESEARCH / 公开资料",
-+  "com_orchestra_research_title": "先找到依据，再形成判断。",
++  "com_orchestra_research_title": "联网研究",
 +  "com_orchestra_research_intro": "检索、读取与引用，在一个工作台里展开。",
 +  "com_orchestra_research_prompt": "你想研究什么？",
 +  "com_orchestra_research_failure_hint": "受限网页会显示未读取；缺少证据时不会生成结论。",
@@ -587,9 +630,22 @@ index 6e8b80d..0690999 100644
 +  "com_orchestra_auth_hint": "继续推进你正在做的工作。",
 +  "com_orchestra_connecting": "正在连接工作台…",
 +  "com_orchestra_composer_hint": "资料与目标，可以一起发送",
-+  "com_orchestra_goal_origin": "来自当前对话的第一条消息",
 +  "com_orchestra_filter_task_titles": "筛选任务标题",
-+  "com_orchestra_filter_scope": "仅筛选已加载的标题，可查看更多任务。"
++  "com_orchestra_filter_scope": "仅筛选已加载的标题，可查看更多任务。",
++  "com_orchestra_conversation": "本对话",
++  "com_orchestra_new_conversation": "新对话",
++  "com_orchestra_message_count": "{{count}} 条消息",
++  "com_orchestra_status_waiting": "等待你的目标",
++  "com_orchestra_status_loading": "正在读取",
++  "com_orchestra_status_replying": "正在回复",
++  "com_orchestra_status_saved": "已保存",
++  "com_orchestra_file_untitled": "附件",
++  "com_orchestra_file_draft": "待发送",
++  "com_orchestra_file_sent": "已发送",
++  "com_orchestra_workspaces": "工作区",
++  "com_orchestra_teams_title": "智能体团队",
++  "com_orchestra_teams_empty": "在画布上组建团队并运行",
++  "com_orchestra_teams_latest": "最近：{{name}}"
  }
 diff --git a/client/src/routes/index.tsx b/client/src/routes/index.tsx
 index 78f2e98..d85aa19 100644
@@ -606,6 +662,26 @@ index 78f2e98..d85aa19 100644
              {
                path: 'search',
                element: <Search />,
+diff --git a/client/src/store/language.ts b/client/src/store/language.ts
+index f49ee99..2075010 100644
+--- a/client/src/store/language.ts
++++ b/client/src/store/language.ts
+@@ -20,12 +20,9 @@ const readStoredLang = () => {
+   }
+ };
+ 
+-const defaultLang = () => {
+-  const userLang =
+-    (typeof navigator !== 'undefined' ? navigator.language || navigator.languages?.[0] : null) ??
+-    'en';
+-  return Cookies.get('lang') || readStoredLang() || userLang;
+-};
++/** OrchestrAI is a Chinese-first product: one language everywhere unless the user picks
++ *  another in Settings (the browser language would leave our own screens half-translated). */
++const defaultLang = () => Cookies.get('lang') || readStoredLang() || 'zh-Hans';
+ 
+ const lang = atomWithLocalStorage('lang', defaultLang());
+ const languageLoading = atom<boolean>({
 diff --git a/client/src/utils/tilde.ts b/client/src/utils/tilde.ts
 index e2b4384..299372b 100644
 --- a/client/src/utils/tilde.ts
