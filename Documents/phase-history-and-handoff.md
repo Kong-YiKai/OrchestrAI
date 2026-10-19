@@ -6,7 +6,7 @@
 
 - **当前阶段：** R5 已由用户手动验收（2026-10-19，基本功能通过），正在按用户反馈做 R5 改进：A、B、C 三批改进已全部上线；下一步 R6（画图/视频/3D 生成工具接入目录中已列出的模型、音视频与文档产物）（见历史条目 2026-10-19）。之后进入 R6（音视频与产物生成）。R4 待用户手动验收。
 - **查服务器：** 用户授权通过其电脑上的 Desktop Commander 执行 `ssh tarot-tencent "sudo -n …"`（日志、状态、OrchestrAI 镜像清理、同步 `/opt/orchestrai/deploy` 中的配置摘要文件；不读、不改 `secrets/`，不动 Tarot 和 BuddyUp）。PowerShell 引号复杂时，把脚本 base64 后在服务器端 `echo … | base64 -d | sudo -n bash` 执行。
-- **Git：** 生产版本见最新 release（C 批上线后更新）；develop 与 main 内容一致。会话代理不允许删除远端分支，已合并的旧分支由用户在本机删除；建议在 GitHub 开启 “Automatically delete head branches”。
+- **Git：** 生产版本为 main `28b8609`（release 128，C 批，PR #86/#87）；develop 与 main 内容一致。会话代理不允许删除远端分支，已合并的旧分支由用户在本机删除；建议在 GitHub 开启 “Automatically delete head branches”。
 - **服务器：** 腾讯云 Ubuntu 22.04，2 核 / 4 GB，与 Tarot、BuddyUp、共享 Nginx（`/opt/shared-ingress`）同机。部署目录 `/opt/orchestrai`，Compose 项目 `orchestrai-production`，只绑定回环端口 `127.0.0.1:3088`。SSH 别名 `tarot-tencent` 在用户本机。
 - **本机：** Windows + Docker Desktop（context 为 `desktop-linux`）。候选环境 `http://localhost:3180`，Compose 项目 `orchestrai-r3`，账号在 `deploy/private/candidate-account.json`。本机 TUN/Fake-IP 会把公网域名解析成 198.18.x.x，research 的私网保护会拒绝这些地址，所以本机真实联网测试不可靠，联网验收以服务器为准。
 - **私有文件（Git 忽略，绝不提交或发到聊天里）：** `deploy/private/`，包括 `product.env`、`model.env`、`providers.json`、账号文件和 `age-recovery.key`。
